@@ -3,10 +3,31 @@
  * then where the two overlap and where they part ways. The point is to send a
  * reader to the right tool, which is sometimes not this one.
  */
+import { alternativesFr, categoriesFr, matrixDimensionsFr, s3ndMatrixFr } from './alternatives.fr'
+import type { Locale } from './i18n/config'
 
 export type AlternativeCategory = 'file-transfer' | 'file-sharing' | 'sync-engine' | 'storage-tooling'
 
-export const categories: Record<AlternativeCategory, { title: string; blurb: string }> = {
+export type AlternativeSlug =
+  | 'magic-wormhole'
+  | 'croc'
+  | 'wetransfer'
+  | 'firefox-send'
+  | 'pairdrop'
+  | 'transfer-sh'
+  | 'dexie-cloud'
+  | 'powersync'
+  | 'electricsql'
+  | 'replicache'
+  | 'pouchdb'
+  | 'firebase'
+  | 'rclone'
+
+export const categoryOrder: AlternativeCategory[] = ['file-transfer', 'file-sharing', 'sync-engine', 'storage-tooling']
+
+export type CategoryCopy = Record<AlternativeCategory, { title: string; blurb: string }>
+
+export const categoriesEn: CategoryCopy = {
   'file-transfer': {
     title: 'Command-line file transfer',
     blurb: 'Tools that move a file between two machines with a code. The closest cousins of the CLI.',
@@ -25,20 +46,22 @@ export const categories: Record<AlternativeCategory, { title: string; blurb: str
   },
 }
 
-export const matrixDimensions = [
-  { key: 'shape', label: 'What it is' },
-  { key: 'storage', label: 'Where the data lives' },
-  { key: 'online', label: 'Both ends online at once' },
-  { key: 'browser', label: 'From inside your web app' },
-  { key: 'accounts', label: 'Accounts' },
-  { key: 'hosting', label: 'Hosting' },
-  { key: 'price', label: 'Price' },
-  { key: 'license', label: 'License' },
-] as const
+export const matrixKeys = ['shape', 'storage', 'online', 'browser', 'accounts', 'hosting', 'price', 'license'] as const
 
-export type MatrixKey = (typeof matrixDimensions)[number]['key']
+export type MatrixKey = (typeof matrixKeys)[number]
 
-export const s3ndMatrix: Record<MatrixKey, string> = {
+export const matrixDimensionsEn: Record<MatrixKey, string> = {
+  shape: 'What it is',
+  storage: 'Where the data lives',
+  online: 'Both ends online at once',
+  browser: 'From inside your web app',
+  accounts: 'Accounts',
+  hosting: 'Hosting',
+  price: 'Price',
+  license: 'License',
+}
+
+export const s3ndMatrixEn: Record<MatrixKey, string> = {
   shape: 'A CLI, a library and React hooks over your own S3 bucket',
   storage: 'Your bucket: S3, R2, MinIO, Scaleway, Wasabi',
   online: 'No. The code is redeemed later, until it expires',
@@ -49,11 +72,16 @@ export const s3ndMatrix: Record<MatrixKey, string> = {
   license: 'MIT',
 }
 
-export interface Alternative {
-  slug: string
+/** The part of a comparison that is the same in every language. */
+interface AlternativeBase {
+  slug: AlternativeSlug
   name: string
   category: AlternativeCategory
   website: string
+}
+
+/** The words, per language. */
+export interface AlternativeCopy {
   /** The page title: "s3nd as a … alternative". */
   headline: string
   /** The other tool, described fairly and in its own terms. */
@@ -67,12 +95,46 @@ export interface Alternative {
   keywords: string[]
 }
 
-export const alternatives: Alternative[] = [
+export type Alternative = AlternativeBase & AlternativeCopy
+
+const base: AlternativeBase[] = [
   {
     slug: 'magic-wormhole',
     name: 'Magic Wormhole',
     category: 'file-transfer',
     website: 'https://magic-wormhole.readthedocs.io',
+  },
+  { slug: 'croc', name: 'croc', category: 'file-transfer', website: 'https://github.com/schollz/croc' },
+  { slug: 'wetransfer', name: 'WeTransfer', category: 'file-sharing', website: 'https://wetransfer.com' },
+  { slug: 'firefox-send', name: 'Firefox Send', category: 'file-sharing', website: 'https://github.com/timvisee/send' },
+  {
+    slug: 'pairdrop',
+    name: 'PairDrop',
+    category: 'file-sharing',
+    website: 'https://github.com/schlagmichdoch/PairDrop',
+  },
+  {
+    slug: 'transfer-sh',
+    name: 'transfer.sh',
+    category: 'file-sharing',
+    website: 'https://github.com/dutchcoders/transfer.sh',
+  },
+  { slug: 'dexie-cloud', name: 'Dexie Cloud', category: 'sync-engine', website: 'https://dexie.org/cloud/' },
+  { slug: 'powersync', name: 'PowerSync', category: 'sync-engine', website: 'https://www.powersync.com' },
+  { slug: 'electricsql', name: 'ElectricSQL', category: 'sync-engine', website: 'https://electric-sql.com' },
+  { slug: 'replicache', name: 'Replicache', category: 'sync-engine', website: 'https://replicache.dev' },
+  { slug: 'pouchdb', name: 'PouchDB', category: 'sync-engine', website: 'https://pouchdb.com' },
+  {
+    slug: 'firebase',
+    name: 'Firebase',
+    category: 'sync-engine',
+    website: 'https://firebase.google.com/products/firestore',
+  },
+  { slug: 'rclone', name: 'rclone', category: 'storage-tooling', website: 'https://rclone.org' },
+]
+
+export const alternativesEn: Record<AlternativeSlug, AlternativeCopy> = {
+  'magic-wormhole': {
     headline: 'A Magic Wormhole alternative that goes through your own bucket',
     what: 'A command-line tool that sends files and directories from one computer to another with a short, human-readable code such as 7-crossover-clockwork. The two sides run a PAKE, so the code both finds the peer and keys the encryption; the bytes travel directly between the machines, or through a transit relay when they cannot reach each other.',
     overlap:
@@ -117,11 +179,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['magic wormhole alternative', 'magic-wormhole vs', 'send file with code terminal'],
   },
-  {
-    slug: 'croc',
-    name: 'croc',
-    category: 'file-transfer',
-    website: 'https://github.com/schollz/croc',
+  croc: {
     headline: 'A croc alternative with nothing running between the two machines',
     what: 'A Go command-line tool for sending files and folders between any two computers with a code phrase. It uses a PAKE for end-to-end encryption, a relay to get through NATs, resumes interrupted transfers, and ships as a single binary for every platform.',
     overlap:
@@ -166,11 +224,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['croc alternative', 'croc vs', 'file transfer code cli'],
   },
-  {
-    slug: 'wetransfer',
-    name: 'WeTransfer',
-    category: 'file-sharing',
-    website: 'https://wetransfer.com',
+  wetransfer: {
     headline: 'A WeTransfer alternative that keeps the file in your own bucket',
     what: 'A hosted file-sharing service: upload in the browser, get a link, email it. The free tier has a size limit and an expiry, and paid plans raise the limit, add password protection and keep files longer. It is a product for people, polished and familiar.',
     overlap:
@@ -189,8 +243,8 @@ export const alternatives: Alternative[] = [
         body: 'A link is pasted; a code is read out loud or typed off another screen. Both work; s3nd’s codes are built to survive being misread, with the confusable letters removed and repaired.',
       },
       {
-        title: 'No interface',
-        body: 's3nd ships no upload page. If the recipient is a non-technical person clicking an email, WeTransfer is the better experience, and the honest answer.',
+        title: 'An interface you deploy yourself',
+        body: 's3nd ships no hosted upload page, but the drop template is one: a Next.js app with a drop zone and a pickup page, deployed to Vercel in one click on top of your bucket. If the recipient is a non-technical person clicking an email, WeTransfer is still the more polished experience, and the honest answer.',
       },
     ],
     pickThem: [
@@ -215,11 +269,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['wetransfer alternative', 'self-hosted wetransfer', 'wetransfer alternative open source'],
   },
-  {
-    slug: 'firefox-send',
-    name: 'Firefox Send',
-    category: 'file-sharing',
-    website: 'https://github.com/timvisee/send',
+  'firefox-send': {
     headline: 'A Firefox Send alternative that needs nothing deployed',
     what: 'Mozilla’s end-to-end encrypted file-sharing service: upload, get a link, and the file expired after a number of downloads or a period of time. Mozilla shut the service down in 2020. The code was open source, and community forks, notably timvisee’s Send, keep it alive as something you host yourself.',
     overlap:
@@ -259,11 +309,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['firefox send alternative', 'firefox send replacement', 'self-hosted encrypted file sharing'],
   },
-  {
-    slug: 'pairdrop',
-    name: 'PairDrop',
-    category: 'file-sharing',
-    website: 'https://github.com/schlagmichdoch/PairDrop',
+  pairdrop: {
     headline: 'A PairDrop alternative for when the other device is not in the room',
     what: 'A browser-based, peer-to-peer file transfer between devices on the same network, in the spirit of AirDrop and a fork of Snapdrop: open the page on both devices, they see each other, drop the file. WebRTC carries the bytes and a small signaling server introduces the peers. Pairing across networks is possible with a code.',
     overlap:
@@ -304,11 +350,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['pairdrop alternative', 'snapdrop alternative', 'airdrop alternative cross platform'],
   },
-  {
-    slug: 'transfer-sh',
-    name: 'transfer.sh',
-    category: 'file-sharing',
-    website: 'https://github.com/dutchcoders/transfer.sh',
+  'transfer-sh': {
     headline: 'A transfer.sh alternative with no service to run',
     what: 'A file-sharing service you drive with curl: PUT a file, get a URL back, share it. Written in Go, self-hostable, with pluggable storage backends that include S3. The public instance made it famous; the self-hosted server is what teams actually run.',
     overlap:
@@ -345,11 +387,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['transfer.sh alternative', 'curl upload file share', 'self-hosted file upload cli'],
   },
-  {
-    slug: 'dexie-cloud',
-    name: 'Dexie Cloud',
-    category: 'sync-engine',
-    website: 'https://dexie.org/cloud/',
+  'dexie-cloud': {
     headline: 'A Dexie Cloud alternative for apps that have no accounts',
     what: 'A sync service for Dexie.js, the IndexedDB wrapper. Add the addon, point it at a Dexie Cloud database, and the local tables sync continuously, with authentication, per-object access control and realtime updates. Hosted by the Dexie team, with a free tier and paid plans, and an on-premise option.',
     overlap:
@@ -395,11 +433,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['dexie cloud alternative', 'dexie sync alternative', 'indexeddb sync without accounts'],
   },
-  {
-    slug: 'powersync',
-    name: 'PowerSync',
-    category: 'sync-engine',
-    website: 'https://www.powersync.com',
+  powersync: {
     headline: 'A PowerSync alternative when there is no backend database',
     what: 'A sync engine that keeps a SQLite database on the client in step with your Postgres, MongoDB or MySQL. Sync rules decide which rows each user receives, writes go back through your own backend, and the client SDKs cover web, React Native, Flutter, Swift and Kotlin. Available as a hosted cloud or self-hosted.',
     overlap:
@@ -444,11 +478,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['powersync alternative', 'offline-first sync without postgres', 'local-first sync simple'],
   },
-  {
-    slug: 'electricsql',
-    name: 'ElectricSQL',
-    category: 'sync-engine',
-    website: 'https://electric-sql.com',
+  electricsql: {
     headline: 'An ElectricSQL alternative for apps without Postgres',
     what: 'A Postgres sync engine. Electric runs next to your database and exposes shapes, filtered subsets of a table, over HTTP; clients subscribe and hold the rows locally, and reads scale through ordinary CDNs. Writes go through your own API. Open source, with a hosted Electric Cloud.',
     overlap:
@@ -489,11 +519,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['electricsql alternative', 'electric sql vs', 'local-first without sync engine'],
   },
-  {
-    slug: 'replicache',
-    name: 'Replicache',
-    category: 'sync-engine',
-    website: 'https://replicache.dev',
+  replicache: {
     headline: 'A Replicache alternative for one-shot moves rather than multiplayer',
     what: 'A client-side sync framework from Rocicorp. Your app writes to a local cache through mutators, Replicache pushes them to your backend and pulls updates back, and you implement push and pull on your server against your own database. Rocicorp now builds Zero, a query-driven successor with its own sync server.',
     overlap:
@@ -533,11 +559,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['replicache alternative', 'replicache vs', 'zero sync alternative simple'],
   },
-  {
-    slug: 'pouchdb',
-    name: 'PouchDB',
-    category: 'sync-engine',
-    website: 'https://pouchdb.com',
+  pouchdb: {
     headline: 'A PouchDB alternative that does not need a CouchDB',
     what: 'A JavaScript database that runs in the browser, on IndexedDB, and replicates with CouchDB or anything that speaks its replication protocol. Bidirectional, incremental, with conflict detection through revision trees, and around for over a decade.',
     overlap:
@@ -578,11 +600,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['pouchdb alternative', 'pouchdb couchdb alternative s3', 'indexeddb replication simple'],
   },
-  {
-    slug: 'firebase',
-    name: 'Firebase',
-    category: 'sync-engine',
-    website: 'https://firebase.google.com/products/firestore',
+  firebase: {
     headline: 'A Firebase alternative for local-first apps that keep their data',
     what: 'Google’s hosted document database, Cloud Firestore, with realtime listeners and offline persistence on web and mobile. The SDK caches locally, queues writes while offline and reconciles when it reconnects. It is priced per document read, write and delete, and per gigabyte stored, and it comes with the rest of the Firebase platform: auth, rules, functions, hosting.',
     overlap:
@@ -623,11 +641,7 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['firebase alternative local-first', 'firestore alternative self-hosted', 'firebase offline alternative'],
   },
-  {
-    slug: 'rclone',
-    name: 'rclone',
-    category: 'storage-tooling',
-    website: 'https://rclone.org',
+  rclone: {
     headline: 'An rclone alternative for handing someone a code',
     what: 'The rsync of cloud storage: a command-line program that copies, syncs, moves and mounts files across seventy-odd storage backends, S3 included. It does bandwidth limits, checksums, filters, encryption and a great deal more. When the job is moving trees of files between a machine and a bucket, it is the standard tool.',
     overlap:
@@ -668,12 +682,35 @@ export const alternatives: Alternative[] = [
     },
     keywords: ['rclone alternative simple', 'rclone vs', 'send file to s3 with code'],
   },
-]
-
-export function findAlternative(slug: string): Alternative | undefined {
-  return alternatives.find((alternative) => alternative.slug === slug)
 }
 
-export function alternativesIn(category: AlternativeCategory): Alternative[] {
-  return alternatives.filter((alternative) => alternative.category === category)
+const copy: Record<Locale, Record<AlternativeSlug, AlternativeCopy>> = { en: alternativesEn, fr: alternativesFr }
+const categoryCopy: Record<Locale, CategoryCopy> = { en: categoriesEn, fr: categoriesFr }
+const dimensionCopy: Record<Locale, Record<MatrixKey, string>> = { en: matrixDimensionsEn, fr: matrixDimensionsFr }
+const s3ndCopy: Record<Locale, Record<MatrixKey, string>> = { en: s3ndMatrixEn, fr: s3ndMatrixFr }
+
+export function alternatives(locale: Locale): Alternative[] {
+  return base.map((entry) => ({ ...entry, ...copy[locale][entry.slug] }))
 }
+
+export function findAlternative(locale: Locale, slug: string): Alternative | undefined {
+  return alternatives(locale).find((alternative) => alternative.slug === slug)
+}
+
+export function alternativesIn(locale: Locale, category: AlternativeCategory): Alternative[] {
+  return alternatives(locale).filter((alternative) => alternative.category === category)
+}
+
+export function categories(locale: Locale): CategoryCopy {
+  return categoryCopy[locale]
+}
+
+export function matrixDimensions(locale: Locale): { key: MatrixKey; label: string }[] {
+  return matrixKeys.map((key) => ({ key, label: dimensionCopy[locale][key] }))
+}
+
+export function s3ndMatrix(locale: Locale): Record<MatrixKey, string> {
+  return s3ndCopy[locale]
+}
+
+export const alternativeSlugs: AlternativeSlug[] = base.map((entry) => entry.slug)

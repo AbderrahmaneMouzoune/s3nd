@@ -1,37 +1,63 @@
 import type { Metadata } from 'next'
 
+import { localePath, localeTags, locales, type Locale } from './i18n/config'
 import { site } from './site'
 
 interface PageMetadata {
+  locale: Locale
   title: string
   description: string
-  /** Absolute path, `/library`. Becomes the canonical URL. */
+  /** Absolute path without the locale, `/library`. Becomes the canonical URL. */
   path: string
   keywords?: string[]
 }
 
+/** `hreflang` alternates for a path: every locale, plus `x-default` on the English one. */
+export function languageAlternates(path: string): Record<string, string> {
+  const languages: Record<string, string> = {}
+  for (const locale of locales) languages[locale] = localePath(locale, path)
+  languages['x-default'] = localePath('en', path)
+
+  return languages
+}
+
+/** The Markdown twin of a page, for agents: `/cli.md`, `/fr/cli.md`, `/index.md` for a home. */
+export function markdownPath(locale: Locale, path: string): string {
+  const localized = localePath(locale, path)
+
+  return localized === '/' ? '/index.md' : localized === `/${locale}` ? `/${locale}/index.md` : `${localized}.md`
+}
+
 /**
  * Every page declares its title, description and path once; this turns that into
- * the full set of tags — canonical, Open Graph and Twitter — against the site's
- * `metadataBase`. The Open Graph image is the generated one at the root.
+ * the full set of tags — canonical, hreflang, the Markdown alternate, Open Graph
+ * and Twitter — against the site's `metadataBase`. The Open Graph image is the
+ * generated one at the root.
  */
-export function pageMetadata({ title, description, path, keywords }: PageMetadata): Metadata {
+export function pageMetadata({ locale, title, description, path, keywords }: PageMetadata): Metadata {
+  const canonical = localePath(locale, path)
+
   return {
     title,
     description,
     keywords,
-    alternates: { canonical: path },
+    alternates: {
+      canonical,
+      languages: languageAlternates(path),
+      types: { 'text/markdown': markdownPath(locale, path) },
+    },
     openGraph: {
-      title: `${title} · ${site.name}`,
+      title: `${title} · ${site.domain}`,
       description,
-      url: path,
+      url: canonical,
       siteName: site.name,
       type: 'website',
-      locale: 'en_US',
+      locale: localeTags[locale].og,
+      alternateLocale: locales.filter((other) => other !== locale).map((other) => localeTags[other].og),
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${title} · ${site.name}`,
+      title: `${title} · ${site.domain}`,
       description,
     },
   }

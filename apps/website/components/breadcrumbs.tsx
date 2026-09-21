@@ -1,21 +1,24 @@
 import Link from 'next/link'
 
+import { getDictionary, localePath, type Locale } from '@/lib/i18n'
 import { site } from '@/lib/site'
 
 import { JsonLd } from './json-ld'
 
 export interface Crumb {
   label: string
+  /** Without the locale: `/use-cases`. */
   href: string
 }
 
 /** The trail above a page title, and the matching BreadcrumbList for search engines. */
-export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
-  const items = [{ label: 'Home', href: '/' }, ...trail]
+export function Breadcrumbs({ locale, trail }: { locale: Locale; trail: Crumb[] }) {
+  const t = getDictionary(locale).ui
+  const items = [{ label: t.home, href: '/' }, ...trail]
 
   return (
     <>
-      <nav aria-label="Breadcrumb" className="text-ink-faint flex flex-wrap items-center gap-1.5 font-mono text-xs">
+      <nav aria-label={t.breadcrumb} className="text-ink-faint flex flex-wrap items-center gap-1.5 font-mono text-xs">
         {items.map((item, index) => {
           const last = index === items.length - 1
 
@@ -27,7 +30,7 @@ export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
                   {item.label}
                 </span>
               ) : (
-                <Link className="hover:text-ink transition-colors" href={item.href}>
+                <Link className="text-link hover:text-ink transition-colors" href={localePath(locale, item.href)}>
                   {item.label}
                 </Link>
               )}
@@ -43,7 +46,7 @@ export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
             '@type': 'ListItem',
             position: index + 1,
             name: item.label,
-            item: `${site.url}${item.href}`,
+            item: `${site.url}${localePath(locale, item.href)}`,
           })),
         }}
       />

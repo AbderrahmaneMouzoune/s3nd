@@ -1,94 +1,86 @@
-import Link from 'next/link'
+import { alternativesIn, categoryOrder, categories } from '@/lib/alternatives'
+import { getDictionary, localePath, type Locale } from '@/lib/i18n'
+import { docs, repositoryUrl } from '@/lib/site'
+import { useCases } from '@/lib/use-cases'
 
-import { navigation, repositoryUrl } from '@/lib/site'
-
-import { Logo } from './logo'
-import { Container, ExternalMark } from './ui'
+import { MegaMenu, type MenuData } from './mega-menu'
 
 /**
- * Sticky header. The mobile menu is a `<details>` element, so navigation works
- * before, and without, any JavaScript.
+ * Builds the menu from the dictionary and the page data, so a use case or a
+ * comparison added in `lib/` shows up under its section without touching this.
  */
-export function SiteHeader() {
-  return (
-    <div className="border-line bg-canvas/90 sticky top-0 z-40 border-b backdrop-blur">
-      <Container className="flex h-14 items-center justify-between gap-6">
-        <Link className="flex items-center gap-2.5" href="/" aria-label="s3nd home">
-          <Logo className="size-6" />
-          <span className="text-lg font-extrabold tracking-[-0.04em]">s3nd</span>
-        </Link>
+export function SiteHeader({ locale }: { locale: Locale }) {
+  const t = getDictionary(locale)
+  const p = (path: string) => localePath(locale, path)
+  const cases = useCases(locale)
+  const cats = categories(locale)
 
-        <nav aria-label="Primary" className="hidden items-center gap-0.5 md:flex">
-          {navigation.map((link) =>
-            link.external ? (
-              <a
-                key={link.href}
-                className="text-ink-muted hover:text-accent rounded-md px-2.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.18em] uppercase transition-colors"
-                href={link.href}
-                rel="noopener"
-              >
-                {link.label} <ExternalMark />
-              </a>
-            ) : (
-              <Link
-                key={link.href}
-                className="text-ink-muted hover:text-accent rounded-md px-2.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.18em] uppercase transition-colors"
-                href={link.href}
-              >
-                {link.label}
-              </Link>
-            ),
-          )}
-          <a
-            className="border-line-strong hover:border-accent hover:text-accent ml-3 rounded-md border px-3 py-1.5 font-mono text-[11px] font-semibold tracking-[0.18em] uppercase transition-colors"
-            href={repositoryUrl}
-            rel="noopener"
-          >
-            GitHub
-          </a>
-        </nav>
+  const data: MenuData = {
+    home: p('/'),
+    homeLabel: `${t.site.tagline}`,
+    sections: [
+      {
+        id: 'product',
+        label: t.nav.product.label,
+        columns: 2,
+        groups: [
+          { links: t.nav.product.items.slice(0, 4).map((item) => ({ ...item, href: p(item.href) })) },
+          { links: t.nav.product.items.slice(4).map((item) => ({ ...item, href: p(item.href) })) },
+        ],
+        aside: {
+          title: t.nav.product.aside.title,
+          body: t.nav.product.aside.body,
+          command: t.nav.product.aside.command,
+          link: { label: t.nav.product.aside.link, href: p('/cli') },
+        },
+      },
+      {
+        id: 'use-cases',
+        label: t.nav.useCases.label,
+        columns: 2,
+        groups: [
+          {
+            title: t.nav.useCases.files,
+            links: cases
+              .filter((useCase) => useCase.kind === 'files')
+              .map((useCase) => ({
+                label: useCase.title,
+                description: useCase.summary,
+                href: p(`/use-cases/${useCase.slug}`),
+              })),
+          },
+          {
+            title: t.nav.useCases.appState,
+            links: cases
+              .filter((useCase) => useCase.kind === 'app-state')
+              .map((useCase) => ({
+                label: useCase.title,
+                description: useCase.summary,
+                href: p(`/use-cases/${useCase.slug}`),
+              })),
+          },
+        ],
+        footer: { label: t.nav.useCases.all, href: p('/use-cases') },
+      },
+      {
+        id: 'compare',
+        label: t.nav.compare.label,
+        lead: t.nav.compare.lead,
+        columns: 4,
+        groups: categoryOrder.map((category) => ({
+          title: cats[category].title,
+          links: alternativesIn(locale, category).map((alternative) => ({
+            label: `${t.home.compare.vs} ${alternative.name}`,
+            href: p(`/alternatives/${alternative.slug}`),
+          })),
+        })),
+        footer: { label: t.nav.compare.all, href: p('/alternatives') },
+      },
+    ],
+    links: [{ label: t.nav.docs, href: docs(), external: true }],
+    github: { label: t.nav.github, href: repositoryUrl, external: true },
+    cta: { label: t.nav.cta, href: p('/cli') },
+  }
 
-        <details className="group relative md:hidden">
-          <summary className="border-line-strong flex cursor-pointer list-none items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-[11px] font-semibold tracking-[0.18em] uppercase select-none [&::-webkit-details-marker]:hidden">
-            Menu
-            <span aria-hidden="true" className="transition-transform group-open:rotate-180">
-              ▾
-            </span>
-          </summary>
-          <nav
-            aria-label="Primary"
-            className="border-line-strong bg-surface shadow-card absolute right-0 mt-2 flex w-60 flex-col rounded-lg border p-2"
-          >
-            {navigation.map((link) =>
-              link.external ? (
-                <a
-                  key={link.href}
-                  className="hover:bg-surface-muted hover:text-accent rounded-md px-3 py-2.5 font-mono text-xs font-semibold tracking-[0.16em] uppercase"
-                  href={link.href}
-                  rel="noopener"
-                >
-                  {link.label} <ExternalMark />
-                </a>
-              ) : (
-                <Link
-                  key={link.href}
-                  className="hover:bg-surface-muted hover:text-accent rounded-md px-3 py-2.5 font-mono text-xs font-semibold tracking-[0.16em] uppercase"
-                  href={link.href}
-                >
-                  {link.label}
-                </Link>
-              ),
-            )}
-            <a
-              className="hover:bg-surface-muted hover:text-accent rounded-md px-3 py-2.5 font-mono text-xs font-semibold tracking-[0.16em] uppercase"
-              href={repositoryUrl}
-              rel="noopener"
-            >
-              GitHub <ExternalMark />
-            </a>
-          </nav>
-        </details>
-      </Container>
-    </div>
-  )
+  return <MegaMenu data={data} />
 }

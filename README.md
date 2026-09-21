@@ -34,16 +34,17 @@ npm install s3nd
 
 A bun workspace monorepo, driven by Turborepo.
 
-| Path                                                   | What it is                                                                                                  |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser. |
-| [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                   |
-| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                |
-| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                    |
-| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                         |
-| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.           |
-| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                |
-| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                      |
+| Path                                                   | What it is                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser.              |
+| [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                                |
+| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                             |
+| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                                 |
+| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                      |
+| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                        |
+| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                             |
+| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                                   |
+| [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket, live at drop.s3nd.sh: the one-click Vercel template, on `s3nd` and `@s3nd/react`. |
 
 The split follows one constraint: a browser must never end up with a storage client in its
 dependency tree. `@s3nd/protocol` is what both halves share, which is why it exists at all
@@ -71,7 +72,13 @@ bun run format
 
 Run the docs site locally with `bun run --filter @s3nd/docs dev` — it listens on
 [localhost:3100](http://localhost:3100). The website is `bun run --filter @s3nd/website dev`, on
-[localhost:3300](http://localhost:3300).
+[localhost:3300](http://localhost:3300), and the drop template is `bun run --filter s3nd-drop dev`, on
+[localhost:3400](http://localhost:3400).
+
+The template depends on `s3nd@^0.1.0` and `@s3nd/react@^0.1.0` rather than on `workspace:*`, on
+purpose: bun links the workspace packages while the version matches, so it builds here against the
+local source, and the same `package.json` installs from npm once it is cloned on its own, which is
+what the Vercel deploy button does.
 
 bun installs and orchestrates; the toolchain itself still runs on Node. That is deliberate rather
 than half-finished: `s3nd` is published for Node, so the test suite runs on Node — CI runs it

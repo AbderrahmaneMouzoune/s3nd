@@ -7,11 +7,27 @@ import { SplitFlap } from './split-flap'
 
 const SAMPLES = ['k7-qp2m4x', 'K7QP 2M4X', 'OIL5 abcd', 'k7qp2m4']
 
+export interface SyncCodeDemoLabels {
+  typed: string
+  lookedUpPrefix: string
+  lookedUpSuffix: string
+  placeholder: string
+  typeACode: string
+  complete: string
+  completeBody: string
+  /** `{have}` and `{need}` are replaced with the counts. */
+  partial: string
+  alphabet: string
+  chars: string
+  bits: string
+  normalizedCode: string
+}
+
 /**
  * The real normalization, running in the browser: the same `createSyncCodes()`
  * an app configures on its server, from the package that never sees S3.
  */
-export function SyncCodeDemo() {
+export function SyncCodeDemo({ labels }: { labels: SyncCodeDemoLabels }) {
   const id = useId()
   const [typed, setTyped] = useState(SAMPLES[0])
   const codes = useMemo(() => createSyncCodes(), [])
@@ -34,11 +50,11 @@ export function SyncCodeDemo() {
     <div className="border-line-strong bg-surface shadow-card rounded-xl border">
       <div className="border-line border-b px-5 py-5 sm:px-6">
         <label className="text-ink-faint block font-mono text-[10px] tracking-[0.22em] uppercase" htmlFor={id}>
-          What the user typed
+          {labels.typed}
         </label>
         <input
           id={id}
-          className="border-line-strong focus:border-accent mt-2 w-full rounded-md border bg-[#0d0d0c] px-3 py-3 font-mono text-lg tracking-[0.14em] outline-none"
+          className="border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_rgb(255_176_0_/_0.18)] mt-2 w-full rounded-md border bg-[#0d0d0c] px-3 py-3 font-mono text-lg tracking-[0.14em] transition-[border-color,box-shadow] duration-200 outline-none"
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
           autoComplete="one-time-code"
@@ -46,7 +62,7 @@ export function SyncCodeDemo() {
           autoCorrect="off"
           spellCheck={false}
           inputMode="text"
-          placeholder="K7QP 2M4X"
+          placeholder={labels.placeholder}
         />
         <div className="mt-3 flex flex-wrap gap-2">
           {SAMPLES.map((sample) => (
@@ -54,7 +70,11 @@ export function SyncCodeDemo() {
               key={sample}
               type="button"
               onClick={() => setTyped(sample)}
-              className="border-line-strong hover:border-accent hover:text-accent rounded-sm border px-2 py-1 font-mono text-xs transition-colors"
+              className={`rounded-sm border px-2 py-1 font-mono text-xs transition-[color,border-color,transform] duration-200 active:scale-95 ${
+                sample === typed
+                  ? 'border-accent text-accent'
+                  : 'border-line-strong hover:border-accent hover:text-accent'
+              }`}
             >
               {sample}
             </button>
@@ -64,27 +84,27 @@ export function SyncCodeDemo() {
 
       <div className="px-5 py-5 sm:px-6">
         <div className="text-ink-faint font-mono text-[10px] tracking-[0.22em] uppercase">
-          What <span className="text-ink">codes.normalize()</span> looks up
+          {labels.lookedUpPrefix} <span className="text-ink">codes.normalize()</span> {labels.lookedUpSuffix}
         </div>
         <div className="mt-3">
-          <SplitFlap value={result.code ?? ''} size="md" label="Normalized code" />
+          <SplitFlap value={result.code ?? ''} size="md" label={labels.normalizedCode} />
         </div>
         <p className="text-ink-muted mt-4 min-h-10 text-sm leading-relaxed" aria-live="polite">
           {result.error ? (
             <span className="text-danger">{result.error}</span>
           ) : result.code == null ? (
-            'Type a code.'
+            labels.typeACode
           ) : complete ? (
             <>
-              <span className="text-ok font-semibold">Complete.</span> Separators dropped, case folded, and O, I and L
-              read as 0, 1 and 1, because Crockford base32 has no O, I or L to confuse them with.
+              <span className="text-ok font-semibold">{labels.complete}</span> {labels.completeBody}
             </>
           ) : (
-            `${result.code.length} of ${codes.length} characters. The input stays exactly as typed; only the lookup is repaired.`
+            labels.partial.replace('{have}', String(result.code.length)).replace('{need}', String(codes.length))
           )}
         </p>
         <p className="text-ink-faint mt-4 font-mono text-[10px] tracking-wider uppercase">
-          Alphabet {syncCodeAlphabets.crockford} · {codes.length} chars · {codes.entropyBits} bits
+          {labels.alphabet} {syncCodeAlphabets.crockford} · {codes.length} {labels.chars} · {codes.entropyBits}{' '}
+          {labels.bits}
         </p>
       </div>
     </div>
