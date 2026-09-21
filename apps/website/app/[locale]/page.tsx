@@ -102,16 +102,16 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
             return (
               <li
                 key={step.stamp}
-                className="bento border-line bg-surface hover:border-line-strong flex flex-col overflow-hidden rounded-lg border transition-colors duration-300"
+                className="bento border-line bg-surface hover:border-line-strong relative flex flex-col overflow-hidden rounded-lg border transition-colors duration-300"
                 data-reveal=""
                 style={{ '--stagger': index } as CSSProperties}
               >
-                <div className="bento-figure border-line border-b">
+                <div className="bento-figure">
                   <Figure labels={t.illustrations} className="h-auto w-full" />
                 </div>
-                <div className="flex flex-1 flex-col p-6">
-                  <Stamp tone="accent">{step.stamp}</Stamp>
-                  <h3 className="mt-4 text-2xl font-bold tracking-tight">{step.title}</h3>
+                <div className="relative flex flex-1 flex-col p-6">
+                  <span className="bento-stamp">{step.stamp}</span>
+                  <h3 className="text-2xl font-bold tracking-tight">{step.title}</h3>
                   <p className="text-ink-muted mt-3 flex-1 text-sm leading-relaxed">{step.body}</p>
                   <div className="mt-5 text-sm">
                     <TextLink href={step.href} external>
