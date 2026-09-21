@@ -39,6 +39,26 @@
         "typescript": "^5.9.3",
       },
     },
+    "apps/website": {
+      "name": "@s3nd/website",
+      "version": "0.0.0",
+      "dependencies": {
+        "@s3nd/protocol": "workspace:*",
+        "next": "^16.3.3",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "shiki": "^3.2.1",
+      },
+      "devDependencies": {
+        "@tailwindcss/postcss": "^4.3.3",
+        "@types/node": "^22.10.5",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.5",
+        "postcss": "^8.5.26",
+        "tailwindcss": "^4.3.3",
+        "typescript": "^5.9.3",
+      },
+    },
     "examples/indexeddb-sync": {
       "name": "@s3nd/example-indexeddb-sync",
       "version": "0.0.0",
@@ -472,6 +492,8 @@
     "@s3nd/protocol": ["@s3nd/protocol@workspace:packages/protocol"],
 
     "@s3nd/react": ["@s3nd/react@workspace:packages/react"],
+
+    "@s3nd/website": ["@s3nd/website@workspace:apps/website"],
 
     "@shikijs/core": ["@shikijs/core@3.23.0", "", { "dependencies": { "@shikijs/types": "3.23.0", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-NSWQz0riNb67xthdm5br6lAkvpDJRTgB36fxlo37ZzM2yq0PQFFzbd8psqC2XMPgCzo1fW6cVi18+ArJ44wqgA=="],
 

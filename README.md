@@ -40,7 +40,8 @@ A bun workspace monorepo, driven by Turborepo.
 | [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                   |
 | [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                |
 | [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                    |
-| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference.                                                  |
+| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                         |
+| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.           |
 | [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                |
 | [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                      |
 
@@ -69,7 +70,8 @@ bun run format
 ```
 
 Run the docs site locally with `bun run --filter @s3nd/docs dev` — it listens on
-[localhost:3100](http://localhost:3100).
+[localhost:3100](http://localhost:3100). The website is `bun run --filter @s3nd/website dev`, on
+[localhost:3300](http://localhost:3300).
 
 bun installs and orchestrates; the toolchain itself still runs on Node. That is deliberate rather
 than half-finished: `s3nd` is published for Node, so the test suite runs on Node — CI runs it

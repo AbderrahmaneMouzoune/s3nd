@@ -8,3 +8,6 @@ export const gitConfig = {
 }
 
 export const repositoryUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`
+
+/** The marketing site. This app is the documentation, served from doc.s3nd.sh. */
+export const websiteUrl = 'https://s3nd.sh'
