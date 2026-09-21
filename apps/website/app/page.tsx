@@ -3,11 +3,11 @@ import type { Metadata } from 'next'
 import { CodeBlock, Command } from '@/components/code-block'
 import { Cta } from '@/components/cta'
 import { Faq } from '@/components/faq'
+import { HeroBoard } from '@/components/hero-board'
 import { JsonLd } from '@/components/json-ld'
 import { SyncCodeDemo } from '@/components/sync-code-demo'
-import { TransferDiagram } from '@/components/transfer-diagram'
-import { ButtonLink, CardLink, Container, Eyebrow, Pill, Section, TextLink } from '@/components/ui'
-import { examples } from '@/lib/examples'
+import { Ticker } from '@/components/ticker'
+import { ButtonLink, Card, CardLink, Container, Eyebrow, Facts, Pill, Section, Stamp, TextLink } from '@/components/ui'
 import { providers } from '@/lib/providers'
 import { docs, packages, repositoryUrl, site } from '@/lib/site'
 import { useCases } from '@/lib/use-cases'
@@ -16,94 +16,113 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
 
-const LIBRARY_SAMPLE = `import { createBucket } from 's3nd'
+const TICKER = [
+  'No account',
+  'No relay',
+  'Nothing to deploy',
+  'Your bucket',
+  'AWS S3',
+  'Cloudflare R2',
+  'MinIO',
+  'Scaleway',
+  'Wasabi',
+  'Expires on its own',
+  '40-bit codes',
+  'CLI · Library · React',
+  'MIT',
+]
 
-const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
-
-// On the old device: hand the user a code.
-const code = store.codes.create() // "K7QP2M4X"
-await store.putSnapshot(code, state, { app: 'notes', version: 3, expiresIn: 3600 })
-
-// On the new device: they type it in.
-const snapshot = await store.getSnapshot(store.codes.normalize(typed), { maxVersion: 3 })
-snapshot?.data // → the state, ready to write back into IndexedDB`
-
-const REACT_SAMPLE = `import { useReceiveTransfer, useSyncCodeInput } from '@s3nd/react'
-
-function RestoreFromCode() {
-  const input = useSyncCodeInput()
-  const { load, transfer, data, notFound } = useReceiveTransfer<Dump>()
-
-  return (
-    <>
-      <input {...input.inputProps} placeholder="K7QP 2M4X" />
-      <button onClick={() => load(input.code!)} disabled={!input.isComplete}>
-        Look it up
-      </button>
-      {notFound && <p>Unknown or expired code.</p>}
-      {transfer && <button onClick={() => importDatabase(data!)}>Replace my data</button>}
-    </>
-  )
-}`
-
-const CLI_SAMPLE = `$ s3nd put ./report.pdf
-report.pdf · 284 kB · expires in 1 hour
+const CLI_SAMPLE = `$ s3nd put ./build.tar.gz
+build.tar.gz · 41 MB · expires in 1 day
 K7QP2M4X
 
-$ s3nd get k7qp-2m4x        # on the other machine
-Wrote /home/you/report.pdf · 284 kB
+$ tar cz ./photos | s3nd put - --name photos.tar.gz
+$ CODE=$(s3nd put ./report.pdf)     # code on stdout, the rest on stderr
 
-$ s3nd doctor
-✓ Bucket reachable: HeadBucket succeeded
-✓ Write, read, delete: round-tripped a probe object
-! Expiry cleanup: no enabled expiration rule`
+# any other machine
+$ s3nd get k7qp-2m4x
+Wrote ./build.tar.gz · 41 MB`
 
-const HANDLER_SAMPLE = `// app/api/transfers/[[...route]]/route.ts
+const APP_SAMPLE = `// app/api/transfers/[[...route]]/route.ts
 import { createBucket, createTransferHandler } from 's3nd'
 
 export const { GET, POST, DELETE } = createTransferHandler({
-  bucket: createBucket({ bucket: 'my-bucket' }),
-  app: 'notes',
-  expiresIn: 3600,
-})`
+  bucket: createBucket({ bucket: 'drop' }),
+  expiresIn: 24 * 3600,
+  authorize: (request) => request.headers.get('authorization') === \`Bearer \${process.env.TOKEN}\`,
+})
 
-const STEPS = [
+// In the browser, with @s3nd/react:
+const { sendFile, transfer } = useSendTransfer()
+await sendFile(file) // → transfer.code`
+
+const CURL_SAMPLE = `$ curl -X POST https://drop.example.com/api/transfers \\
+    -H "Authorization: Bearer $TOKEN" \\
+    -H "Content-Type: application/pdf" \\
+    -H "X-S3nd-Filename: report.pdf" \\
+    --data-binary @report.pdf
+{ "code": "K7QP2M4X", "kind": "file", "size": 290816, "expiresAt": "…" }
+
+$ curl -LOJ -H "Authorization: Bearer $TOKEN" \\
+    https://drop.example.com/api/transfers/K7QP2M4X/raw`
+
+const SNAPSHOT_SAMPLE = `import { createBucket } from 's3nd'
+
+const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
+
+// On the old phone: hand the user a code.
+const code = store.codes.create() // "K7QP2M4X"
+await store.putSnapshot(code, state, { app: 'notes', version: 3, expiresIn: 3600 })
+
+// On the new phone: they type it in.
+const snapshot = await store.getSnapshot(store.codes.normalize(typed), { maxVersion: 3 })
+snapshot?.data // → ready to write back into IndexedDB`
+
+const MECHANISM = [
   {
-    title: 'Snapshot',
-    body: 'The old device exports its local state. s3nd wraps it in a self-describing envelope with your app name, schema version and expiry, gzips it, and writes it to your bucket under a fresh code.',
-    href: docs('/snapshots'),
+    stamp: 'put',
+    title: 'Drop it in your bucket.',
+    body: 'A file, a folder as an archive, whatever comes down stdin. One PutObject into a bucket you own, under a fresh code, with an expiry stamped on the object. The code is printed and nothing else, so it composes.',
+    href: docs('/cli'),
+    label: 'The CLI reference',
   },
   {
-    title: 'Code',
-    body: 'Eight Crockford base32 characters, forty bits, with the letters people misread left out. The user reads it off one screen and types it into the other, sloppily, and it still resolves.',
+    stamp: 'code',
+    title: 'Read it over the phone.',
+    body: 'Eight characters, forty bits, no I, L, O or U. Write it on a sticky note, type it in the wrong case with a dash in the middle: it still resolves. The server picks it and claims it with a conditional write.',
     href: docs('/sync-codes'),
+    label: 'Sync codes',
   },
   {
-    title: 'Restore',
-    body: 'The new device looks the code up, sees when and where the snapshot was made, and only then replaces its own data. An expired snapshot is never handed over, and a newer schema refuses cleanly.',
-    href: docs('/use-cases/new-device'),
+    stamp: 'get',
+    title: 'Pick it up anywhere.',
+    body: 'Any machine with the code and access to the bucket, or a token for your server, gets the file back. Until the transfer expires, or you burn it. The other machine did not have to be on when you sent.',
+    href: docs('/no-server'),
+    label: 'Without a server',
   },
 ]
 
 export default function HomePage() {
+  const files = useCases.filter((useCase) => useCase.kind === 'files')
+  const appState = useCases.filter((useCase) => useCase.kind === 'app-state')
+
   return (
     <>
-      <header className="border-line relative border-b">
+      <header className="relative overflow-hidden">
+        <div className="grid-paper absolute inset-0 -z-10" aria-hidden="true" />
         <Container className="pt-16 pb-16 sm:pt-24 sm:pb-24">
-          <div className="grid gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center">
             <div>
-              <Eyebrow>Open source · MIT · TypeScript</Eyebrow>
-              <h1 className="mt-4 text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
-                Move data between devices with a code.
+              <Eyebrow>Your bucket · A code · No account</Eyebrow>
+              <h1 className="mt-5 text-[2.75rem] leading-[0.95] font-extrabold tracking-[-0.045em] text-balance uppercase sm:text-7xl lg:text-[5.4rem]">
+                Send anything with a code.
               </h1>
-              <p className="text-ink-muted mt-6 max-w-xl text-lg leading-relaxed text-pretty sm:text-xl">
-                s3nd snapshots a local-first app&apos;s state, or a file from your terminal, into an S3 bucket you
-                control, under a short code the user carries across. Credentials stay on your server.
+              <p className="text-ink-muted mt-7 max-w-xl text-lg leading-relaxed text-pretty sm:text-xl">
+                s3nd drops a file into an S3 bucket you own and hands you eight characters. Whoever has the code picks
+                it up, from any machine, until it expires. From a terminal, from your own app, or from curl.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <ButtonLink href={docs('/quick-start')} external>
-                  Quick start
-                </ButtonLink>
+                <ButtonLink href="/cli">Install the CLI</ButtonLink>
                 <ButtonLink href="/how-it-works" variant="secondary">
                   How it works
                 </ButtonLink>
@@ -112,117 +131,149 @@ export default function HomePage() {
                 </ButtonLink>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Command>npm install s3nd</Command>
-                <Command>npx @s3nd/cli doctor</Command>
+                <Command>npm i -g @s3nd/cli</Command>
+                <Command>s3nd put ./anything.zip</Command>
               </div>
             </div>
-            <TransferDiagram />
+            <HeroBoard />
           </div>
         </Container>
       </header>
 
-      <Section
-        id="ways-in"
-        eyebrow="Three ways in"
-        title="A library, hooks, and a command line. One primitive under all three."
-        lead="The browser never sees a storage credential. The server-side package holds the keys; the browser packages depend on fetch and nothing else."
-      >
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="flex min-w-0 flex-col gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold tracking-tight">The library</h3>
-                <Pill>{packages.s3nd.name}</Pill>
-              </div>
-              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
-                Snapshots with an envelope, conditional writes, a file API, and a transfer handler that is a Next route
-                in one line. Runs where the AWS SDK runs.
-              </p>
-            </div>
-            <CodeBlock code={LIBRARY_SAMPLE} lang="ts" className="flex-1" />
-            <TextLink href="/library">Everything the library does</TextLink>
-          </div>
-          <div className="flex min-w-0 flex-col gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold tracking-tight">React hooks</h3>
-                <Pill>{packages.react.name}</Pill>
-              </div>
-              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
-                Send a snapshot or a file, read a code back, and an input that repairs what the user typed. No path from
-                it reaches S3.
-              </p>
-            </div>
-            <CodeBlock code={REACT_SAMPLE} lang="tsx" className="flex-1" />
-            <TextLink href="/react">The hooks, in detail</TextLink>
-          </div>
-          <div className="flex min-w-0 flex-col gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold tracking-tight">The CLI</h3>
-                <Pill>{packages.cli.name}</Pill>
-              </div>
-              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
-                A file between two machines with a code, straight to the bucket or through your server. And a doctor
-                that checks the bucket is actually set up to hold transfers.
-              </p>
-            </div>
-            <CodeBlock code={CLI_SAMPLE} lang="sh" className="flex-1" />
-            <TextLink href="/cli">Every command</TextLink>
-          </div>
-        </div>
-      </Section>
+      <Ticker items={TICKER} />
 
       <Section
         id="how"
-        eyebrow="How a transfer works"
-        title="Snapshot, code, restore."
-        lead="IndexedDB is fast, offline and private, and it never leaves the browser it was written in. s3nd is the small server-side piece that closes that gap."
-        className="bg-surface-muted/60"
+        index="01"
+        eyebrow="Put. Code. Get."
+        title="The whole product is three commands."
+        lead="The bytes go from one machine to your bucket and from your bucket to the other. Nothing streams through anyone else's server, and nobody signs up for anything."
       >
-        <ol className="grid gap-6 md:grid-cols-3">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="border-line bg-surface shadow-card rounded-2xl border p-6">
-              <div className="text-accent font-mono text-xs">0{index + 1}</div>
-              <h3 className="mt-2 text-lg font-semibold tracking-tight">{step.title}</h3>
-              <p className="text-ink-muted mt-2 text-sm leading-relaxed">{step.body}</p>
-              <div className="mt-4 text-sm">
+        <ol className="grid gap-4 lg:grid-cols-3">
+          {MECHANISM.map((step) => (
+            <li key={step.stamp} className="border-line bg-surface flex flex-col rounded-lg border p-6">
+              <Stamp tone="accent">{step.stamp}</Stamp>
+              <h3 className="mt-4 text-2xl font-bold tracking-tight">{step.title}</h3>
+              <p className="text-ink-muted mt-3 flex-1 text-sm leading-relaxed">{step.body}</p>
+              <div className="mt-5 text-sm">
                 <TextLink href={step.href} external>
-                  Read more
+                  {step.label}
                 </TextLink>
               </div>
             </li>
           ))}
         </ol>
-        <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
-          <div>
-            <h3 className="text-lg font-semibold tracking-tight">The routes, without writing them</h3>
-            <p className="text-ink-muted mt-2 text-sm leading-relaxed">
-              <code className="font-mono">createTransferHandler()</code> serves the four-route transfer protocol. It
-              takes a <code className="font-mono">Request</code> and returns a{' '}
-              <code className="font-mono">Response</code>, so it is a Next route handler, a Hono route,{' '}
-              <code className="font-mono">Bun.serve</code>, Deno or a worker, without an adapter for any of them. Add{' '}
-              <code className="font-mono">authorize</code> and it is not public any more.
-            </p>
-            <div className="mt-4 text-sm">
-              <TextLink href={docs('/protocol')} external>
-                The transfer protocol
-              </TextLink>
+      </Section>
+
+      <Section
+        id="ways-in"
+        index="02"
+        eyebrow="Three ways to send"
+        title="A terminal, your own app, or anything that speaks HTTP."
+        lead="One primitive under all three. The server-side package holds the keys; everything that runs in a browser depends on fetch and nothing else."
+      >
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xl font-bold tracking-tight">From a terminal</h3>
+                <Pill>{packages.cli.name}</Pill>
+              </div>
+              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
+                Straight to the bucket with the credentials on that machine, nothing deployed. Or through your server
+                with a token and <code className="font-mono">--remote</code>. A doctor command proves the setup works.
+              </p>
+            </div>
+            <CodeBlock code={CLI_SAMPLE} lang="sh" className="flex-1" />
+            <TextLink href="/cli">Every command</TextLink>
+          </div>
+          <div className="flex min-w-0 flex-col gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xl font-bold tracking-tight">Inside your app</h3>
+                <Pill>{packages.s3nd.name}</Pill>
+                <Pill>{packages.react.name}</Pill>
+              </div>
+              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
+                One route file serves the four-route protocol on your domain, with your auth. React hooks send a file,
+                read a code back, and repair what the user typed.
+              </p>
+            </div>
+            <CodeBlock code={APP_SAMPLE} lang="ts" className="flex-1" />
+            <div className="flex flex-wrap gap-4">
+              <TextLink href="/library">The library</TextLink>
+              <TextLink href="/react">The hooks</TextLink>
             </div>
           </div>
-          <CodeBlock code={HANDLER_SAMPLE} lang="ts" />
+          <div className="flex min-w-0 flex-col gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xl font-bold tracking-tight">Anything with HTTP</h3>
+                <Pill>{packages.protocol.name}</Pill>
+              </div>
+              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
+                The protocol is four routes and one error format, written down. curl works, a Go client works, and a
+                server in Rails works with every s3nd client.
+              </p>
+            </div>
+            <CodeBlock code={CURL_SAMPLE} lang="sh" className="flex-1" />
+            <TextLink href={docs('/protocol')} external>
+              The protocol spec
+            </TextLink>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        id="bucket"
+        index="03"
+        eyebrow="Your bucket"
+        title="Nobody in the middle."
+        lead="Every other tool in this space either runs a relay, hosts your files, or asks for an account. s3nd is a thin layer over object storage you already pay for."
+      >
+        <Facts
+          items={[
+            {
+              label: 'No relay',
+              value:
+                'Machine to bucket, bucket to machine. Your provider’s durability, your provider’s bill, and on R2 no egress fee at all.',
+            },
+            {
+              label: 'No account',
+              value:
+                'A code is the whole handshake. On your own server, a bearer token per person is the most identity s3nd ever asks for.',
+            },
+            {
+              label: 'Nothing to deploy',
+              value:
+                'The CLI talks to the bucket directly. A server enters the picture only when a browser has to, and it is one route file.',
+            },
+            {
+              label: 'Expires on its own',
+              value:
+                'Every transfer carries an expiry, checked on every read. A lifecycle rule deletes the object, and s3nd doctor checks you have one.',
+            },
+          ]}
+        />
+        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {providers.map((provider) => (
+            <CardLink key={provider.slug} href={`/providers/${provider.slug}`} title={provider.name}>
+              {provider.tagline}
+            </CardLink>
+          ))}
         </div>
       </Section>
 
       <Section
         id="codes"
+        index="04"
         eyebrow="Sync codes"
-        title="A code that survives being read aloud."
-        lead="The whole user experience of moving between devices is someone reading a code off one screen and typing it into another. Everything about the code is shaped by that."
+        title="A code you can read over the phone."
+        lead="The whole experience of a transfer is someone reading a code off one screen and typing it into another. Everything about the code is shaped by that."
       >
         <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
           <SyncCodeDemo />
-          <div className="space-y-5 text-sm leading-relaxed lg:pt-2">
+          <div className="space-y-5 text-base leading-relaxed lg:pt-2">
             <p>
               The default is eight characters of Crockford base32: no <code className="font-mono">I</code>,{' '}
               <code className="font-mono">L</code>, <code className="font-mono">O</code> or{' '}
@@ -231,13 +282,13 @@ export default function HomePage() {
               alphabet.
             </p>
             <p>
-              Four digits for a phone-first app, twelve alphanumerics for a long-lived one: both halves are
+              Four digits for a phone-first app, twelve alphanumerics for a long-lived drop: both halves are
               configurable, and <code className="font-mono">entropyBits</code> tells you what the code is worth guessing
               against so the rate limit can do the rest.
             </p>
             <p>
-              A code is a bearer token. Give it a short expiry, rate-limit the lookup route, and for sensitive data
-              encrypt in the browser before anything reaches your server.
+              A code is a bearer token. Give it a short expiry, rate-limit the lookup route, and for sensitive payloads
+              encrypt before anything reaches the bucket.
             </p>
             <div className="flex flex-wrap gap-4">
               <TextLink href={docs('/sync-codes')} external>
@@ -252,84 +303,95 @@ export default function HomePage() {
       </Section>
 
       <Section
-        id="providers"
-        eyebrow="Your bucket"
-        title="Any storage that speaks S3."
-        lead="Set an endpoint and s3nd switches the two defaults those providers expect. The CLI writes a starter configuration for each, and doctor tells you whether it actually works."
-        className="bg-surface-muted/60"
+        id="app-state"
+        index="05"
+        eyebrow="Also"
+        title="Not only files. An app's whole state."
+        lead="A transfer can be structured data as well as bytes. That is how a local-first app with no accounts carries its database to the user's new phone: the browser exports IndexedDB, the server snapshots it, the other phone types the code."
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {providers.map((provider) => (
-            <CardLink key={provider.slug} href={`/providers/${provider.slug}`} title={provider.name}>
-              {provider.tagline}
-            </CardLink>
-          ))}
+        <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
+          <CodeBlock code={SNAPSHOT_SAMPLE} lang="ts" />
+          <div className="grid gap-4">
+            <Card>
+              <h3 className="font-bold tracking-tight">A self-describing envelope</h3>
+              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
+                Your app name, your schema version, the device, an expiry, then the data, gzipped. A restore refuses a
+                snapshot from a newer build instead of misreading it, and shows when and where it was made before
+                replacing anything.
+              </p>
+            </Card>
+            <Card>
+              <h3 className="font-bold tracking-tight">Two devices, one backup, no silent loss</h3>
+              <p className="text-ink-muted mt-2 text-sm leading-relaxed">
+                Pass the ETag you last read as <code className="font-mono">ifMatch</code> and a device that writes after
+                someone else did gets an error instead of overwriting their work.
+              </p>
+            </Card>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <TextLink href="/use-cases/new-device">Move an app to a new device</TextLink>
+              <TextLink href="/react">The React hooks</TextLink>
+              <TextLink href={docs('/snapshots')} external>
+                Snapshots
+              </TextLink>
+            </div>
+          </div>
         </div>
       </Section>
 
-      <Section
-        id="use-cases"
-        eyebrow="Use cases"
-        title="What people build with it."
-        lead="The flagship case is a new phone with no account to sign into. The same primitive covers the cases around it."
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {useCases.map((useCase) => (
-            <CardLink
-              key={useCase.slug}
-              href={`/use-cases/${useCase.slug}`}
-              title={useCase.title}
-              meta={useCase.packages.join(' · ')}
-            >
-              {useCase.summary}
-            </CardLink>
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        id="examples"
-        eyebrow="Examples"
-        title="Runnable, in the repository."
-        lead="Both point at a local MinIO by default, so the real code path runs on your laptop with nothing to sign up for."
-        className="bg-surface-muted/60"
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          {examples.map((example) => (
-            <CardLink
-              key={example.slug}
-              href={example.source}
-              title={example.title}
-              meta={example.stack.join(' · ')}
-              external
-            >
-              {example.summary}
-            </CardLink>
-          ))}
-        </div>
-        <div className="mt-6 text-sm">
-          <TextLink href="/examples">All examples and guides</TextLink>
+      <Section id="use-cases" index="06" eyebrow="Use cases" title="What people move with it.">
+        <div className="grid gap-10">
+          <div>
+            <h3 className="text-ink-faint mb-4 font-mono text-[10px] tracking-[0.22em] uppercase">Files</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {files.map((useCase) => (
+                <CardLink
+                  key={useCase.slug}
+                  href={`/use-cases/${useCase.slug}`}
+                  title={useCase.title}
+                  meta={useCase.packages.join(' · ')}
+                >
+                  {useCase.summary}
+                </CardLink>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="text-ink-faint mb-4 font-mono text-[10px] tracking-[0.22em] uppercase">App state</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {appState.map((useCase) => (
+                <CardLink
+                  key={useCase.slug}
+                  href={`/use-cases/${useCase.slug}`}
+                  title={useCase.title}
+                  meta={useCase.packages.join(' · ')}
+                >
+                  {useCase.summary}
+                </CardLink>
+              ))}
+            </div>
+          </div>
         </div>
       </Section>
 
       <Section
         id="compare"
+        index="07"
         eyebrow="Compared"
-        title="Why not croc, WeTransfer or a sync engine?"
-        lead="Sometimes those are the right answer. The comparison pages say when, tool by tool."
+        title="Why not croc, WeTransfer or rclone?"
+        lead="Sometimes they are the right answer. The comparison pages say when, tool by tool, in the other tool's own terms."
       >
         <div className="flex flex-wrap gap-2">
           {[
-            ['Magic Wormhole', 'magic-wormhole'],
             ['croc', 'croc'],
+            ['Magic Wormhole', 'magic-wormhole'],
             ['WeTransfer', 'wetransfer'],
+            ['transfer.sh', 'transfer-sh'],
             ['PairDrop', 'pairdrop'],
+            ['Firefox Send', 'firefox-send'],
+            ['rclone', 'rclone'],
             ['Dexie Cloud', 'dexie-cloud'],
             ['PowerSync', 'powersync'],
-            ['ElectricSQL', 'electricsql'],
-            ['PouchDB', 'pouchdb'],
             ['Firebase', 'firebase'],
-            ['rclone', 'rclone'],
           ].map(([name, slug]) => (
             <ButtonLink key={slug} href={`/alternatives/${slug}`} variant="secondary">
               vs {name}
@@ -341,7 +403,7 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <Section id="faq" eyebrow="Questions" title="The ones that come up." className="bg-surface-muted/60">
+      <Section id="faq" index="08" eyebrow="Questions" title="The ones that come up.">
         <Faq />
       </Section>
 
@@ -361,8 +423,8 @@ export default function HomePage() {
           license: 'https://opensource.org/license/mit',
           isAccessibleForFree: true,
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-          downloadUrl: packages.s3nd.npm,
-          installUrl: packages.s3nd.npm,
+          downloadUrl: packages.cli.npm,
+          installUrl: packages.cli.npm,
           softwareHelp: { '@type': 'CreativeWork', url: docs() },
           author: { '@id': `${site.url}/#organization` },
           sameAs: [repositoryUrl],

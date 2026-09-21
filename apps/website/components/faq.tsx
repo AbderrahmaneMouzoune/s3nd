@@ -7,16 +7,19 @@ import { TextLink } from './ui'
 export function Faq({ entries = faq }: { entries?: FaqEntry[] }) {
   return (
     <>
-      <div className="border-line divide-line divide-y rounded-2xl border">
-        {entries.map((entry) => (
-          <details key={entry.question} className="group px-6 py-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium [&::-webkit-details-marker]:hidden">
-              {entry.question}
-              <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-45">
+      <div className="border-line divide-line divide-y border-y">
+        {entries.map((entry, index) => (
+          <details key={entry.question} className="group py-5">
+            <summary className="flex cursor-pointer list-none items-baseline gap-5 text-lg font-bold tracking-tight [&::-webkit-details-marker]:hidden">
+              <span className="text-accent w-8 shrink-0 font-mono text-xs font-semibold tabular-nums">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span className="flex-1">{entry.question}</span>
+              <span aria-hidden="true" className="text-accent font-mono transition-transform group-open:rotate-45">
                 +
               </span>
             </summary>
-            <p className="text-ink-muted mt-3 max-w-3xl text-sm leading-relaxed">
+            <p className="text-ink-muted mt-3 max-w-3xl pl-13 text-base leading-relaxed">
               {entry.answer}
               {entry.link ? (
                 <>

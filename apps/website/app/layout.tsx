@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { JsonLd } from '@/components/json-ld'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
+import { display, mono } from '@/lib/fonts'
 import { repositoryUrl, site } from '@/lib/site'
 
 import './globals.css'
@@ -19,15 +20,15 @@ export const metadata: Metadata = {
   creator: site.author,
   keywords: [
     's3nd',
-    'local-first',
-    'IndexedDB sync',
-    'sync code',
+    'send file with code',
     'file transfer cli',
+    'self-hosted file transfer',
     'S3',
     'Cloudflare R2',
     'MinIO',
+    'sync code',
+    'local-first',
     'TypeScript',
-    'React hooks',
   ],
   openGraph: {
     type: 'website',
@@ -46,20 +47,18 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fbfaf7' },
-    { media: '(prefers-color-scheme: dark)', color: '#0f0e0c' },
-  ],
+  themeColor: '#0a0a0a',
+  colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,
 }
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${display.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="flex min-h-screen flex-col">
         <a
-          className="bg-accent text-accent-ink sr-only rounded-md px-3 py-2 focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
+          className="bg-accent text-accent-ink sr-only rounded-md px-3 py-2 font-mono text-xs uppercase focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
           href="#main"
         >
           Skip to content

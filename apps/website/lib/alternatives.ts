@@ -39,13 +39,13 @@ export const matrixDimensions = [
 export type MatrixKey = (typeof matrixDimensions)[number]['key']
 
 export const s3ndMatrix: Record<MatrixKey, string> = {
-  shape: 'A library, React hooks and a CLI over an S3 bucket',
+  shape: 'A CLI, a library and React hooks over your own S3 bucket',
   storage: 'Your bucket: S3, R2, MinIO, Scaleway, Wasabi',
   online: 'No. The code is redeemed later, until it expires',
   browser: 'Yes, through one route on your server',
   accounts: 'None. The code is the whole handshake',
   hosting: 'Your bucket, plus your server when a browser takes part',
-  price: 'Free. You pay your storage provider for a few small objects',
+  price: 'Free. You pay your storage provider for a few objects that expire',
   license: 'MIT',
 }
 

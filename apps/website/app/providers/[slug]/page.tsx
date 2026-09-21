@@ -65,7 +65,6 @@ export default async function ProviderPage(props: PageProps<'/providers/[slug]'>
         eyebrow="From the command line"
         title="A starter configuration, and what is left to do."
         lead="init writes the file with ${VAR} references rather than secrets, so it is meant to be committed; the env file it points at is not."
-        className="bg-surface-muted/60"
       >
         <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
           <div className="min-w-0 space-y-3">
@@ -109,7 +108,7 @@ export default async function ProviderPage(props: PageProps<'/providers/[slug]'>
         </div>
       </Section>
 
-      <Section eyebrow="Other providers" title="The endpoint is the only difference." className="bg-surface-muted/60">
+      <Section eyebrow="Other providers" title="The endpoint is the only difference.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {others.map((other) => (
             <CardLink key={other.slug} href={`/providers/${other.slug}`} title={other.name}>

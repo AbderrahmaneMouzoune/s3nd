@@ -158,7 +158,6 @@ export default function CliPage() {
         eyebrow="Configuration"
         title="Committable settings, uncommittable keys."
         lead="${VAR} is read from the environment, and envFile names a file to load first without overwriting what the shell already set. Profiles hold several setups in one file. A flag beats a variable, which beats the file."
-        className="bg-surface-muted/60"
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <CodeBlock code={CONFIG_FILE} lang="json" title="s3nd.config.json" />
@@ -198,7 +197,7 @@ export default function CliPage() {
         </div>
       </Section>
 
-      <Section eyebrow="Reference" title="Six commands, a dozen options." className="bg-surface-muted/60">
+      <Section eyebrow="Reference" title="Six commands, a dozen options.">
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="p-0">
             <h3 className="border-line text-ink-faint border-b px-5 py-3 font-mono text-[11px] tracking-wider uppercase">

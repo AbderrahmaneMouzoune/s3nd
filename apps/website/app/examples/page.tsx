@@ -55,7 +55,7 @@ export default function ExamplesPage() {
           eyebrow={`examples/${example.slug}`}
           title={example.title}
           lead={example.summary}
-          className={index % 2 === 1 ? 'bg-surface-muted/60' : undefined}
+          index={String(index + 1).padStart(2, '0')}
         >
           <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
             <div>
@@ -101,7 +101,7 @@ export default function ExamplesPage() {
         </div>
       </Section>
 
-      <Section eyebrow="Try it in a minute" title="No clone required." className="bg-surface-muted/60">
+      <Section eyebrow="Try it in a minute" title="No clone required.">
         <Card>
           <ol className="grid gap-6 md:grid-cols-3">
             <li>

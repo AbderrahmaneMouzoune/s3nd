@@ -86,7 +86,7 @@ export default async function UseCasePage(props: PageProps<'/use-cases/[slug]'>)
         </div>
       </Section>
 
-      <Section eyebrow="Worth watching" title="The things that are easy to get wrong." className="bg-surface-muted/60">
+      <Section eyebrow="Worth watching" title="The things that are easy to get wrong.">
         <div className="grid gap-6 md:grid-cols-3">
           {useCase.watch.map((item) => (
             <Card key={item.title}>

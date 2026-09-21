@@ -34,8 +34,8 @@ export default function AlternativesPage() {
           key={category}
           id={category}
           eyebrow={categories[category].title}
+          index={String(index + 1).padStart(2, '0')}
           title={categories[category].blurb}
-          className={index % 2 === 1 ? 'bg-surface-muted/60' : undefined}
         >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {alternativesIn(category).map((alternative) => (

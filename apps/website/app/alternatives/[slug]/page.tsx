@@ -68,7 +68,7 @@ export default async function AlternativePage(props: PageProps<'/alternatives/[s
         <p className="max-w-3xl text-base leading-relaxed">{alternative.what}</p>
       </Section>
 
-      <Section eyebrow="Side by side" title="Where they part ways." className="bg-surface-muted/60">
+      <Section eyebrow="Side by side" title="Where they part ways.">
         <div className="border-line bg-surface overflow-x-auto rounded-2xl border">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
@@ -113,7 +113,7 @@ export default async function AlternativePage(props: PageProps<'/alternatives/[s
         </div>
       </Section>
 
-      <Section eyebrow="The decision" title="Pick the one that fits." className="bg-surface-muted/60">
+      <Section eyebrow="The decision" title="Pick the one that fits.">
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <h3 className="font-semibold tracking-tight">Pick {alternative.name} when</h3>

@@ -5,6 +5,8 @@ export interface UseCase {
   title: string
   /** One line, for cards. */
   summary: string
+  /** Which side of the product it shows. */
+  kind: 'files' | 'app-state'
   /** Search intent this page answers. */
   keywords: string[]
   /** The situation, in a paragraph. */
@@ -23,9 +25,134 @@ export interface UseCase {
 
 export const useCases: UseCase[] = [
   {
+    slug: 'file-between-machines',
+    title: 'A file between two machines',
+    summary: 'A laptop, a desktop, a code. No server, no account, through the bucket you already have.',
+    kind: 'files',
+    keywords: ['send file between computers cli', 'transfer file with code terminal', 'cli file transfer s3 bucket'],
+    problem:
+      'You have a file here and need it there. Email chokes on it, a chat app recompresses it and keeps a copy, the USB stick is in another room, and the hosted services want an account.',
+    approach:
+      'Both machines hold credentials for a bucket you own. s3nd put uploads the file and prints a code; s3nd get on the other side downloads it; s3nd rm burns it. The bytes go from one machine to the bucket and from the bucket to the other, and nothing streams through a service in between. The other machine does not have to be on when you send.',
+    code: {
+      lang: 'sh',
+      source: `$ s3nd put ./contract.pdf
+contract.pdf · 284 kB · expires in 1 day
+K7QP2M4X
+
+# on the other machine, whenever it is on
+$ s3nd get k7qp-2m4x
+Wrote /home/you/contract.pdf · 284 kB
+
+$ s3nd rm K7QP2M4X
+Burned K7QP2M4X`,
+    },
+    watch: [
+      {
+        title: 'Run doctor first',
+        body: 'It performs the operations s3nd needs and reports what happened, including whether a lifecycle rule will delete expired transfers, the thing nobody discovers until a bill arrives.',
+      },
+      {
+        title: 'Every machine holds the keys',
+        body: 'Fine for two or three machines you own. For a team, put a server in front and hand out tokens instead of S3 credentials.',
+      },
+      {
+        title: 'Directories travel as archives',
+        body: 'tar cz ./project | s3nd put - --name project.tar.gz. The code goes to stdout and everything else to stderr, so it composes.',
+      },
+    ],
+    packages: ['@s3nd/cli'],
+    guide: { label: 'Without a server, in full', href: docs('/no-server') },
+  },
+  {
+    slug: 'team-drop-box',
+    title: 'A drop box for your team',
+    summary: 'One route on your own domain, a token per person, and a code instead of a chat upload.',
+    kind: 'files',
+    keywords: [
+      'self-hosted file drop',
+      'team file transfer cli',
+      'internal file sharing s3 bucket',
+      'wetransfer for teams self-hosted',
+    ],
+    problem:
+      'Files move around a team as chat uploads and email attachments, each one a copy on somebody else’s servers. Handing everyone the bucket keys is not an option, and a shared drive is a different kind of mess.',
+    approach:
+      'Mount the transfer handler on a domain you own and pass an authorize function that checks a bearer token. Each person has a token, not a key. The CLI points at it with --remote, a browser uses the same four routes through the React hooks, and curl works too. Files land in your bucket under a code and expire on their own.',
+    code: {
+      lang: 'ts',
+      title: 'app/api/transfers/[[...route]]/route.ts',
+      source: `import { createBucket, createTransferHandler } from 's3nd'
+
+const tokens = new Set(process.env.DROP_TOKENS!.split(','))
+
+export const { GET, POST, DELETE } = createTransferHandler({
+  bucket: createBucket({ bucket: 'drop' }),
+  expiresIn: 24 * 3600,
+  raw: 'redirect', // downloads go straight from the bucket, presigned
+  authorize: (request) => tokens.has(request.headers.get('authorization')?.replace('Bearer ', '') ?? ''),
+})
+
+// $ s3nd --remote https://drop.example.com/api/transfers --token $TOKEN put ./deck.pdf`,
+    },
+    watch: [
+      {
+        title: 'Rate-limit the lookup',
+        body: 'A code is a bearer token and forty bits is the whole secret. A rate limit on GET /:code is what makes guessing pointless.',
+      },
+      {
+        title: 'raw: redirect for big files',
+        body: 'With it, a download answers 302 with a presigned URL, so the bytes never transit your server twice. Without it they stream through, which is fine for small files and expensive for large ones.',
+      },
+      {
+        title: 'doctor --remote as the smoke test',
+        body: 'It round-trips a real transfer against the deployment and exits non-zero on failure. Put it in the deploy pipeline.',
+      },
+    ],
+    packages: ['s3nd', '@s3nd/cli'],
+    guide: { label: 'Setting up a server, in full', href: docs('/server') },
+  },
+  {
+    slug: 'ci-backups',
+    title: 'Backups from CI',
+    summary: 'A nightly archive to your bucket from a workflow, with secrets from the runner and no file to check in.',
+    kind: 'files',
+    keywords: ['github actions backup to s3', 'ci upload to r2', 'nightly backup cli s3'],
+    problem:
+      'A workflow produces something worth keeping: a database dump, a build, a generated report. It needs to land in your bucket every night, without a config file in the repository and without a client library in the workflow.',
+    approach:
+      'npx @s3nd/cli put, with the bucket and credentials in environment variables from the runner’s secret store. Two flags turn a transfer into a backup: --expires-in never, and a prefix of its own so the lifecycle rule on transfers cannot reach it.',
+    code: {
+      lang: 'yaml',
+      title: '.github/workflows/nightly.yml',
+      source: `- run: tar cz ./data | npx @s3nd/cli put - --name backup.tar.gz --expires-in never
+  env:
+    S3ND_BUCKET: transfers
+    S3ND_PREFIX: backups
+    S3ND_ENDPOINT: https://\${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    S3ND_REGION: auto
+    AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}`,
+    },
+    watch: [
+      {
+        title: '--json for the logs',
+        body: 'Machine-readable output, and s3nd doctor --json exits non-zero when a check fails, so it doubles as a deployment smoke test.',
+      },
+      {
+        title: 'A prefix per policy',
+        body: 'Transfers expire, backups do not. Keeping them under different prefixes is what lets one bucket hold both.',
+      },
+    ],
+    packages: ['@s3nd/cli'],
+    guide: { label: 'The CLI reference', href: docs('/cli') },
+  },
+  {
     slug: 'new-device',
-    title: 'Move to a new device',
-    summary: 'A code on the old phone, typed into the new one. The whole database follows.',
+    title: 'Move an app to a new device',
+    summary:
+      'A local-first app with no accounts. A code on the old phone, typed into the new one, and the whole database follows.',
+    kind: 'app-state',
     keywords: ['indexeddb sync between devices', 'local-first app new device', 'transfer indexeddb to another browser'],
     problem:
       'The user has a new phone. The app on the old one holds everything, in IndexedDB, and there is no account to sign into because the app never needed one. IndexedDB does not leave the browser it was written in.',
@@ -71,7 +198,9 @@ export async function POST(request: Request) {
   {
     slug: 'continuous-backup',
     title: 'Continuous backup',
-    summary: 'One snapshot per account, rewritten as the local database changes.',
+    summary:
+      'One snapshot per account, rewritten as the local database changes, with conditional writes so two devices cannot silently clobber each other.',
+    kind: 'app-state',
     keywords: ['indexeddb backup to s3', 'local-first backup', 'browser database backup'],
     problem:
       'Once the app has accounts, a transfer code is the wrong shape. There is a session, so the server already knows who is asking. What the user wants is for their data to survive losing the laptop, without doing anything.',
@@ -110,20 +239,21 @@ try {
   },
   {
     slug: 'encrypted-sync',
-    title: 'End-to-end encrypted sync',
-    summary: 'Encrypt in the browser with a passphrase. Your server stores bytes it cannot read.',
-    keywords: ['end-to-end encrypted sync', 'zero-knowledge backup s3', 'encrypted indexeddb transfer'],
+    title: 'End-to-end encrypted',
+    summary: 'Encrypt in the browser with a passphrase. Your server and your bucket store bytes they cannot read.',
+    kind: 'app-state',
+    keywords: ['end-to-end encrypted sync', 'zero-knowledge backup s3', 'encrypted file transfer code'],
     problem:
-      'By default your server can read every snapshot it stores. For a journal, a password manager or health data, that is the wrong default, and a liability you may not want to hold.',
+      'By default your server can read every transfer it stores. For a journal, a password manager, health data or a contract, that is the wrong default, and a liability you may not want to hold.',
     approach:
-      's3nd stores whatever you hand it. Derive a key from a passphrase with WebCrypto, encrypt the dump in the browser, and send the ciphertext. The bucket, your server and anyone who guesses the code see bytes they cannot use; the passphrase travels with the person, not over the wire.',
+      's3nd stores whatever you hand it. Derive a key from a passphrase with WebCrypto, encrypt the payload in the browser, and send the ciphertext. The bucket, your server and anyone who guesses the code see bytes they cannot use; the passphrase travels with the person, not over the wire. The same works for a file as for a snapshot.',
     code: {
       lang: 'ts',
       source: `const key = await deriveKey(passphrase, salt) // PBKDF2 or Argon2, in the browser
 const iv = crypto.getRandomValues(new Uint8Array(12))
 const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded)
 
-// The snapshot holds the salt, the IV and the ciphertext. Nothing else.
+// The transfer holds the salt, the IV and the ciphertext. Nothing else.
 await transfers.createSnapshot({
   data: { salt: toBase64(salt), iv: toBase64(iv), ciphertext: toBase64(ciphertext) },
   version: 3,
@@ -149,7 +279,8 @@ await transfers.createSnapshot({
   {
     slug: 'attachments',
     title: 'Attachments beside the data',
-    summary: 'The blobs an IndexedDB app holds, carried across with the records that point at them.',
+    summary: 'The blobs an app holds, carried across as objects, with the records that point at them in the snapshot.',
+    kind: 'app-state',
     keywords: ['indexeddb blobs s3', 'local-first attachments sync', 'upload blob s3 nodejs'],
     problem:
       'IndexedDB stores Blobs natively, so local-first apps end up holding images, recordings and PDFs next to their records. Base64 inside a JSON snapshot inflates them by a third and defeats gzip: three ways to hit the size ceiling at once.',
@@ -179,79 +310,6 @@ const url = await store.getUrl(record.attachmentKey, { expiresIn: 600 })`,
     ],
     packages: ['s3nd'],
     guide: { label: 'Attachments beside the data, in full', href: docs('/use-cases/attachments') },
-  },
-  {
-    slug: 'file-between-machines',
-    title: 'A file between two machines',
-    summary: 'A laptop, a desktop, a code. No server, no account, through the bucket you already have.',
-    keywords: ['send file between computers cli', 'transfer file with code terminal', 'cli file transfer s3 bucket'],
-    problem:
-      'You have a file here and need it there. Email chokes on it, a chat app recompresses it, a USB stick is in another room, and the hosted services want an account and keep a copy.',
-    approach:
-      'Both machines hold credentials for a bucket you own. s3nd put uploads the file and prints a code; s3nd get on the other side downloads it; s3nd rm burns it. The bytes go from one machine to the bucket and from the bucket to the other, and nothing streams through a service in between.',
-    code: {
-      lang: 'sh',
-      source: `$ s3nd put ./contract.pdf
-contract.pdf · 284 kB · expires in 1 day
-K7QP2M4X
-
-# on the other machine
-$ s3nd get k7qp-2m4x
-Wrote /home/you/contract.pdf · 284 kB
-
-$ s3nd rm K7QP2M4X
-Burned K7QP2M4X`,
-    },
-    watch: [
-      {
-        title: 'Run doctor first',
-        body: 'It performs the operations s3nd needs and reports what happened, including whether a lifecycle rule will delete expired transfers, the thing nobody discovers until a bill arrives.',
-      },
-      {
-        title: 'Every machine holds the keys',
-        body: 'Fine for two or three machines you own. For a team, put a server in front and hand out tokens instead of S3 credentials.',
-      },
-      {
-        title: 'Directories travel as archives',
-        body: 'tar cz ./project | s3nd put - --name project.tar.gz. The code goes to stdout and everything else to stderr, so it composes.',
-      },
-    ],
-    packages: ['@s3nd/cli'],
-    guide: { label: 'Without a server, in full', href: docs('/no-server') },
-  },
-  {
-    slug: 'ci-backups',
-    title: 'Backups from CI',
-    summary: 'A nightly archive to your bucket from a workflow, with secrets from the runner and no file to check in.',
-    keywords: ['github actions backup to s3', 'ci upload to r2', 'nightly backup cli s3'],
-    problem:
-      'A workflow produces something worth keeping: a database dump, a build, a generated report. It needs to land in your bucket every night, without a config file in the repository and without a client library in the workflow.',
-    approach:
-      'npx @s3nd/cli put, with the bucket and credentials in environment variables from the runner’s secret store. Two flags turn a transfer into a backup: --expires-in never, and a prefix of its own so the lifecycle rule on transfers cannot reach it.',
-    code: {
-      lang: 'yaml',
-      title: '.github/workflows/nightly.yml',
-      source: `- run: tar cz ./data | npx @s3nd/cli put - --name backup.tar.gz --expires-in never
-  env:
-    S3ND_BUCKET: transfers
-    S3ND_PREFIX: backups
-    S3ND_ENDPOINT: https://\${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-    S3ND_REGION: auto
-    AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-    AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}`,
-    },
-    watch: [
-      {
-        title: '--json for the logs',
-        body: 'Machine-readable output, and s3nd doctor --json exits non-zero when a check fails, so it doubles as a deployment smoke test.',
-      },
-      {
-        title: 'A prefix per policy',
-        body: 'Transfers expire, backups do not. Keeping them under different prefixes is what lets one bucket hold both.',
-      },
-    ],
-    packages: ['@s3nd/cli'],
-    guide: { label: 'The CLI reference', href: docs('/cli') },
   },
 ]
 

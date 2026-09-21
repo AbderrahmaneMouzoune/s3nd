@@ -11,49 +11,54 @@ export const faq: FaqEntry[] = [
   {
     question: 'What is s3nd?',
     answer:
-      'A small TypeScript toolkit for moving data from one device to another through an S3 bucket you own. A local-first app snapshots its IndexedDB state into the bucket under a short code; the user types that code on the other device and the state comes back. The same primitive moves files between machines from the command line.',
+      'A way to send anything with a code. s3nd put drops a file into an S3 bucket you own and prints eight characters; s3nd get on any other machine, with the code, downloads it. The same primitive runs inside your own app as a library and React hooks, and it carries structured data as well as files.',
     link: { label: 'How it works', href: '/how-it-works' },
+  },
+  {
+    question: 'How is it different from WeTransfer, croc or Magic Wormhole?',
+    answer:
+      'The bytes go into your bucket and nowhere else: no hosted service, no relay, no account on either end. And unlike a live peer-to-peer transfer, the sender leaves and the code is redeemed later, until it expires. The comparison pages go tool by tool and say when the other one is the better choice.',
+    link: { label: 'Compare', href: '/alternatives' },
   },
   {
     question: 'Do I need a server?',
     answer:
-      'When a browser takes part, yes: a browser cannot hold S3 credentials, so a small handler on your server sits between it and the bucket. s3nd ships that handler, and it is one route file. When every participant is a machine you control, the CLI talks to the bucket directly and there is nothing to deploy.',
+      'Not for machines you control: the CLI talks to the bucket directly with the credentials on that machine, and there is nothing to deploy. You need one as soon as a browser takes part, because a browser cannot hold S3 credentials. s3nd ships that server as one route file, and the CLI talks to it with a token instead of keys.',
     link: { label: 'Without a server', href: docs('/no-server') },
   },
   {
     question: 'Which storage providers work?',
     answer:
-      'AWS S3 and anything that speaks the S3 API: Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph and the rest. Set an endpoint and s3nd switches the two defaults those providers expect. The CLI writes a starter configuration for each.',
+      'AWS S3 and anything that speaks the S3 API: Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage and the rest. Set an endpoint and s3nd switches the two defaults those providers expect. s3nd init writes a starter configuration per provider, and s3nd doctor proves it works before you rely on it.',
     link: { label: 'Storage providers', href: '/providers' },
   },
   {
-    question: 'Is a sync code secure?',
+    question: 'Is a code secure?',
     answer:
-      'A code is a bearer token: whoever has it can read that one transfer while it lives. The default is eight Crockford base32 characters, forty bits, which is sound when a transfer expires within an hour and the lookup route is rate-limited. For sensitive data, encrypt in the browser before sending; s3nd stores whatever bytes you hand it.',
+      'A code is a bearer token: whoever has it can read that one transfer while it lives. The default is eight Crockford base32 characters, forty bits, which is sound when a transfer expires within a day and the lookup route is rate-limited. For sensitive payloads, encrypt before sending; s3nd stores whatever bytes you hand it.',
     link: { label: 'Sync codes', href: docs('/sync-codes') },
   },
   {
-    question: 'How big can a snapshot be?',
+    question: 'How big can a file be?',
     answer:
-      "A snapshot goes through your server, so your runtime's request limit is the ceiling: 4.5 MB on Vercel functions, 6 MB on Lambda, whatever you configure on a long-running Node server. Snapshots are gzipped by default, and a database dump typically shrinks five to ten times, so that limit holds tens of thousands of ordinary records.",
+      "From the CLI straight to the bucket, a file goes up in one PutObject, so it is bound by the memory of the sending machine rather than by a request limit: hundreds of megabytes are fine, multi-gigabyte archives wait for multipart, which is on the roadmap. Through your server, the runtime's request limit applies, 4.5 MB on Vercel functions and 6 MB on Lambda, unless you presign.",
     link: { label: 'Limits', href: docs('/limits') },
   },
   {
-    question: 'Does it merge changes from two devices?',
+    question: 'What happens when a transfer expires?',
     answer:
-      'No. s3nd is a snapshot primitive, not a CRDT or a sync engine. A restore replaces what is on the receiving device, which is the right model for carrying data to a new phone. For two devices writing to one backup, conditional writes make the second writer fail loudly instead of silently overwriting the first, and your app decides how to merge.',
-    link: { label: 'Two devices, one snapshot', href: docs('/two-devices') },
+      'It is never handed over again: the expiry is checked on every read, and an expired code answers the same NOT_FOUND as one that never existed. The object itself is deleted by a lifecycle rule on your bucket, which s3nd doctor checks you have, because a bucket quietly filling up with expired transfers is the most common way this goes wrong.',
   },
   {
-    question: 'Does it dump IndexedDB for me?',
+    question: "Can it move an app's data, not only files?",
     answer:
-      'No, on purpose. Only your app knows its object stores, so exporting and importing them stays application code; a generic dumper would be wrong for most schemas. The IndexedDB example in the repository has a complete export and import pair to start from.',
-    link: { label: 'Examples', href: '/examples' },
+      'Yes. A snapshot is structured state wrapped in an envelope with your app name, a schema version and an expiry, gzipped, and stored under a code. A local-first app exports its IndexedDB, posts it, and the user types the code on their other phone: no account, and the receiving build refuses a snapshot from a newer schema. That is where s3nd started.',
+    link: { label: 'Move an app to a new device', href: '/use-cases/new-device' },
   },
   {
     question: 'What does it cost?',
     answer:
-      'Nothing. Every package is MIT-licensed and there is no hosted service in the middle: the only bill is whatever your storage provider charges for a few small objects, and on Cloudflare R2 egress is free.',
+      'Nothing. Every package is MIT-licensed and there is no hosted service in the middle. The only bill is what your storage provider charges for a few objects that expire, and on Cloudflare R2 egress is free.',
   },
   {
     question: 'Which runtimes does it run on?',

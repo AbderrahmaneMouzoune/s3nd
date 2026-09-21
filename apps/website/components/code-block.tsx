@@ -11,22 +11,18 @@ interface CodeBlockProps {
 }
 
 /**
- * Server-rendered syntax highlighting. Shiki runs at build time and emits both
- * themes; `globals.css` switches to the dark one with the colour scheme, so no
- * JavaScript reaches the browser for it.
+ * Server-rendered syntax highlighting. Shiki runs at build time with a single
+ * dark theme whose accents sit close to the site's amber, so no JavaScript
+ * reaches the browser for it.
  */
 export async function CodeBlock({ code, lang = 'ts', title, className }: CodeBlockProps) {
-  const html = await codeToHtml(code, {
-    lang,
-    themes: { light: 'github-light', dark: 'github-dark' },
-    defaultColor: 'light',
-  })
+  const html = await codeToHtml(code, { lang, theme: 'vesper' })
 
   return (
-    <figure className={cx('border-line bg-surface shadow-card overflow-hidden rounded-xl border', className)}>
+    <figure className={cx('border-line overflow-hidden rounded-lg border bg-[#0d0d0c]', className)}>
       {title ? (
-        <figcaption className="border-line text-ink-faint flex items-center gap-2 border-b px-4 py-2 font-mono text-[11px]">
-          <span className="bg-accent inline-block size-1.5 rounded-full" aria-hidden="true" />
+        <figcaption className="border-line text-ink-faint flex items-center gap-2 border-b px-4 py-2 font-mono text-[10px] tracking-[0.18em] uppercase">
+          <span className="bg-accent inline-block h-2.5 w-1" aria-hidden="true" />
           {title}
         </figcaption>
       ) : null}
@@ -43,11 +39,11 @@ export function Command({ children, className }: { children: string; className?:
   return (
     <code
       className={cx(
-        'border-line bg-surface-muted text-ink inline-flex max-w-full items-center gap-2 overflow-x-auto rounded-lg border px-3 py-2 font-mono text-sm',
+        'border-line-strong text-ink inline-flex max-w-full items-center gap-2 overflow-x-auto rounded-md border bg-[#0d0d0c] px-3 py-2 font-mono text-sm',
         className,
       )}
     >
-      <span className="text-ink-faint select-none" aria-hidden="true">
+      <span className="text-accent select-none" aria-hidden="true">
         $
       </span>
       {children}
