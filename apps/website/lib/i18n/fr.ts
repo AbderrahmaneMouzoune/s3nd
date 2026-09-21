@@ -340,6 +340,36 @@ export const fr: Dictionary = {
     lead: 's3nd est délibérément petit. Cette page en fait le tour complet : ce qu’est un transfert, ce qu’est un code, le protocole entre un serveur et ses clients, et pourquoi les packages sont découpés ainsi.',
     primary: 'Installer la CLI',
     secondary: 'La spec du protocole',
+    scene: {
+      title: 'Deux machines. Votre bucket entre les deux. Rien d’autre.',
+      eyebrow: 'tout le transfert · 14 s · en boucle',
+      machineA: 'machine A · votre ordinateur',
+      machineB: 'machine B · votre téléphone',
+      bucket: 'votre bucket',
+      noMiddle: 'pas de relais · pas de compte · rien à déployer',
+      byHand: 'le code voyage à la voix, dans un chat ou en QR code · le fichier ne quitte jamais votre bucket',
+      expires: 'expire dans',
+      gone: 'parti',
+      steps: [
+        {
+          stamp: '01 · put',
+          title: 'Une machine dépose',
+          body: 'Un fichier, ou les données d’une app, atterrit dans votre bucket comme un seul objet sous un code neuf de huit caractères, l’expiration inscrite sur l’objet.',
+        },
+        {
+          stamp: '02 · le code',
+          title: 'Huit caractères changent de mains',
+          body: 'Lus à voix haute, collés dans un chat, scannés sur un écran. Le code est toute la poignée de main : aucun compte d’un côté ni de l’autre, rien entre les deux machines que votre bucket.',
+        },
+        {
+          stamp: '03 · get, puis rm',
+          title: 'Une autre machine récupère',
+          body: 'Le code est réparé tel que tapé, l’expiration vérifiée à la lecture, puis l’objet est remis. Brûlez-le quand c’est fini, ou laissez l’expiration s’en charger.',
+        },
+      ],
+      caption:
+        'La machine A dépose un fichier dans le bucket et reçoit un code ; le code passe à la machine B de main en main ; la machine B récupère le fichier et le brûle. Rejoué toutes les quatorze secondes ; en mouvement réduit, le transfert terminé est montré à la place.',
+    },
     transfer: {
       eyebrow: 'Un transfert',
       title: 'Un objet, un code, une expiration.',
@@ -827,19 +857,6 @@ export const fr: Dictionary = {
     gone: 'brûlé',
   },
 
-  diagram: {
-    machineA: 'Machine A',
-    bucket: 'Votre bucket',
-    machineB: 'Machine B',
-    putLines: ['s3nd put ./report.pdf', 'ou POST /api/transfers depuis votre app', '→ K7QP2M4X'],
-    bucketLines: ['drop/K7QP2M4X', '284 ko · expire dans 1 h', 'S3, R2, MinIO, Scaleway, Wasabi'],
-    getLines: ['s3nd get k7qp-2m4x', 'ou GET /api/transfers/:code/raw', '→ report.pdf, puis rm'],
-    connectorUp: 'un PutObject · ifAbsent · expiration inscrite sur l’objet',
-    connectorDown: 'code normalisé · expiration vérifiée à la lecture',
-    caption: 'Huit caractères lus sur un écran et tapés sur un autre.',
-    bits: '40 bits',
-  },
-
   demo: {
     typed: 'Ce que l’utilisateur a tapé',
     lookedUpPrefix: 'Ce que',
@@ -878,7 +895,7 @@ export const fr: Dictionary = {
   drop: {
     metaTitle: 'Déployer une drop box',
     metaDescription:
-      'Un petit WeTransfer sur votre propre bucket : déposez un fichier, obtenez un code et un lien, récupérez-le sur n’importe quel appareil jusqu’à expiration. Un template Next.js bâti sur s3nd, déployé sur Vercel en un clic.',
+      'Un petit WeTransfer sur votre propre bucket : déposez un fichier, obtenez un code, un lien et un QR code, récupérez-le sur n’importe quel appareil jusqu’à expiration, puis brûlez-le. Un template Next.js bâti sur s3nd, déployé sur Vercel en un clic.',
     keywords: [
       'wetransfer auto-hébergé',
       'template vercel transfert de fichiers',
@@ -888,18 +905,26 @@ export const fr: Dictionary = {
     crumb: 'Déployer une drop box',
     eyebrow: 'Template',
     title: 'Votre propre WeTransfer, sur votre propre bucket.',
-    lead: 'Déposez un fichier, obtenez un code de huit caractères et un lien, récupérez-le sur n’importe quel appareil jusqu’à expiration. Une app Next.js bâtie sur la bibliothèque et les hooks, déployée sur Vercel en un clic avec cinq variables d’environnement.',
+    lead: 'Déposez un fichier, obtenez un code de huit caractères, un lien et un QR code ; tapez le code ou scannez-le sur n’importe quel appareil jusqu’à expiration, puis brûlez-le. Une app Next.js bâtie sur la bibliothèque et les hooks, déployée sur Vercel en un clic avec cinq variables d’environnement.',
     primary: 'Déployer sur Vercel',
     secondary: 'Le template sur GitHub',
     tertiary: 'Essayer sur drop.s3nd.sh',
     what: {
       eyebrow: 'Ce que vous obtenez',
       title: 'Deux pages et une route.',
-      lead: 'La page de dépôt, la page de récupération, et le handler de transfert entre les deux. Tout le reste est à vous pour le restyler.',
+      lead: 'La page d’accueil pour déposer un fichier ou taper un code, la page de récupération, et le handler de transfert entre les deux. Tout le reste est à vous pour le restyler.',
       cards: [
         {
           title: 'Une zone de dépôt',
-          body: 'Glissez un fichier ou choisissez-en un. Il atterrit dans votre bucket sous un code neuf avec une expiration inscrite sur l’objet, et la page affiche le code sur un panneau à volets à côté du lien à partager.',
+          body: 'Glissez un fichier ou choisissez-en un. Il atterrit dans votre bucket sous un code neuf avec une expiration inscrite sur l’objet, et la page affiche le code sur un panneau à volets, le lien à partager, et un QR code de ce lien.',
+        },
+        {
+          title: 'Vous avez déjà un code ?',
+          body: 'L’autre moitié de la page d’accueil : tapez les huit caractères lus sur l’autre écran, les fautes de frappe réparées au fil de la saisie (`k7qp-2m4x` se lit `K7QP2M4X`), et arrivez sur la page de récupération.',
+        },
+        {
+          title: 'De l’ordinateur au téléphone',
+          body: 'Pointez l’appareil photo du téléphone sur le QR code à côté du panneau : la page de récupération s’ouvre sur le téléphone. Téléchargez là, et la page propose de brûler le code juste après, pour que rien ne reste dans le bucket.',
         },
         {
           title: 'Une page de récupération',

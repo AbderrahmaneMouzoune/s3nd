@@ -328,6 +328,36 @@ export const en = {
     lead: 's3nd is deliberately small. This page is the whole of it: what a transfer is, what a code is, the protocol between a server and its clients, and why the packages are split the way they are.',
     primary: 'Install the CLI',
     secondary: 'The protocol spec',
+    scene: {
+      title: 'Two machines. Your bucket between them. Nothing else.',
+      eyebrow: 'the whole transfer · 14 s · on a loop',
+      machineA: 'machine A · your laptop',
+      machineB: 'machine B · your phone',
+      bucket: 'your bucket',
+      noMiddle: 'no relay · no account · nothing to deploy',
+      byHand: 'the code travels by voice, in a chat, or as a QR code · the file never leaves your bucket',
+      expires: 'expires in',
+      gone: 'gone',
+      steps: [
+        {
+          stamp: '01 · put',
+          title: 'One machine puts',
+          body: 'A file, or an app’s data, lands in your bucket as one object under a fresh eight-character code, with the expiry stamped on the object.',
+        },
+        {
+          stamp: '02 · the code',
+          title: 'Eight characters change hands',
+          body: 'Read out loud, pasted in a chat, scanned off a screen. The code is the whole handshake: no account on either side, nothing between the two machines but your bucket.',
+        },
+        {
+          stamp: '03 · get, then burn',
+          title: 'Another machine gets',
+          body: 'The code is repaired as typed and the expiry checked on read, then the object is handed over. Burn it when you are done, or let the expiry do it.',
+        },
+      ],
+      caption:
+        'Machine A puts a file in the bucket and gets a code; the code crosses to machine B by hand; machine B gets the file and burns it. Replays every fourteen seconds; under reduced motion, the finished transfer is shown instead.',
+    },
     transfer: {
       eyebrow: 'A transfer',
       title: 'One object, one code, one expiry.',
@@ -794,19 +824,6 @@ export const en = {
     gone: 'gone',
   },
 
-  diagram: {
-    machineA: 'Machine A',
-    bucket: 'Your bucket',
-    machineB: 'Machine B',
-    putLines: ['s3nd put ./report.pdf', 'or POST /api/transfers from your app', '→ K7QP2M4X'],
-    bucketLines: ['drop/K7QP2M4X', '284 kB · expires in 1 h', 'S3, R2, MinIO, Scaleway, Wasabi'],
-    getLines: ['s3nd get k7qp-2m4x', 'or GET /api/transfers/:code/raw', '→ report.pdf, then rm'],
-    connectorUp: 'one PutObject · ifAbsent · expiry stamped on the object',
-    connectorDown: 'code normalized · expiry checked on read',
-    caption: 'Eight characters read off one screen and typed into another.',
-    bits: '40 bits',
-  },
-
   demo: {
     typed: 'What the user typed',
     lookedUpPrefix: 'What',
@@ -844,23 +861,31 @@ export const en = {
   drop: {
     metaTitle: 'Deploy a drop box',
     metaDescription:
-      'A small WeTransfer on your own bucket: drop a file, get a code and a link, pick it up on any device until it expires. A Next.js template built on s3nd, deployed to Vercel in one click.',
+      'A small WeTransfer on your own bucket: drop a file, get a code, a link and a QR code, pick it up on any device until it expires, then burn it. A Next.js template built on s3nd, deployed to Vercel in one click.',
     keywords: ['self-hosted wetransfer', 'vercel file transfer template', 'nextjs file drop template s3', 's3nd drop'],
     crumb: 'Deploy a drop box',
     eyebrow: 'Template',
     title: 'Your own WeTransfer, on your own bucket.',
-    lead: 'Drop a file, get an eight-character code and a link, pick it up on any device until it expires. One Next.js app built on the library and the hooks, deployed to Vercel in one click with five environment variables.',
+    lead: 'Drop a file, get an eight-character code, a link and a QR code; type the code or scan it on any device until it expires, then burn it. One Next.js app built on the library and the hooks, deployed to Vercel in one click with five environment variables.',
     primary: 'Deploy with Vercel',
     secondary: 'The template on GitHub',
     tertiary: 'Try it on drop.s3nd.sh',
     what: {
       eyebrow: 'What you get',
       title: 'Two pages and one route.',
-      lead: 'The upload page, the pickup page, and the transfer handler between them. Everything else is yours to restyle.',
+      lead: 'The front page to drop a file or type a code, the pickup page, and the transfer handler between them. Everything else is yours to restyle.',
       cards: [
         {
           title: 'A drop zone',
-          body: 'Drag a file in or pick one. It lands in your bucket under a fresh code with an expiry stamped on the object, and the page shows the code on a split-flap board next to the link to share.',
+          body: 'Drag a file in or pick one. It lands in your bucket under a fresh code with an expiry stamped on the object, and the page shows the code on a split-flap board, the link to share, and a QR code of that link.',
+        },
+        {
+          title: 'Already have a code?',
+          body: 'The other half of the front page: type the eight characters from the other screen, typos repaired as you go (`k7qp-2m4x` reads as `K7QP2M4X`), and land on the pickup page.',
+        },
+        {
+          title: 'From a laptop to a phone',
+          body: 'Point the phone’s camera at the QR code next to the board: the pickup page opens on the phone. Download there, and the page offers to burn the code right after, so nothing stays in the bucket.',
         },
         {
           title: 'A pickup page',

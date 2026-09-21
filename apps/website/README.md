@@ -26,7 +26,7 @@ The name is written the way the domain is: `s3nd` in full weight and `.sh` a ste
 
 Two typefaces, bundled under `app/fonts` so a build never reaches for the network (both are under the SIL Open Font
 License, see the LICENSE there): Bricolage Grotesque for everything set in words, JetBrains Mono for every code,
-command and sync code. The static `.ttf` weights render the generated Open Graph image. The favicon and the Apple
+command and sync code. The static `.ttf` weights render the generated Open Graph images. The favicon and the Apple
 icon are the amber tile with the arrow leaving it, from `app/icon.svg` and `app/apple-icon.tsx`.
 
 The positioning is files first: put a file, hand over the code, get it on any other machine, through a bucket you
@@ -74,6 +74,23 @@ CSS for the strokes and tiles (`ill-*` in `globals.css`) and SMIL for the packet
 words they carry come from the dictionary (`illustrations`), and reduced motion stops everything, packets included.
 The cells they sit in are `.bento`.
 
+`components/two-machines.tsx` is the scene under the hero of the how-it-works page: machine A puts a file in the
+bucket and gets a code, the code crosses to machine B by hand, machine B gets the file and burns it, on a
+fourteen-second loop with three captions lighting up in turn. Everything runs on one CSS timeline, generated in the
+component from timings in seconds so nothing drifts; no script and no SMIL. Its words are `howItWorks.scene` in the
+dictionaries. Under reduced motion the finished transfer is shown still, and on a phone the stage pans from the laptop
+to the bucket to the phone as the story advances.
+
+## The Open Graph images
+
+Every page has its own card, drawn at build time from the same words as the page: `lib/og.ts` is the catalogue (the
+section, the title, one line, and which figure goes beside them), `components/og-image.tsx` draws it with satori, and
+`app/[locale]/og/[...path]/route.tsx` serves it at `/og/how-it-works.png`, `/fr/og/use-cases/new-device.png`,
+`/og/index.png` for the home. The URL follows the same locale rule as the pages, so the rewrites route it without
+knowing it exists. `pageMetadata()` points every page at its own; a page added to `lib/` gets a card on its own, a
+new static page needs an entry in `ogPages()`. Satori is not a browser: every box with more than one child is a flex
+box, the two static `.ttf` weights are the only fonts, and the figures are shapes rather than text.
+
 ## For agents
 
 Every page exists as Markdown: `/cli.md`, `/fr/cli.md`, `/index.md`, or the page URL asked for with
@@ -84,19 +101,20 @@ through `<link rel="alternate" type="text/markdown">`, and `robots.txt` names th
 
 ## Where things are
 
-| Path                                                         |                                                                                                                          |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `lib/site.ts`                                                | Every external URL: the documentation domain and path, the repository, npm, the Vercel deploy link for the template.     |
-| `lib/i18n/`                                                  | The locales, the two dictionaries and `getDictionary()`.                                                                 |
-| `lib/use-cases.ts`, `lib/use-cases.fr.ts`                    | The seven use-case pages, as data. One entry is one page under `/use-cases/`; `kind` sorts it under files or app state.  |
-| `lib/providers.ts`, `lib/providers.fr.ts`                    | The five provider pages under `/providers/`: `createBucket()` snippet, the CLI starter, notes.                           |
-| `lib/alternatives.ts`, `lib/alternatives.fr.ts`              | The comparison pages under `/alternatives/`: the other tool in its own terms, a matrix, the differences, and the choice. |
-| `lib/examples.ts`, `lib/faq.ts`                              | The examples page and the FAQ (also emitted as `FAQPage` structured data), in both languages.                            |
-| `lib/fonts.ts`                                               | The two `next/font/local` families and the CSS variables they expose.                                                    |
-| `next.config.mjs`                                            | The locale rewrite and the `/en` redirect. The locale list is written there too, since it cannot import TypeScript.      |
-| `app/[locale]/*/page.tsx`                                    | The pages. Static text comes from the dictionary; anything repeated across pages lives in `lib/`.                        |
-| `components/`                                                | Header and mega menu, footer, code block, command, split-flap board, hero board, ticker, the sync code demo, CTA.        |
-| `app/sitemap.ts`, `app/robots.ts`, `app/opengraph-image.tsx` | Sitemap (every page in every language, with alternates), robots and the generated Open Graph image.                      |
+| Path                                                       |                                                                                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `lib/site.ts`                                              | Every external URL: the documentation domain and path, the repository, npm, the Vercel deploy link for the template.     |
+| `lib/i18n/`                                                | The locales, the two dictionaries and `getDictionary()`.                                                                 |
+| `lib/use-cases.ts`, `lib/use-cases.fr.ts`                  | The seven use-case pages, as data. One entry is one page under `/use-cases/`; `kind` sorts it under files or app state.  |
+| `lib/providers.ts`, `lib/providers.fr.ts`                  | The five provider pages under `/providers/`: `createBucket()` snippet, the CLI starter, notes.                           |
+| `lib/alternatives.ts`, `lib/alternatives.fr.ts`            | The comparison pages under `/alternatives/`: the other tool in its own terms, a matrix, the differences, and the choice. |
+| `lib/examples.ts`, `lib/faq.ts`                            | The examples page and the FAQ (also emitted as `FAQPage` structured data), in both languages.                            |
+| `lib/fonts.ts`                                             | The two `next/font/local` families and the CSS variables they expose.                                                    |
+| `next.config.mjs`                                          | The locale rewrite and the `/en` redirect. The locale list is written there too, since it cannot import TypeScript.      |
+| `app/[locale]/*/page.tsx`                                  | The pages. Static text comes from the dictionary; anything repeated across pages lives in `lib/`.                        |
+| `components/`                                              | Header and mega menu, footer, code block, command, split-flap board, hero board, ticker, the sync code demo, CTA.        |
+| `app/sitemap.ts`, `app/robots.ts`                          | Sitemap (every page in every language, with alternates) and robots.                                                      |
+| `lib/og.ts`, `components/og-image.tsx`, `app/[locale]/og/` | The Open Graph images: the catalogue, the drawing, the route that serves one per page and language.                      |
 
 ## The header
 
@@ -112,7 +130,8 @@ drawer of native disclosure widgets.
   the sitemap entry, the menu and the cards on the index pages follow from the data.
 - **Anything else:** a `page.tsx` under `app/[locale]/`, with `pageMetadata()` from `lib/metadata.ts` for the title,
   description, canonical URL and alternates, a `PageHero` with a `trail` so it carries breadcrumbs, and its copy in
-  both dictionaries. Add it to `app/sitemap.ts` and, if it belongs in the navigation, to the dictionaries' `nav`.
+  both dictionaries. Add it to `app/sitemap.ts`, to `ogPages()` in `lib/og.ts` so it gets a card, and, if it belongs
+  in the navigation, to the dictionaries' `nav`.
 
 ## Links to the documentation
 
@@ -122,8 +141,9 @@ English only; the French pages link to it as is.
 
 ## SEO
 
-Every page sets a canonical URL, `hreflang` alternates, Open Graph and Twitter tags through `pageMetadata()`, and the
-locale layout declares `metadataBase`, the `Organization` and `WebSite` structured data, and the theme colour. The
+Every page sets a canonical URL, `hreflang` alternates, Open Graph and Twitter tags with its own image through
+`pageMetadata()`, and the locale layout declares `metadataBase`, the `Organization` and `WebSite` structured data, and
+the theme colour. The
 home page adds `SoftwareApplication` and `FAQPage`; every subpage adds a `BreadcrumbList`; comparison pages add an
 `Article`.
 

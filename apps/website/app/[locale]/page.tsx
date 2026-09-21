@@ -22,8 +22,8 @@ import { Ticker } from '@/components/ticker'
 import { ButtonLink, Card, CardLink, Container, Eyebrow, Pill, Section, Stamp, TextLink } from '@/components/ui'
 import { alternatives } from '@/lib/alternatives'
 import { faq } from '@/lib/faq'
-import { getDictionary, localeFrom, localePath, localeTags } from '@/lib/i18n'
-import { languageAlternates } from '@/lib/metadata'
+import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
+import { pageMetadata } from '@/lib/metadata'
 import { providers } from '@/lib/providers'
 import { docs, packages, repositoryUrl, site } from '@/lib/site'
 import { useCases } from '@/lib/use-cases'
@@ -35,12 +35,13 @@ export async function generateMetadata({ params }: PageProps<'/[locale]'>): Prom
   const locale = await localeFrom(params)
   const t = getDictionary(locale)
 
-  return {
-    title: { absolute: `${site.name} · ${t.site.tagline}` },
+  return pageMetadata({
+    locale,
+    title: `${site.name} · ${t.site.tagline}`,
     description: t.site.description,
-    alternates: { canonical: localePath(locale, '/'), languages: languageAlternates('/') },
-    openGraph: { locale: localeTags[locale].og, url: localePath(locale, '/') },
-  }
+    path: '/',
+    home: true,
+  })
 }
 
 export default async function HomePage({ params }: PageProps<'/[locale]'>) {

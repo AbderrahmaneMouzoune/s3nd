@@ -8,6 +8,9 @@ import { formatBytes, formatExpiry, groupCode } from '@/lib/format'
 
 import { CodeBoard } from './code-board'
 import { CopyButton } from './copy-button'
+import { BurnButton } from './pickup-actions'
+import { PickupForm } from './pickup-form'
+import { QrCode } from './qr-code'
 
 interface DropProps {
   /** Bytes. Shown as a hint and checked before anything is uploaded. */
@@ -17,7 +20,7 @@ interface DropProps {
 }
 
 /**
- * The upload page. The provider sends the password, when one is needed, as
+ * The front page. The provider sends the password, when one is needed, as
  * a bearer token on every request; the first upload finds out whether it is.
  */
 export function Drop(props: DropProps) {
@@ -37,6 +40,23 @@ function humanDuration(seconds: number): string {
   return `${Math.round(seconds / 86400)} days`
 }
 
+/**
+ * The pickup page sends people back here with `?burned=<code>` once they have
+ * burned a transfer. Read it once, say so, and take it off the URL.
+ */
+function useBurnedNotice(): string | null {
+  const [burned, setBurned] = useState<string | null>(null)
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('burned')
+    if (!code) return
+    setBurned(code.toUpperCase())
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  return burned
+}
+
 function DropZone({
   maxSize,
   expiresIn,
@@ -52,6 +72,7 @@ function DropZone({
   const [dragging, setDragging] = useState(false)
   const [tooLarge, setTooLarge] = useState<File | null>(null)
   const [needsPassword, setNeedsPassword] = useState(false)
+  const burned = useBurnedNotice()
 
   const unauthorized = isTransferError(error) && error.code === 'UNAUTHORIZED'
 
@@ -110,6 +131,15 @@ function DropZone({
         It lands in a bucket you own, under eight characters anyone can read out loud. Pick it up on any device, until
         it expires.
       </p>
+
+      {burned ? (
+        <p className="rise rise-2 mt-5 flex flex-wrap items-center gap-2 font-mono text-sm" role="status">
+          <span className="border-danger text-danger inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] font-bold tracking-[0.2em] uppercase">
+            gone
+          </span>
+          <span className="text-ink-muted">{groupCode(burned)} is burned. Nothing is left in the bucket under it.</span>
+        </p>
+      ) : null}
 
       <label
         htmlFor={inputId}
@@ -201,23 +231,105 @@ function DropZone({
           {error.message}
         </p>
       ) : null}
+
+      <Pickup />
     </div>
   )
 }
 
+/** The other half of the front page: someone with a code, here to collect. */
+function Pickup() {
+  return (
+    <section className="rise rise-3 mt-12" aria-labelledby="pickup-title">
+      <div className="perforation mb-10" aria-hidden="true" />
+      <div className="grid gap-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:items-start">
+        <div>
+          <p className="text-accent font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
+            Already have a code?
+          </p>
+          <h2 id="pickup-title" className="mt-3 text-2xl font-extrabold tracking-[-0.03em] text-balance sm:text-3xl">
+            Type it in, and pick the file up here.
+          </h2>
+          <div className="mt-6">
+            <PickupForm />
+          </div>
+        </div>
+        <div className="border-line bg-surface rounded-lg border p-5 text-sm leading-relaxed">
+          <p className="font-bold tracking-tight">From a laptop to your phone</p>
+          <p className="text-ink-muted mt-2">
+            Point the phone’s camera at the QR code shown next to the code on the other screen. The pickup page opens
+            straight away, download the file there, and burn the code once you have it.
+          </p>
+          <p className="text-ink-faint mt-3 font-mono text-[10px] tracking-[0.22em] uppercase">
+            or, from a terminal: s3nd get k7qp-2m4x
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * While the result is on screen, ask the bucket now and then whether the
+ * transfer is still there. It stops being there when the other device burned
+ * it, or when it expired; either way, the sender should know.
+ */
+function useStillThere(code: string, active: boolean): boolean {
+  const [gone, setGone] = useState(false)
+
+  useEffect(() => {
+    if (!active) return
+    let polls = 0
+    let cancelled = false
+
+    const interval = setInterval(async () => {
+      // Ten minutes of watching, then the tab stops asking.
+      if (++polls > 120) {
+        clearInterval(interval)
+        return
+      }
+      try {
+        const response = await fetch(`/api/transfers/${encodeURIComponent(code)}`, { cache: 'no-store' })
+        if (!cancelled && (response.status === 404 || response.status === 410)) {
+          setGone(true)
+          clearInterval(interval)
+        }
+      } catch {
+        // Offline for a moment: ask again next time.
+      }
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [code, active])
+
+  return gone
+}
+
 function Result({ transfer, file, onReset }: { transfer: CreatedTransfer; file: File | null; onReset: () => void }) {
   const [origin, setOrigin] = useState('')
+  const [burned, setBurned] = useState(false)
   useEffect(() => setOrigin(window.location.origin), [])
 
   const link = `${origin}/${transfer.code}`
+  const gone = useStillThere(transfer.code, !burned)
+  const over = burned || gone
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pt-12 pb-16 sm:pt-20">
-      <p className="rise text-ok font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
-        ✓ In your bucket · expires {formatExpiry(transfer.expiresAt)}
-      </p>
+      {over ? (
+        <p className="rise text-danger font-mono text-[11px] font-semibold tracking-[0.22em] uppercase" role="status">
+          ✕ {burned ? 'Burned · nothing left in the bucket' : 'Gone · picked up and burned, or expired'}
+        </p>
+      ) : (
+        <p className="rise text-ok font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
+          ✓ In your bucket · expires {formatExpiry(transfer.expiresAt)}
+        </p>
+      )}
       <h1 className="rise rise-1 mt-4 text-4xl font-extrabold tracking-[-0.04em] text-balance sm:text-6xl">
-        Read this out to them.
+        {over ? 'That code is spent.' : 'Read this out, or show it.'}
       </h1>
       {file ? (
         <p className="rise rise-2 text-ink-muted mt-3 font-mono text-sm">
@@ -225,13 +337,36 @@ function Result({ transfer, file, onReset }: { transfer: CreatedTransfer; file: 
         </p>
       ) : null}
 
-      <div className="rise rise-2 border-line-strong bg-surface mt-8 rounded-xl border shadow-[0_1px_0_rgb(0_0_0/0.6),0_12px_32px_-16px_rgb(0_0_0/0.8)]">
+      <div
+        className={`rise rise-2 border-line-strong bg-surface mt-8 rounded-xl border shadow-[0_1px_0_rgb(0_0_0/0.6),0_12px_32px_-16px_rgb(0_0_0/0.8)] ${
+          over ? 'opacity-60' : ''
+        }`}
+      >
         <div className="hazard h-2 rounded-t-xl" aria-hidden="true" />
-        <div className="flex flex-col items-center gap-6 px-5 py-8 sm:px-8">
-          <CodeBoard code={transfer.code} />
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <CopyButton text={transfer.code} label={`Copy ${groupCode(transfer.code)}`} />
-            <CopyButton text={link} label="Copy the link" />
+        <div className="grid gap-8 px-5 py-8 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+          <div className="flex flex-col items-center gap-6">
+            <CodeBoard code={transfer.code} />
+            {!over ? (
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <CopyButton text={transfer.code} label={`Copy ${groupCode(transfer.code)}`} />
+                <CopyButton text={link} label="Copy the link" />
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-center gap-3 md:border-l md:border-[var(--color-line)] md:pl-8">
+            {origin ? (
+              <QrCode
+                value={link}
+                label={`The pickup page for ${groupCode(transfer.code)}, as a QR code`}
+                size={168}
+                className={`rounded-md ${over ? 'grayscale' : ''}`}
+              />
+            ) : (
+              <div className="size-[168px] rounded-md bg-[#f3efe4]/10" aria-hidden="true" />
+            )}
+            <p className="text-ink-faint max-w-[12rem] text-center font-mono text-[10px] leading-relaxed tracking-[0.18em] uppercase">
+              scan it with a phone: the pickup page opens there
+            </p>
           </div>
         </div>
         <div className="perforation" aria-hidden="true" />
@@ -245,7 +380,7 @@ function Result({ transfer, file, onReset }: { transfer: CreatedTransfer; file: 
         </div>
       </div>
 
-      <div className="rise rise-3 mt-8 flex flex-wrap gap-3">
+      <div className="rise rise-3 mt-8 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onReset}
@@ -253,13 +388,23 @@ function Result({ transfer, file, onReset }: { transfer: CreatedTransfer; file: 
         >
           Send another <span aria-hidden="true">→</span>
         </button>
-        <Link
-          className="btn border-ink/30 bg-surface hover:border-accent hover:text-accent inline-flex items-center gap-2 rounded-md border px-5 py-3.5 font-mono text-[13px] font-bold tracking-[0.14em] uppercase"
-          href={`/${transfer.code}`}
-        >
-          Open the pickup page
-        </Link>
+        {!over ? (
+          <>
+            <Link
+              className="btn border-ink/30 bg-surface hover:border-accent hover:text-accent inline-flex items-center gap-2 rounded-md border px-5 py-3.5 font-mono text-[13px] font-bold tracking-[0.14em] uppercase"
+              href={`/${transfer.code}`}
+            >
+              Open the pickup page
+            </Link>
+            <BurnButton code={transfer.code} onBurned={() => setBurned(true)} />
+          </>
+        ) : null}
       </div>
+      {!over ? (
+        <p className="rise rise-3 text-ink-faint mt-4 max-w-xl text-sm text-pretty">
+          Once the other device has the file, burn the code from either side: this page notices when it is gone.
+        </p>
+      ) : null}
     </div>
   )
 }

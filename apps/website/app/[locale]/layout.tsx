@@ -8,6 +8,7 @@ import { SiteHeader } from '@/components/site-header'
 import { display, mono } from '@/lib/fonts'
 import { getDictionary, localeFrom, localePath, localeTags, locales } from '@/lib/i18n'
 import { languageAlternates } from '@/lib/metadata'
+import { ogImagePath } from '@/lib/og'
 import { repositoryUrl, site } from '@/lib/site'
 
 import '../globals.css'
@@ -22,6 +23,7 @@ export async function generateMetadata({ params }: LayoutProps<'/[locale]'>): Pr
   const locale = await localeFrom(params)
   const t = getDictionary(locale)
   const title = `${site.name} · ${t.site.tagline}`
+  const image = { url: ogImagePath(locale, '/'), width: 1200, height: 630, alt: title }
 
   return {
     metadataBase: new URL(site.url),
@@ -53,11 +55,13 @@ export async function generateMetadata({ params }: LayoutProps<'/[locale]'>): Pr
       url: localePath(locale, '/'),
       title,
       description: t.site.description,
+      images: [image],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description: t.site.description,
+      images: [image],
     },
     robots: { index: true, follow: true },
   }
