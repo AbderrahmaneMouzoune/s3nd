@@ -1,10 +1,11 @@
 /**
  * A strip of facts that never stops moving, like the board in a station. Two
- * copies of the list make the loop seamless; reduced motion stops it.
+ * copies of the list make the loop seamless; reduced motion stops it, and a
+ * hover pauses it.
  */
-export function Ticker({ items }: { items: string[] }) {
+export function Ticker({ items, label }: { items: string[]; label: string }) {
   return (
-    <div className="border-line bg-surface overflow-hidden border-y" aria-label="In short">
+    <div className="border-line bg-surface overflow-hidden border-y" aria-label={label}>
       <div className="ticker-track flex w-max">
         {[0, 1].map((copy) => (
           <ul key={copy} className="flex shrink-0" aria-hidden={copy === 1}>

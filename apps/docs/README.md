@@ -1,7 +1,17 @@
 # s3nd docs
 
 The documentation site, built on [Fumadocs](https://fumadocs.dev) — Next.js App Router, MDX content,
-built-in search, table of contents and light/dark themes.
+built-in search and table of contents.
+
+## The identity
+
+The same one as the website: near-black, warm paper for text, the amber of a departure board for
+anything that matters, Bricolage Grotesque for the words and JetBrains Mono for the code. The theme
+is forced dark, since the identity is the dark board; there is no switch. `app/global.css` maps the
+palette onto Fumadocs' `--color-fd-*` tokens and tightens the corners, `lib/fonts.ts` bundles the two
+families under `app/fonts` (SIL Open Font License, see the LICENSE there), `lib/source.ts` gives the
+code blocks the website's shiki theme, and `components/wordmark.tsx` writes the name the way the
+domain is: `s3nd` and a quieter `.sh`. The favicon is the website's amber tile.
 
 ```sh
 bun run --filter @s3nd/docs dev    # localhost:3100

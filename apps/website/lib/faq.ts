@@ -1,3 +1,4 @@
+import type { Locale } from './i18n/config'
 import { docs } from './site'
 
 export interface FaqEntry {
@@ -7,7 +8,7 @@ export interface FaqEntry {
   link?: { label: string; href: string }
 }
 
-export const faq: FaqEntry[] = [
+const en: FaqEntry[] = [
   {
     question: 'What is s3nd?',
     answer:
@@ -66,3 +67,69 @@ export const faq: FaqEntry[] = [
       'The library and the CLI need Node 20 or later, because the AWS SDK does. The transfer handler takes a Request and returns a Response, so it drops into Next.js, Hono, Bun.serve, Deno or a worker without an adapter. The browser packages depend on fetch and nothing else, so they run in a browser, a worker or React Native.',
   },
 ]
+
+const fr: FaqEntry[] = [
+  {
+    question: 'Qu’est-ce que s3nd ?',
+    answer:
+      'Une façon d’envoyer n’importe quoi avec un code. s3nd put dépose un fichier dans un bucket S3 qui vous appartient et affiche huit caractères ; s3nd get sur n’importe quelle autre machine, avec le code, le télécharge. La même primitive tourne dans votre propre app sous forme de bibliothèque et de hooks React, et elle transporte des données structurées autant que des fichiers.',
+    link: { label: 'Comment ça marche', href: '/how-it-works' },
+  },
+  {
+    question: 'En quoi est-ce différent de WeTransfer, croc ou Magic Wormhole ?',
+    answer:
+      'Les octets vont dans votre bucket et nulle part ailleurs : pas de service hébergé, pas de relais, pas de compte d’un côté ni de l’autre. Et contrairement à un transfert pair-à-pair en direct, l’expéditeur s’en va et le code est utilisé plus tard, jusqu’à son expiration. Les pages de comparaison vont outil par outil et disent quand l’autre est le meilleur choix.',
+    link: { label: 'Comparer', href: '/alternatives' },
+  },
+  {
+    question: 'Ai-je besoin d’un serveur ?',
+    answer:
+      'Pas pour des machines que vous contrôlez : la CLI parle directement au bucket avec les identifiants de cette machine, et il n’y a rien à déployer. Il vous en faut un dès qu’un navigateur participe, parce qu’un navigateur ne peut pas détenir des identifiants S3. s3nd livre ce serveur sous forme d’un seul fichier de route, et la CLI lui parle avec un jeton plutôt qu’avec des clés.',
+    link: { label: 'Sans serveur', href: docs('/no-server') },
+  },
+  {
+    question: 'Quels fournisseurs de stockage fonctionnent ?',
+    answer:
+      'AWS S3 et tout ce qui parle l’API S3 : Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage et les autres. Définissez un endpoint et s3nd bascule les deux valeurs par défaut que ces fournisseurs attendent. s3nd init écrit une configuration de départ par fournisseur, et s3nd doctor prouve qu’elle fonctionne avant que vous ne vous y fiiez.',
+    link: { label: 'Fournisseurs de stockage', href: '/providers' },
+  },
+  {
+    question: 'Un code, c’est sûr ?',
+    answer:
+      'Un code est un jeton au porteur : quiconque l’a peut lire ce transfert-là tant qu’il vit. Par défaut, huit caractères en base32 Crockford, quarante bits, ce qui est solide quand un transfert expire dans la journée et que la route de lecture est limitée en débit. Pour les données sensibles, chiffrez avant d’envoyer ; s3nd stocke les octets que vous lui donnez, tels quels.',
+    link: { label: 'Codes de synchronisation', href: docs('/sync-codes') },
+  },
+  {
+    question: 'Quelle taille peut faire un fichier ?',
+    answer:
+      'Depuis la CLI directement vers le bucket, un fichier monte en un seul PutObject, donc il est borné par la mémoire de la machine qui envoie plutôt que par une limite de requête : des centaines de mégaoctets passent, les archives de plusieurs gigaoctets attendent le multipart, qui est sur la feuille de route. Via votre serveur, la limite de requête du runtime s’applique, 4,5 Mo sur les fonctions Vercel et 6 Mo sur Lambda, sauf à présigner.',
+    link: { label: 'Limites', href: docs('/limits') },
+  },
+  {
+    question: 'Que se passe-t-il quand un transfert expire ?',
+    answer:
+      'Il n’est plus jamais remis : l’expiration est vérifiée à chaque lecture, et un code expiré répond le même NOT_FOUND qu’un code qui n’a jamais existé. L’objet lui-même est supprimé par une règle de cycle de vie sur votre bucket, dont s3nd doctor vérifie la présence, parce qu’un bucket qui se remplit discrètement de transferts expirés est la façon la plus courante de se tromper.',
+  },
+  {
+    question: 'Peut-il déplacer les données d’une app, pas seulement des fichiers ?',
+    answer:
+      'Oui. Un snapshot est de l’état structuré enveloppé avec le nom de votre app, une version de schéma et une expiration, gzippé, et stocké sous un code. Une app local-first exporte son IndexedDB, le poste, et l’utilisateur tape le code sur son autre téléphone : pas de compte, et la version qui reçoit refuse un snapshot d’un schéma plus récent. C’est de là que s3nd est parti.',
+    link: { label: 'Migrer une app sur un nouvel appareil', href: '/use-cases/new-device' },
+  },
+  {
+    question: 'Combien ça coûte ?',
+    answer:
+      'Rien. Chaque package est sous licence MIT et il n’y a aucun service hébergé au milieu. La seule facture est ce que votre fournisseur de stockage demande pour quelques objets qui expirent, et sur Cloudflare R2 la sortie est gratuite.',
+  },
+  {
+    question: 'Sur quels runtimes ça tourne ?',
+    answer:
+      'La bibliothèque et la CLI ont besoin de Node 20 ou plus, parce que le SDK AWS l’exige. Le handler de transfert prend une Request et renvoie une Response, donc il s’insère dans Next.js, Hono, Bun.serve, Deno ou un worker sans adaptateur. Les packages navigateur ne dépendent que de fetch, donc ils tournent dans un navigateur, un worker ou React Native.',
+  },
+]
+
+const entries: Record<Locale, FaqEntry[]> = { en, fr }
+
+export function faq(locale: Locale): FaqEntry[] {
+  return entries[locale]
+}

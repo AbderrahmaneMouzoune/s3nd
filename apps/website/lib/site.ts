@@ -4,6 +4,8 @@
  */
 export const site = {
   name: 's3nd',
+  /** The domain, as the wordmark writes it: `s3nd` and a quieter `.sh`. */
+  domain: 's3nd.sh',
   url: 'https://s3nd.sh',
   docsUrl: 'https://doc.s3nd.sh',
   /** Where the documentation app mounts its pages. `''` once it moves to the root. */
@@ -57,65 +59,24 @@ export const packages = {
   },
 } as const
 
-export interface NavLink {
-  label: string
-  href: string
-  external?: boolean
-}
+/**
+ * The one-click template: a small WeTransfer on your own bucket, deployed
+ * from the repository to Vercel with the environment variables it needs.
+ */
+export const dropTemplate = {
+  path: 'templates/drop',
+  source: github('templates/drop'),
+  deployUrl: (() => {
+    const params = new URLSearchParams({
+      'repository-url': `${repositoryUrl}/tree/${site.github.branch}/templates/drop`,
+      'project-name': 's3nd-drop',
+      'repository-name': 's3nd-drop',
+      env: 'S3ND_BUCKET,S3ND_ENDPOINT,S3ND_REGION,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY',
+      envDescription:
+        'An S3-compatible bucket and a key pair scoped to it. R2, S3, MinIO, Scaleway and Wasabi all work.',
+      envLink: `${site.url}/providers`,
+    })
 
-export const navigation: NavLink[] = [
-  { label: 'How it works', href: '/how-it-works' },
-  { label: 'CLI', href: '/cli' },
-  { label: 'Library', href: '/library' },
-  { label: 'React', href: '/react' },
-  { label: 'Use cases', href: '/use-cases' },
-  { label: 'Compare', href: '/alternatives' },
-  { label: 'Docs', href: docs(), external: true },
-]
-
-export const footerColumns: { title: string; links: NavLink[] }[] = [
-  {
-    title: 'Product',
-    links: [
-      { label: 'How it works', href: '/how-it-works' },
-      { label: 'The CLI', href: '/cli' },
-      { label: 'The library', href: '/library' },
-      { label: 'React hooks', href: '/react' },
-      { label: 'Storage providers', href: '/providers' },
-      { label: 'Examples', href: '/examples' },
-    ],
-  },
-  {
-    title: 'Use cases',
-    links: [
-      { label: 'A file between two machines', href: '/use-cases/file-between-machines' },
-      { label: 'A drop box for your team', href: '/use-cases/team-drop-box' },
-      { label: 'Backups from CI', href: '/use-cases/ci-backups' },
-      { label: 'Move an app to a new device', href: '/use-cases/new-device' },
-      { label: 'Continuous backup', href: '/use-cases/continuous-backup' },
-      { label: 'End-to-end encrypted', href: '/use-cases/encrypted-sync' },
-    ],
-  },
-  {
-    title: 'Compare',
-    links: [
-      { label: 'All comparisons', href: '/alternatives' },
-      { label: 'vs croc', href: '/alternatives/croc' },
-      { label: 'vs Magic Wormhole', href: '/alternatives/magic-wormhole' },
-      { label: 'vs WeTransfer', href: '/alternatives/wetransfer' },
-      { label: 'vs transfer.sh', href: '/alternatives/transfer-sh' },
-      { label: 'vs rclone', href: '/alternatives/rclone' },
-    ],
-  },
-  {
-    title: 'Resources',
-    links: [
-      { label: 'Documentation', href: docs(), external: true },
-      { label: 'Without a server', href: docs('/no-server'), external: true },
-      { label: 'Setting up a server', href: docs('/server'), external: true },
-      { label: 'The protocol', href: docs('/protocol'), external: true },
-      { label: 'GitHub', href: repositoryUrl, external: true },
-      { label: 'npm', href: npm('@s3nd/cli'), external: true },
-    ],
-  },
-]
+    return `https://vercel.com/new/clone?${params.toString()}`
+  })(),
+} as const

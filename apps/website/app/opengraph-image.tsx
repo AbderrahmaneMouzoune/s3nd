@@ -5,7 +5,7 @@ import { ImageResponse } from 'next/og'
 
 import { site } from '@/lib/site'
 
-export const alt = `${site.name}: ${site.tagline}`
+export const alt = `${site.domain}: ${site.tagline}`
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -30,7 +30,14 @@ export default async function OpenGraphImage() {
         fontFamily: 'Bricolage',
       }}
     >
-      <div style={{ display: 'flex', height: 16, width: '100%', background: '#ffb000' }} />
+      <div
+        style={{
+          display: 'flex',
+          height: 16,
+          width: '100%',
+          backgroundImage: 'repeating-linear-gradient(-45deg, #ffb000 0 12px, #0a0a0a 12px 24px)',
+        }}
+      />
 
       <div
         style={{
@@ -59,7 +66,10 @@ export default async function OpenGraphImage() {
             >
               →
             </div>
-            <div style={{ fontSize: 44, letterSpacing: -2 }}>s3nd</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 44, letterSpacing: -2 }}>
+              s3nd
+              <span style={{ color: '#7f7a70', fontSize: 40 }}>.sh</span>
+            </div>
           </div>
           <div
             style={{
