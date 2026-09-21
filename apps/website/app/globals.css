@@ -1,0 +1,175 @@
+@import 'tailwindcss';
+
+/*
+ * One committed palette: near-black, warm paper for text, and the amber of a
+ * departure board for anything that matters. The site does not switch with the
+ * colour scheme; the identity is the dark board.
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.6), 0 12px 32px -16px rgb(0 0 0 / 0.8);
+  --shadow-tile: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 0 #000, 0 8px 18px -10px rgb(0 0 0 / 0.9);
+}
+
+/* Corners stay tight everywhere: this is hardware, not a SaaS dashboard. */
+@theme {
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+  --radius-3xl: 10px;
+}
+
+:root {
+  color-scheme: dark;
+
+  --canvas: #0a0a0a;
+  --surface: #111111;
+  --surface-muted: #171716;
+  --ink: #f3efe4;
+  --ink-muted: #b3ada1;
+  --ink-faint: #7f7a70;
+  --line: #262624;
+  --line-strong: #3d3b36;
+  --accent: #ffb000;
+  --accent-bright: #ffcf4d;
+  --accent-ink: #0a0a0a;
+  --accent-soft: #2b1e05;
+  --ok: #6fe3a1;
+  --danger: #ff5a4a;
+}
+
+html {
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Shiki, single dark theme; the panel owns the background. */
+.shiki {
+  background-color: transparent !important;
+}
+
+/* ─── The split-flap tile ─────────────────────────────────────────────── */
+
+.flap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  background: linear-gradient(180deg, #262523 0%, #1c1b19 49.6%, #111110 50.4%, #181816 100%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  text-shadow: 0 0 14px rgb(255 176 0 / 0.35);
+  user-select: none;
+}
+
+.flap::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: 1px;
+  background: #050505;
+}
+
+.flap[data-blank='true'] {
+  color: var(--line-strong);
+  text-shadow: none;
+}
+
+/* ─── Ticker ──────────────────────────────────────────────────────────── */
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  animation: ticker 48s linear infinite;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* ─── Textures ────────────────────────────────────────────────────────── */
+
+/* A row of holes, the tear-off line on a ticket. */
+.perforation {
+  background-image: radial-gradient(circle, var(--line-strong) 1.2px, transparent 1.6px);
+  background-size: 10px 10px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 10px;
+}
+
+/* Amber and black hazard stripes: the edge of something that moves. */
+.hazard {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 12px, var(--canvas) 12px 24px);
+}
+
+/* Faint engineering grid behind the hero. */
+.grid-paper {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* Long-form text on the comparison and use-case pages. */
+.prose-site > p + p {
+  margin-top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ticker-track {
+    animation: none;
+  }
+}
