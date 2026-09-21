@@ -21,6 +21,13 @@ export const metadata: Metadata = {
   },
   description: 'Drop a file, get an eight-character code and a link, pick it up on any device until it expires.',
   applicationName: dropConfig.name,
+  openGraph: {
+    type: 'website',
+    siteName: dropConfig.name,
+    title: `${dropConfig.name} · a file, a code, your bucket`,
+    description: 'Drop a file, get an eight-character code and a link, pick it up on any device until it expires.',
+  },
+  twitter: { card: 'summary_large_image' },
 }
 
 export const viewport: Viewport = {

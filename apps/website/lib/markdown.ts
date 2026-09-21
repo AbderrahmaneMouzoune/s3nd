@@ -164,6 +164,10 @@ function howItWorks(locale: Locale): MarkdownPage {
   const body = [
     t.lead,
     '',
+    `**${t.scene.title}**`,
+    '',
+    ...t.scene.steps.map((step) => `- **${step.title}** — ${text(locale, step.body)}`),
+    '',
     h2(t.transfer.title),
     t.transfer.lead,
     '',

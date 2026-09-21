@@ -1,12 +1,12 @@
-import type { TransferMetadata } from '@s3nd/react'
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import { CodeBoard } from '@/components/code-board'
 import { PickupActions } from '@/components/pickup-actions'
+import { QrCode } from '@/components/qr-code'
 import { formatBytes, formatExpiry, groupCode } from '@/lib/format'
-import { transfers } from '@/lib/transfers'
+import { lookupTransfer } from '@/lib/transfers'
 
 /** A code is looked up on every visit: never cached, never indexed. */
 export const dynamic = 'force-dynamic'
@@ -14,25 +14,21 @@ export const dynamic = 'force-dynamic'
 export async function generateMetadata({ params }: PageProps<'/[code]'>): Promise<Metadata> {
   const { code } = await params
 
-  return { title: groupCode(code.toUpperCase()), robots: { index: false, follow: false } }
-}
+  const title = groupCode(code.toUpperCase())
 
-/** Asks the transfer handler, in-process, what a code holds. */
-async function lookup(code: string): Promise<TransferMetadata | null> {
-  const response = await transfers()(new Request(`http://drop.internal/api/transfers/${encodeURIComponent(code)}`))
-
-  if (response.status === 404 || response.status === 400) return null
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
-    throw new Error(body?.error?.message ?? `The bucket answered ${response.status}.`)
+  // The card a chat shows for this link: the code, and that something waits
+  // under it. Whoever holds the link already holds the code.
+  return {
+    title,
+    description: 'A transfer is waiting under this code, until it expires.',
+    robots: { index: false, follow: false },
+    openGraph: { title: `${title} · a transfer is waiting`, description: 'Open it to download, then burn the code.' },
   }
-
-  return (await response.json()) as TransferMetadata
 }
 
 export default async function PickupPage({ params }: PageProps<'/[code]'>) {
   const { code } = await params
-  const meta = await lookup(code)
+  const meta = await lookupTransfer(code)
   if (!meta) notFound()
 
   const isFile = meta.kind === 'file'
@@ -40,6 +36,7 @@ export default async function PickupPage({ params }: PageProps<'/[code]'>) {
   const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? 'drop.s3nd.sh'
   const protocol = requestHeaders.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
   const remote = `${protocol}://${host}/api/transfers`
+  const pageUrl = `${protocol}://${host}/${meta.code}`
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pt-12 pb-16 sm:pt-20">
@@ -62,6 +59,17 @@ export default async function PickupPage({ params }: PageProps<'/[code]'>) {
         <div className="flex flex-col items-center gap-6 px-5 py-8 sm:px-8">
           <CodeBoard code={meta.code} size="md" />
           <PickupActions code={meta.code} filename={meta.filename} isFile={isFile} />
+        </div>
+        <div className="perforation" aria-hidden="true" />
+        <div className="flex flex-wrap items-center gap-5 px-5 py-5 sm:px-8">
+          <QrCode value={pageUrl} label="This page, as a QR code" size={104} className="shrink-0 rounded-sm" />
+          <div className="min-w-0 flex-1 text-sm leading-relaxed">
+            <p className="font-bold tracking-tight">Want it on another device?</p>
+            <p className="text-ink-muted mt-1 text-pretty">
+              Point its camera at this code and the same page opens there. Download, then burn the code from either
+              device.
+            </p>
+          </div>
         </div>
         {!isFile ? (
           <>

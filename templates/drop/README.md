@@ -1,22 +1,46 @@
 # s3nd drop
 
-A small WeTransfer on your own bucket. Drop a file, get an eight-character code and a link, pick it
-up on any device until it expires. Two pages and one route, built on [s3nd](https://s3nd.sh), on
-top of the S3-compatible bucket you already have: Cloudflare R2, AWS S3, MinIO, Scaleway, Wasabi.
+A small WeTransfer on your own bucket. Drop a file, get an eight-character code, a link and a QR
+code; type the code or scan it on any device until it expires, then burn it. Two pages and one
+route, built on [s3nd](https://s3nd.sh), on top of the S3-compatible bucket you already have:
+Cloudflare R2, AWS S3, MinIO, Scaleway, Wasabi.
 
 Try it at [drop.s3nd.sh](https://drop.s3nd.sh), then deploy your own:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAbderrahmaneMouzoune%2Fs3nd%2Ftree%2Fmain%2Ftemplates%2Fdrop&project-name=s3nd-drop&repository-name=s3nd-drop&env=S3ND_BUCKET%2CS3ND_ENDPOINT%2CS3ND_REGION%2CAWS_ACCESS_KEY_ID%2CAWS_SECRET_ACCESS_KEY&envDescription=An%20S3-compatible%20bucket%20and%20a%20key%20pair%20scoped%20to%20it.%20R2%2C%20S3%2C%20MinIO%2C%20Scaleway%20and%20Wasabi%20all%20work.&envLink=https%3A%2F%2Fs3nd.sh%2Fproviders)
 
-| Page               | Does                                                                                         |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| `/`                | The drop zone. A file goes into your bucket under a fresh code with an expiry.               |
-| `/K7QP2M4X`        | The pickup page: filename, size, time left, a download button, a way to burn it.             |
-| `/api/transfers/*` | The four-route [transfer protocol](https://doc.s3nd.sh/docs/protocol), so the CLI works too. |
+| Page               | Does                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `/`                | The drop zone, and under it "already have a code?": type it, typos repaired, and land on the pickup page.   |
+| `/K7QP2M4X`        | The pickup page: filename, size, time left, a download button, a QR code for another device, a way to burn. |
+| `/api/transfers/*` | The four-route [transfer protocol](https://doc.s3nd.sh/docs/protocol), so the CLI works too.                |
 
 No account, no relay, nothing in the middle. The code is the whole handshake: whoever has it can
 pick the file up while it lives, and an unknown or expired code answers the same 404 as one that
 never existed.
+
+## Picking up
+
+Three ways in, all landing on the same pickup page:
+
+- **Type the code.** The front page has a field for it. What is typed stays as typed; underneath,
+  `useSyncCodeInput()` from `@s3nd/react` drops separators, folds case and reads `O` as zero, so
+  `k7qp-2m4x` finds `K7QP2M4X`.
+- **Scan it.** Once a file is dropped, the result shows a QR code of the pickup link beside the
+  board, and the pickup page shows one too. Point a phone's camera at it and the page opens there:
+  the way to move a file from a laptop to the phone in your hand. The QR code is inline SVG, drawn
+  by [`uqr`](https://github.com/unjs/uqr), dark on paper so a camera reads it first time.
+- **From a terminal.** `s3nd get k7qp-2m4x --remote https://your.drop/api/transfers`.
+
+Then burn it. The pickup page offers to as soon as the download has started, and the sender's
+result page has a burn button too; whichever side does it, the sender's page notices the code is
+gone (it asks the bucket every few seconds, for ten minutes at most). A code left alone expires
+on its own; burning just means nothing waits in the bucket meanwhile.
+
+Sharing a link somewhere with previews (a chat, a social network) shows a card for it:
+`app/opengraph-image.tsx` draws the front page's, and `app/[code]/opengraph-image.tsx` draws the
+pickup page's with the filename, the size and the time left. Whoever holds the link already holds
+the code, so the card gives nothing away that the URL did not.
 
 ## Deploy
 
@@ -89,15 +113,19 @@ npx @s3nd/cli get k7qp-2m4x --remote https://your.drop/api/transfers
 
 ## What is where
 
-| Path                                      |                                                                                  |
-| ----------------------------------------- | -------------------------------------------------------------------------------- |
-| `app/page.tsx`, `components/drop.tsx`     | The drop zone, the upload, the result with the code and the link.                |
-| `app/[code]/page.tsx`                     | The pickup page. Looks the code up through the handler, in-process.              |
-| `app/api/transfers/[[...route]]/route.ts` | The protocol routes: one line each.                                              |
-| `lib/transfers.ts`                        | `createTransferHandler()`: expiry, download mode, the password check on `POST`.  |
-| `lib/store.ts`                            | `createBucket()`, built on the first request so a build never needs credentials. |
-| `lib/config.ts`                           | The `DROP_*` variables, parsed once.                                             |
-| `app/globals.css`                         | The identity: tokens, the split-flap tile, the hazard stripes, the drop zone.    |
+| Path                                      |                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `app/page.tsx`, `components/drop.tsx`     | The front page: the drop zone, the upload, the result with the code, the link and the QR. |
+| `components/pickup-form.tsx`              | "Already have a code?": the field, repaired as typed, that leads to the pickup page.      |
+| `components/qr-code.tsx`                  | A QR code as inline SVG, from `uqr`.                                                      |
+| `app/[code]/page.tsx`                     | The pickup page. Looks the code up through the handler, in-process.                       |
+| `components/pickup-actions.tsx`           | Download, copy the link, burn; burning steps forward once the download has started.       |
+| `app/opengraph-image.tsx`, `app/[code]/…` | The cards a shared link shows, drawn by `lib/og.tsx`.                                     |
+| `app/api/transfers/[[...route]]/route.ts` | The protocol routes: one line each.                                                       |
+| `lib/transfers.ts`                        | `createTransferHandler()`: expiry, download mode, the password check on `POST`.           |
+| `lib/store.ts`                            | `createBucket()`, built on the first request so a build never needs credentials.          |
+| `lib/config.ts`                           | The `DROP_*` variables, parsed once.                                                      |
+| `app/globals.css`                         | The identity: tokens, the split-flap tile, the hazard stripes, the drop zone.             |
 
 ## Limits, honestly
 
@@ -113,6 +141,6 @@ npx @s3nd/cli get k7qp-2m4x --remote https://your.drop/api/transfers
 Tailwind 4, two pages, no component library. The colours, the fonts and the corner radii are
 tokens at the top of `app/globals.css`; the split-flap board and the amber are the s3nd.sh
 identity, not the template's contract. The fonts under `app/fonts` are under the SIL Open Font
-License.
+License; the two static `.ttf` weights are only there to draw the cards.
 
 MIT © Abderrahmane Mouzoune

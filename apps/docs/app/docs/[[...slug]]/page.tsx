@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 
 import { getMDXComponents } from '@/components/mdx'
 import { githubUrl, markdownUrl } from '@/lib/markdown'
+import { cardMetadata } from '@/lib/shared'
 import { source } from '@/lib/source'
 
 export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
@@ -42,5 +43,11 @@ export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): P
     title: page.data.title,
     description: page.data.description,
     alternates: { canonical: page.url, types: { 'text/markdown': `${page.url}.md` } },
+    ...cardMetadata({
+      title: `${page.data.title} · doc.s3nd.sh`,
+      description: page.data.description,
+      url: page.url,
+      slugs: page.slugs,
+    }),
   }
 }

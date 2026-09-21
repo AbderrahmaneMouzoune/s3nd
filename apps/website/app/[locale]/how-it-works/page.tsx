@@ -5,7 +5,7 @@ import { CodeBlock } from '@/components/code-block'
 import { Cta } from '@/components/cta'
 import { PageHero } from '@/components/page-hero'
 import { Rich } from '@/components/rich-text'
-import { TransferDiagram } from '@/components/transfer-diagram'
+import { TwoMachines } from '@/components/two-machines'
 import { ButtonLink, Card, Facts, Section, Stamp, TextLink } from '@/components/ui'
 import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
@@ -29,8 +29,7 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/how-it-w
 
 export default async function HowItWorksPage({ params }: PageProps<'/[locale]/how-it-works'>) {
   const locale = await localeFrom(params)
-  const d = getDictionary(locale)
-  const t = d.howItWorks
+  const t = getDictionary(locale).howItWorks
   const p = (path: string) => localePath(locale, path)
 
   return (
@@ -51,7 +50,7 @@ export default async function HowItWorksPage({ params }: PageProps<'/[locale]/ho
             </ButtonLink>
           </>
         }
-        aside={<TransferDiagram t={d.diagram} codeLabel={d.ui.theCode} />}
+        below={<TwoMachines t={t.scene} />}
       />
 
       <Section index="01" eyebrow={t.transfer.eyebrow} title={t.transfer.title} lead={t.transfer.lead}>

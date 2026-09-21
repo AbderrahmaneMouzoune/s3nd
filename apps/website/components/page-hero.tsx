@@ -14,10 +14,12 @@ interface PageHeroProps {
   actions?: ReactNode
   /** Something to the right of the text on wide screens: a code block, a board. */
   aside?: ReactNode
+  /** Something the full width of the hero, under the text: a scene. */
+  below?: ReactNode
 }
 
 /** The top of every page but the home. Each block rises in turn on load. */
-export function PageHero({ locale, trail, eyebrow, title, lead, actions, aside }: PageHeroProps) {
+export function PageHero({ locale, trail, eyebrow, title, lead, actions, aside, below }: PageHeroProps) {
   return (
     <header className="relative pt-10 pb-14 sm:pt-14 sm:pb-20">
       <div className="grid-paper absolute inset-0 -z-10" aria-hidden="true" />
@@ -48,6 +50,7 @@ export function PageHero({ locale, trail, eyebrow, title, lead, actions, aside }
           </div>
           {aside ? <div className="rise rise-4 min-w-0">{aside}</div> : null}
         </div>
+        {below ? <div className="rise rise-5 mt-10 min-w-0 sm:mt-14">{below}</div> : null}
       </Container>
     </header>
   )
