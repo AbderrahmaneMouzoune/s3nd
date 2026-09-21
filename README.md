@@ -34,17 +34,17 @@ npm install s3nd
 
 A bun workspace monorepo, driven by Turborepo.
 
-| Path                                                   | What it is                                                                                                  |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser. |
-| [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                   |
-| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                |
-| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                    |
-| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                         |
-| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.           |
-| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                |
-| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                      |
-| [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket: the one-click Vercel template, built on `s3nd` and `@s3nd/react`.    |
+| Path                                                   | What it is                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser.              |
+| [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                                |
+| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                             |
+| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                                 |
+| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                      |
+| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                        |
+| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                             |
+| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                                   |
+| [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket, live at drop.s3nd.sh: the one-click Vercel template, on `s3nd` and `@s3nd/react`. |
 
 The split follows one constraint: a browser must never end up with a storage client in its
 dependency tree. `@s3nd/protocol` is what both halves share, which is why it exists at all

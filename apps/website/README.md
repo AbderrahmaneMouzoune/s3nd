@@ -42,7 +42,9 @@ command flashes green, the terminal in the hero blinks a caret. The hidden-until
 `@media (scripting: enabled)`, so a crawler or a browser without JavaScript sees the page whole, and everything stops
 under `prefers-reduced-motion`.
 
-Every command (`components/command.tsx`) and every code block (`components/code-block.tsx`) copies itself on click.
+Every command (`components/command.tsx`) and every code block (`components/code-block.tsx`) copies itself on click. A
+shell transcript with `$` prompts copies its first command, continuation lines joined and the trailing comment dropped,
+because that is what someone pastes; anything else is copied whole. Pass `copy` to a `CodeBlock` to say otherwise.
 
 ## Two languages
 
@@ -63,6 +65,22 @@ dictionary, and the `.fr.ts`-style copy for the data files.
 One thing to know: Next 16 prefetches a hovered link segment by segment, and for the rewritten English URLs that
 segment request answers 404 (the French ones, which are not rewritten, are fine). Navigation is unaffected, the client
 falls back to fetching the page on click, but the request shows up in the browser console.
+
+## The figures
+
+`components/illustrations.tsx` draws the product: put, code and get in the first section, the bucket with nothing in
+the middle, a snapshot between two phones, and three glyphs for the three ways in. Inline SVG in the palette, with
+CSS for the strokes and tiles (`ill-*` in `globals.css`) and SMIL for the packets that travel along a path; the few
+words they carry come from the dictionary (`illustrations`), and reduced motion stops everything, packets included.
+The cells they sit in are `.bento`.
+
+## For agents
+
+Every page exists as Markdown: `/cli.md`, `/fr/cli.md`, `/index.md`, or the page URL asked for with
+`Accept: text/markdown`. `lib/markdown.ts` assembles it from the same dictionaries, data and code samples
+(`lib/samples.ts`) as the HTML, and the rewrites in `next.config.mjs` route to `app/[locale]/markdown`. `/llms.txt`
+is the map and `/llms-full.txt` the whole site in one file, both languages; every page links its Markdown twin
+through `<link rel="alternate" type="text/markdown">`, and `robots.txt` names the AI crawlers it welcomes.
 
 ## Where things are
 

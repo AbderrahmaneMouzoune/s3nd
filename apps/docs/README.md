@@ -18,6 +18,14 @@ bun run --filter @s3nd/docs dev    # localhost:3100
 bun run --filter @s3nd/docs build
 ```
 
+## For agents
+
+Every page exists as Markdown at `/docs/<slug>.md`, or by asking for the page with `Accept: text/markdown`;
+`lib/markdown.ts` serves the MDX source minus its frontmatter, `app/llms.md` is the route behind the rewrite in
+`next.config.mjs`. `/llms.txt` lists every page with its Markdown twin and `/llms-full.txt` is the whole
+documentation in one file. Each page carries a "copy as Markdown / open in an assistant" popover under its title, and
+`app/robots.ts` and `app/sitemap.ts` cover the rest.
+
 ## Where the content lives
 
 Every page is an MDX file under `content/docs`, and the route follows the file path:

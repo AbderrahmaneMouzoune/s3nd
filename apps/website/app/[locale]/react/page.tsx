@@ -10,6 +10,9 @@ import { ButtonLink, Card, Section, TextLink } from '@/components/ui'
 import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { docs, packages } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { PROVIDER, SEND_FILE, RECEIVE_FILE, SEND_STATE } = samples.react
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/react'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -23,68 +26,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/react'>)
     keywords: t.keywords,
   })
 }
-
-const PROVIDER = `import { S3ndProvider } from '@s3nd/react'
-
-export default function Providers({ children }) {
-  return <S3ndProvider baseUrl="/api/transfers">{children}</S3ndProvider>
-}`
-
-const SEND_FILE = `import { useSendTransfer } from '@s3nd/react'
-
-function DropFile() {
-  const { sendFile, transfer, isPending, error } = useSendTransfer()
-
-  return (
-    <>
-      <input
-        type="file"
-        disabled={isPending}
-        onChange={(event) => event.target.files?.[0] && sendFile(event.target.files[0])}
-      />
-      {transfer && <p>Read this out to them: {transfer.code}</p>}
-      {error && <p>{error.message}</p>}
-    </>
-  )
-}`
-
-const RECEIVE_FILE = `import { useReceiveTransfer, useSyncCodeInput } from '@s3nd/react'
-
-function PickUp() {
-  const input = useSyncCodeInput()
-  const { load, loadBytes, transfer, notFound, isPending } = useReceiveTransfer()
-
-  async function download() {
-    const bytes = await loadBytes(input.code!)
-    if (bytes) saveToDisk(new Blob([bytes]), transfer?.filename ?? 'file') // your helper
-  }
-
-  return (
-    <>
-      <input {...input.inputProps} placeholder="K7QP 2M4X" />
-      <button onClick={() => load(input.code!)} disabled={!input.isComplete || isPending}>
-        Look it up
-      </button>
-      {notFound && <p>Unknown or expired code.</p>}
-      {transfer?.kind === 'file' && (
-        <button onClick={download}>
-          Download {transfer.filename} · {transfer.size} bytes
-        </button>
-      )}
-    </>
-  )
-}`
-
-const SEND_STATE = `const { send, transfer } = useSendTransfer()
-
-// Structured state goes as a snapshot, with your schema version.
-await send(await exportDatabase(), { version: 3 })
-
-// On the other device: load, show, then apply.
-const { load, transfer, data } = useReceiveTransfer<DatabaseDump>()
-await load(code)
-// transfer.device, transfer.createdAt → show them
-// importDatabase(data!) → only after the user confirms`
 
 export default async function ReactPage({ params }: PageProps<'/[locale]/react'>) {
   const locale = await localeFrom(params)

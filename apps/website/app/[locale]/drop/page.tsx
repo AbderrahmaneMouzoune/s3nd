@@ -9,6 +9,9 @@ import { ButtonLink, Card, Section } from '@/components/ui'
 import { getDictionary, localeFrom } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { dropTemplate } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { ENV } = samples.drop
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/drop'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -22,17 +25,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/drop'>):
     keywords: t.keywords,
   })
 }
-
-const ENV = `S3ND_BUCKET=drop
-S3ND_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-S3ND_REGION=auto
-AWS_ACCESS_KEY_ID=…
-AWS_SECRET_ACCESS_KEY=…
-
-# optional
-DROP_PASSWORD=…              # ask for it before an upload
-DROP_EXPIRES_IN=86400        # seconds, one day
-DROP_MAX_SIZE_MB=4           # under Vercel's 4.5 MB request limit`
 
 export default async function DropPage({ params }: PageProps<'/[locale]/drop'>) {
   const locale = await localeFrom(params)
@@ -53,6 +45,9 @@ export default async function DropPage({ params }: PageProps<'/[locale]/drop'>) 
             </ButtonLink>
             <ButtonLink href={dropTemplate.source} variant="secondary" size="lg" external>
               {t.secondary}
+            </ButtonLink>
+            <ButtonLink href={dropTemplate.live} variant="ghost" size="lg" external>
+              {t.tertiary}
             </ButtonLink>
           </>
         }

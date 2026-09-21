@@ -5,11 +5,21 @@ import { CodeBlock, Command } from '@/components/code-block'
 import { Cta } from '@/components/cta'
 import { Faq } from '@/components/faq'
 import { HeroBoard } from '@/components/hero-board'
+import {
+  AppGlyph,
+  CodeIllustration,
+  GetIllustration,
+  HttpGlyph,
+  NoMiddleIllustration,
+  PutIllustration,
+  SnapshotIllustration,
+  TerminalGlyph,
+} from '@/components/illustrations'
 import { JsonLd } from '@/components/json-ld'
 import { Rich } from '@/components/rich-text'
 import { SyncCodeDemo } from '@/components/sync-code-demo'
 import { Ticker } from '@/components/ticker'
-import { ButtonLink, Card, CardLink, Container, Eyebrow, Facts, Pill, Section, Stamp, TextLink } from '@/components/ui'
+import { ButtonLink, Card, CardLink, Container, Eyebrow, Pill, Section, Stamp, TextLink } from '@/components/ui'
 import { alternatives } from '@/lib/alternatives'
 import { faq } from '@/lib/faq'
 import { getDictionary, localeFrom, localePath, localeTags } from '@/lib/i18n'
@@ -17,6 +27,9 @@ import { languageAlternates } from '@/lib/metadata'
 import { providers } from '@/lib/providers'
 import { docs, packages, repositoryUrl, site } from '@/lib/site'
 import { useCases } from '@/lib/use-cases'
+import { samples } from '@/lib/samples'
+
+const { CLI_SAMPLE, APP_SAMPLE, CURL_SAMPLE, SNAPSHOT_SAMPLE } = samples.home
 
 export async function generateMetadata({ params }: PageProps<'/[locale]'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -29,52 +42,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]'>): Prom
     openGraph: { locale: localeTags[locale].og, url: localePath(locale, '/') },
   }
 }
-
-const CLI_SAMPLE = `$ s3nd put ./build.tar.gz
-build.tar.gz · 41 MB · expires in 1 day
-K7QP2M4X
-
-$ tar cz ./photos | s3nd put - --name photos.tar.gz
-$ CODE=$(s3nd put ./report.pdf)     # code on stdout, the rest on stderr
-
-# any other machine
-$ s3nd get k7qp-2m4x
-Wrote ./build.tar.gz · 41 MB`
-
-const APP_SAMPLE = `// app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
-
-export const { GET, POST, DELETE } = createTransferHandler({
-  bucket: createBucket({ bucket: 'drop' }),
-  expiresIn: 24 * 3600,
-  authorize: (request) => request.headers.get('authorization') === \`Bearer \${process.env.TOKEN}\`,
-})
-
-// In the browser, with @s3nd/react:
-const { sendFile, transfer } = useSendTransfer()
-await sendFile(file) // → transfer.code`
-
-const CURL_SAMPLE = `$ curl -X POST https://drop.example.com/api/transfers \\
-    -H "Authorization: Bearer $TOKEN" \\
-    -H "Content-Type: application/pdf" \\
-    -H "X-S3nd-Filename: report.pdf" \\
-    --data-binary @report.pdf
-{ "code": "K7QP2M4X", "kind": "file", "size": 290816, "expiresAt": "…" }
-
-$ curl -LOJ -H "Authorization: Bearer $TOKEN" \\
-    https://drop.example.com/api/transfers/K7QP2M4X/raw`
-
-const SNAPSHOT_SAMPLE = `import { createBucket } from 's3nd'
-
-const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
-
-// On the old phone: hand the user a code.
-const code = store.codes.create() // "K7QP2M4X"
-await store.putSnapshot(code, state, { app: 'notes', version: 3, expiresIn: 3600 })
-
-// On the new phone: they type it in.
-const snapshot = await store.getSnapshot(store.codes.normalize(typed), { maxVersion: 3 })
-snapshot?.data // → ready to write back into IndexedDB`
 
 export default async function HomePage({ params }: PageProps<'/[locale]'>) {
   const locale = await localeFrom(params)
@@ -128,23 +95,32 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
 
       <Section id="how" index="01" eyebrow={t.home.how.eyebrow} title={t.home.how.title} lead={t.home.how.lead}>
         <ol className="grid gap-4 lg:grid-cols-3">
-          {t.home.how.steps.map((step, index) => (
-            <li
-              key={step.stamp}
-              className="card border-line bg-surface hover:border-line-strong flex flex-col rounded-lg border p-6 transition-colors duration-300"
-              data-reveal=""
-              style={{ '--stagger': index } as CSSProperties}
-            >
-              <Stamp tone="accent">{step.stamp}</Stamp>
-              <h3 className="mt-4 text-2xl font-bold tracking-tight">{step.title}</h3>
-              <p className="text-ink-muted mt-3 flex-1 text-sm leading-relaxed">{step.body}</p>
-              <div className="mt-5 text-sm">
-                <TextLink href={step.href} external>
-                  {step.label}
-                </TextLink>
-              </div>
-            </li>
-          ))}
+          {t.home.how.steps.map((step, index) => {
+            const Figure = [PutIllustration, CodeIllustration, GetIllustration][index]
+
+            return (
+              <li
+                key={step.stamp}
+                className="bento border-line bg-surface hover:border-line-strong flex flex-col overflow-hidden rounded-lg border transition-colors duration-300"
+                data-reveal=""
+                style={{ '--stagger': index } as CSSProperties}
+              >
+                <div className="bento-figure border-line border-b">
+                  <Figure labels={t.illustrations} className="h-auto w-full" />
+                </div>
+                <div className="flex flex-1 flex-col p-6">
+                  <Stamp tone="accent">{step.stamp}</Stamp>
+                  <h3 className="mt-4 text-2xl font-bold tracking-tight">{step.title}</h3>
+                  <p className="text-ink-muted mt-3 flex-1 text-sm leading-relaxed">{step.body}</p>
+                  <div className="mt-5 text-sm">
+                    <TextLink href={step.href} external>
+                      {step.label}
+                    </TextLink>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
         </ol>
       </Section>
 
@@ -159,6 +135,7 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
           <div className="flex min-w-0 flex-col gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
+                <TerminalGlyph className="h-8 w-auto" />
                 <h3 className="text-xl font-bold tracking-tight">{t.home.waysIn.terminal.title}</h3>
                 <Pill>{packages.cli.name}</Pill>
               </div>
@@ -172,6 +149,7 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
           <div className="flex min-w-0 flex-col gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
+                <AppGlyph className="h-8 w-auto" />
                 <h3 className="text-xl font-bold tracking-tight">{t.home.waysIn.app.title}</h3>
                 <Pill>{packages.s3nd.name}</Pill>
                 <Pill>{packages.react.name}</Pill>
@@ -189,6 +167,7 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
           <div className="flex min-w-0 flex-col gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
+                <HttpGlyph className="h-8 w-auto" />
                 <h3 className="text-xl font-bold tracking-tight">{t.home.waysIn.http.title}</h3>
                 <Pill>{packages.protocol.name}</Pill>
               </div>
@@ -211,7 +190,31 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
         title={t.home.bucket.title}
         lead={t.home.bucket.lead}
       >
-        <Facts items={t.home.bucket.facts} />
+        <div className="grid gap-4 lg:grid-cols-4 lg:grid-rows-2">
+          <div
+            className="bento border-line bg-surface hover:border-line-strong flex flex-col overflow-hidden rounded-lg border transition-colors duration-300 lg:col-span-2 lg:row-span-2"
+            data-reveal=""
+          >
+            <div className="bento-figure border-line flex flex-1 items-center border-b">
+              <NoMiddleIllustration labels={t.illustrations} className="h-auto w-full" />
+            </div>
+            <div className="p-6">
+              <Stamp tone="accent">{t.home.bucket.eyebrow}</Stamp>
+              <p className="text-ink-muted mt-3 text-sm leading-relaxed">{t.home.bucket.figure}</p>
+            </div>
+          </div>
+          {t.home.bucket.facts.map((fact, index) => (
+            <div
+              key={fact.label}
+              className="bento border-line bg-surface hover:bg-surface-muted hover:border-line-strong rounded-lg border p-5 transition-colors duration-300"
+              data-reveal=""
+              style={{ '--stagger': index + 1 } as CSSProperties}
+            >
+              <h3 className="text-accent font-mono text-[10px] tracking-[0.2em] uppercase">{fact.label}</h3>
+              <p className="mt-2 text-sm leading-relaxed">{fact.value}</p>
+            </div>
+          ))}
+        </div>
         <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {providers(locale).map((provider, index) => (
             <CardLink key={provider.slug} href={p(`/providers/${provider.slug}`)} title={provider.name} index={index}>
@@ -249,7 +252,17 @@ export default async function HomePage({ params }: PageProps<'/[locale]'>) {
         lead={t.home.appState.lead}
       >
         <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
-          <CodeBlock code={SNAPSHOT_SAMPLE} lang="ts" />
+          <div className="grid gap-4">
+            <div className="bento border-line bg-surface overflow-hidden rounded-lg border" data-reveal="">
+              <div className="bento-figure">
+                <SnapshotIllustration labels={t.illustrations} className="h-auto w-full" />
+              </div>
+              <p className="text-ink-muted border-line border-t px-5 py-4 text-sm leading-relaxed">
+                {t.home.appState.figure}
+              </p>
+            </div>
+            <CodeBlock code={SNAPSHOT_SAMPLE} lang="ts" />
+          </div>
           <div className="grid gap-4">
             {t.home.appState.cards.map((card) => (
               <Card key={card.title}>

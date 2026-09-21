@@ -439,3 +439,153 @@ body {
     transform: none;
   }
 }
+
+/* ─── Illustrations ───────────────────────────────────────────────────── */
+
+/* A dashed route, flowing towards its end. */
+.ill-dash {
+  animation: dash-flow 1s linear infinite;
+}
+
+@keyframes dash-back {
+  to {
+    stroke-dashoffset: 12;
+  }
+}
+
+.ill-dash-back {
+  animation: dash-back 1s linear infinite;
+}
+
+@keyframes ill-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.ill-blink {
+  animation: ill-blink 1.1s steps(1) infinite;
+}
+
+.ill-blink-slow {
+  animation: ill-blink 2.4s steps(1) infinite;
+}
+
+@keyframes ill-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.ill-pulse {
+  animation: ill-pulse 2.4s ease-in-out infinite;
+}
+
+.ill-ghost {
+  opacity: 0.55;
+  animation: ill-pulse 4s ease-in-out infinite;
+}
+
+@keyframes ill-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.ill-float {
+  animation: ill-float 3.2s ease-in-out infinite;
+}
+
+.ill-float-small {
+  animation: ill-float 2.4s ease-in-out infinite;
+}
+
+/* A split-flap tile that flips in turn: it collapses, then springs back. */
+@keyframes ill-flip {
+  0%,
+  6% {
+    transform: scaleY(1);
+  }
+  9% {
+    transform: scaleY(0.05);
+  }
+  12%,
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.ill-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ill-flip 6s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 120ms);
+}
+
+/* The expiry ring, running down over six seconds and starting over. */
+@keyframes ill-countdown {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 81.7;
+  }
+}
+
+.ill-countdown {
+  stroke-dasharray: 81.7;
+  animation: ill-countdown 6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ill-dash,
+  .ill-dash-back,
+  .ill-blink,
+  .ill-blink-slow,
+  .ill-pulse,
+  .ill-ghost,
+  .ill-float,
+  .ill-float-small,
+  .ill-tile,
+  .ill-countdown {
+    animation: none;
+  }
+
+  /* The travelling packets are SMIL, which CSS cannot pause: hide them. */
+  .ill-motion {
+    display: none;
+  }
+}
+
+/* ─── Bento cells ─────────────────────────────────────────────────────── */
+
+.bento-figure {
+  background-color: #0d0d0c;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bento-figure svg {
+  display: block;
+  transition: transform 0.5s var(--ease-out-soft);
+}
+
+.bento:hover .bento-figure svg {
+  transform: scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento:hover .bento-figure svg {
+    transform: none;
+  }
+}

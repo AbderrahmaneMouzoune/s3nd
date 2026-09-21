@@ -8,6 +8,9 @@ import { examples, guides } from '@/lib/examples'
 import { getDictionary, localeFrom } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { github, repositoryUrl } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { MINIO, OUTPUT } = samples.examples
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/examples'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -21,19 +24,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/examples
     keywords: t.keywords,
   })
 }
-
-const MINIO = `docker run -p 9000:9000 -p 9001:9001 \\
-  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \\
-  quay.io/minio/minio server /data --console-address ":9001"`
-
-const OUTPUT = `code      ZZWMBSTD
-stored    1826 bytes gzipped, from 22991 raw (12.6x)
-typed     "zzwm-bstd" → ZZWMBSTD
-restored  200 notes from node-script, written 2026-08-27T14:29:20.442Z
-identical true
-claim     rejected as PRECONDITION_FAILED
-ifMatch   rejected as PRECONDITION_FAILED
-burned    gone`
 
 export default async function ExamplesPage({ params }: PageProps<'/[locale]/examples'>) {
   const locale = await localeFrom(params)

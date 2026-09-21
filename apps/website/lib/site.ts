@@ -66,6 +66,8 @@ export const packages = {
 export const dropTemplate = {
   path: 'templates/drop',
   source: github('templates/drop'),
+  /** The template, deployed: a drop box anyone can try. */
+  live: 'https://drop.s3nd.sh',
   deployUrl: (() => {
     const params = new URLSearchParams({
       'repository-url': `${repositoryUrl}/tree/${site.github.branch}/templates/drop`,

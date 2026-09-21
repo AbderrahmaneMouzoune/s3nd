@@ -1,4 +1,4 @@
-import { docs, packages, repositoryUrl } from '@/lib/site'
+import { docs, dropTemplate, packages, repositoryUrl } from '@/lib/site'
 
 /**
  * Every word the pages say, in English. `fr.ts` mirrors this object key for
@@ -66,7 +66,7 @@ export const en = {
         { label: 'Examples', description: 'Runnable, in the repository, against a local MinIO.', href: '/examples' },
         {
           label: 'Deploy a drop box',
-          description: 'A small WeTransfer on your own bucket, one click on Vercel.',
+          description: 'A small WeTransfer on your own bucket. Try it on drop.s3nd.sh, deploy it in one click.',
           href: '/drop',
         },
       ],
@@ -138,6 +138,7 @@ export const en = {
           { label: 'The protocol', href: docs('/protocol'), external: true },
           { label: 'GitHub', href: repositoryUrl, external: true },
           { label: 'npm', href: packages.cli.npm, external: true },
+          { label: 'The live drop box', href: dropTemplate.live, external: true },
         ],
       },
     ] as { title: string; links: { label: string; href: string; external?: boolean }[] }[],
@@ -239,6 +240,8 @@ export const en = {
       eyebrow: 'Your bucket',
       title: 'Nobody in the middle.',
       lead: 'Every other tool in this space either runs a relay, hosts your files, or asks for an account. s3nd is a thin layer over object storage you already pay for.',
+      figure:
+        'The bytes go from one machine to your bucket and from your bucket to the other. Nothing else is in the picture.',
       facts: [
         {
           label: 'No relay',
@@ -280,6 +283,8 @@ export const en = {
       eyebrow: 'Also',
       title: 'Not only files. An app’s whole state.',
       lead: 'A transfer can be structured data as well as bytes. That is how a local-first app with no accounts carries its database to the user’s new phone: the browser exports IndexedDB, the server snapshots it, the other phone types the code.',
+      figure:
+        'The old phone exports, your server snapshots, the new phone types the code and sees what it is about to restore.',
       cards: [
         {
           title: 'A self-describing envelope',
@@ -817,6 +822,25 @@ export const en = {
     bits: 'bits',
   },
 
+  illustrations: {
+    yourBucket: 'your bucket',
+    putCaption: 'one PutObject · ifAbsent · expiry on the object',
+    codeHint: 'lowercase, a dash, no I L O U',
+    codeResult: '✓ normalized → K7QP2M4X',
+    getCaption: 'any machine · until it expires',
+    noMiddle: 'no relay · no account · nothing to deploy',
+    machineA: 'machine A',
+    machineB: 'machine B',
+    midCaption: 'machine → bucket → machine. your provider’s bill, your retention rule.',
+    oldPhone: 'old phone',
+    newPhone: 'new phone',
+    fromDevice: 'from Pixel 8',
+    notes: '200 notes · 12:00',
+    restore: 'restore',
+    snapshot: 'snapshot',
+    snapCaption: 'self-describing · refuses a newer schema · shown before replacing',
+  },
+
   drop: {
     metaTitle: 'Deploy a drop box',
     metaDescription:
@@ -828,6 +852,7 @@ export const en = {
     lead: 'Drop a file, get an eight-character code and a link, pick it up on any device until it expires. One Next.js app built on the library and the hooks, deployed to Vercel in one click with five environment variables.',
     primary: 'Deploy with Vercel',
     secondary: 'The template on GitHub',
+    tertiary: 'Try it on drop.s3nd.sh',
     what: {
       eyebrow: 'What you get',
       title: 'Two pages and one route.',
@@ -843,7 +868,7 @@ export const en = {
         },
         {
           title: 'One route file',
-          body: '`createTransferHandler()` serves the four-route protocol, so the CLI works against your deployment too: `s3nd put --remote https://your.drop/api/transfers`.',
+          body: '`createTransferHandler()` serves the four-route protocol, so the CLI works against your deployment too: `s3nd put --remote https://drop.s3nd.sh/api/transfers`.',
         },
         {
           title: 'An optional password',
@@ -860,7 +885,7 @@ export const en = {
         'Create a bucket on R2, S3, Scaleway, Wasabi or a MinIO you host, and a key pair with read and write on that bucket and nothing else.',
         'Click Deploy, paste the five values, wait for the build.',
         'Add a lifecycle rule that deletes objects under the prefix after a day or two: the expiry stops a transfer being handed over, only the rule deletes the object.',
-        'Run `npx @s3nd/cli doctor --remote https://your.drop/api/transfers` and watch it round-trip a real transfer.',
+        'Run `npx @s3nd/cli doctor --remote https://drop.s3nd.sh/api/transfers` and watch it round-trip a real transfer.',
       ],
     },
     limits: {

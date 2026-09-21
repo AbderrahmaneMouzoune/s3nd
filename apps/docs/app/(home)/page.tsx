@@ -78,7 +78,7 @@ export default async function HomePage() {
 
       <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-12 sm:pt-24">
         <div className="grid gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:items-center">
-          <div>
+          <div className="min-w-0">
             <p className="rise text-accent flex items-center gap-3 font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
               <Logo className="size-5" />
               Documentation · doc.s3nd.sh
@@ -120,7 +120,7 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="rise rise-3 border-line-strong bg-surface rounded-xl border shadow-[0_1px_0_rgb(0_0_0/0.6),0_12px_32px_-16px_rgb(0_0_0/0.8)]">
+          <div className="rise rise-3 border-line-strong bg-surface min-w-0 overflow-hidden rounded-xl border shadow-[0_1px_0_rgb(0_0_0/0.6),0_12px_32px_-16px_rgb(0_0_0/0.8)]">
             <div className="border-line flex items-center justify-between border-b px-4 py-2.5">
               <span className="text-ink-faint font-mono text-[10px] tracking-[0.22em] uppercase">lib/store.ts</span>
               <span className="border-accent text-accent rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.2em] uppercase">
@@ -132,7 +132,7 @@ export default async function HomePage() {
               dangerouslySetInnerHTML={{ __html: highlighted }}
             />
             <div className="border-line flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
-              <div className="flex gap-1" role="img" aria-label="Code: K7QP 2M4X">
+              <div className="flex flex-wrap gap-1" role="img" aria-label="Code: K7QP 2M4X">
                 {CODE.map((character, index) => (
                   <span
                     key={index}

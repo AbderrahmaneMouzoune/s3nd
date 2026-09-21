@@ -9,6 +9,9 @@ import { ButtonLink, Card, Section, TextLink } from '@/components/ui'
 import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { docs, packages } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { HERO, FILES, HANDLER, HONO, BUN, SNAPSHOT, CONDITIONAL, ERRORS, CONFIG } = samples.library
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/library'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -22,91 +25,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/library'
     keywords: t.keywords,
   })
 }
-
-const HERO = `import { createBucket, createTransferHandler } from 's3nd'
-
-const store = createBucket({ bucket: 'drop' })
-
-// A drop box on your own domain, in one route file.
-export const { GET, POST, DELETE } = createTransferHandler({
-  bucket: store,
-  expiresIn: 24 * 3600,
-  authorize: (request) => request.headers.get('authorization') === \`Bearer \${process.env.TOKEN}\`,
-})`
-
-const FILES = `await store.upload(file)     // → { key, path, url?, size?, etag?, contentType }
-await store.put(id, file)    // one file per identifier: create or replace
-await store.get(id)          // → the file back, or null
-await store.getUrl(id)       // → public or presigned URL
-await store.delete(id)       // → void
-
-store.client                 // the plain S3Client, for anything else`
-
-const HANDLER = `// app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
-
-export const { GET, POST, DELETE } = createTransferHandler({
-  bucket: createBucket({ bucket: 'drop' }),
-  expiresIn: 24 * 3600,
-  raw: 'redirect', // downloads 302 to a presigned URL
-  authorize: (request) => request.headers.get('authorization') === \`Bearer \${process.env.TOKEN}\`,
-})`
-
-const HONO = `import { Hono } from 'hono'
-import { createBucket, createTransferHandler } from 's3nd'
-
-const transfers = createTransferHandler({ bucket: createBucket(), basePath: '/api/transfers' })
-
-const app = new Hono()
-app.all('/api/transfers', (c) => transfers(c.req.raw))
-app.all('/api/transfers/*', (c) => transfers(c.req.raw))`
-
-const BUN = `import { createBucket, createTransferHandler } from 's3nd'
-
-const transfers = createTransferHandler({ bucket: createBucket(), basePath: '/api/transfers' })
-
-Bun.serve({
-  fetch(request) {
-    if (new URL(request.url).pathname.startsWith('/api/transfers')) return transfers(request)
-    return new Response('Not found', { status: 404 })
-  },
-})`
-
-const SNAPSHOT = `const code = store.codes.create() // "K7QP2M4X"
-await store.putSnapshot(code, state, { app: 'notes', version: 3, expiresIn: 3600, ifAbsent: true })
-
-const snapshot = await store.getSnapshot(store.codes.normalize(typed), { maxVersion: 3 })
-snapshot?.data      // the state, or null when unknown or expired
-snapshot?.createdAt // what to show before replacing anything
-snapshot?.device`
-
-const CONDITIONAL = `// Claim a fresh code: write only if nothing is stored under it yet.
-await store.put(code, file, { ifAbsent: true })
-
-// Rewrite a shared object: fail if someone else wrote since you read.
-const current = await store.getSnapshot(\`user-\${userId}\`)
-await store.putSnapshot(\`user-\${userId}\`, merged, { ifMatch: current?.etag })`
-
-const ERRORS = `import { isS3ndError } from 's3nd'
-
-try {
-  await store.upload(body, { filename })
-} catch (error) {
-  if (isS3ndError(error) && error.code === 'FILE_TOO_LARGE') {
-    return Response.json({ error: 'Too large to transfer in one piece' }, { status: 413 })
-  }
-  throw error
-}`
-
-const CONFIG = `createBucket({
-  bucket: 'drop',               // or S3ND_BUCKET / S3_BUCKET
-  region: 'eu-west-3',          // or S3ND_REGION / AWS_REGION
-  credentials: { … },           // omit for the AWS provider chain
-  endpoint: 'https://…',        // R2, MinIO, Scaleway, Wasabi — or S3ND_ENDPOINT
-  prefix: 'drop',               // internal namespace
-  maxSize: 4 * 1024 * 1024,     // reject before any network call
-  syncCode: { length: 8 },      // the shape of store.codes
-})`
 
 export default async function LibraryPage({ params }: PageProps<'/[locale]/library'>) {
   const locale = await localeFrom(params)

@@ -6,7 +6,15 @@ import { display, mono } from '@/lib/fonts'
 
 import './globals.css'
 
+/** Where this deployment lives, for absolute URLs: Vercel's production domain, or whatever `DROP_URL` says. */
+const baseUrl = process.env.DROP_URL
+  ? process.env.DROP_URL
+  : process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : 'http://localhost:3400'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(baseUrl),
   title: {
     default: `${dropConfig.name} · a file, a code, your bucket`,
     template: `%s · ${dropConfig.name}`,

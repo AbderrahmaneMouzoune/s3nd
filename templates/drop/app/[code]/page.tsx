@@ -1,5 +1,6 @@
 import type { TransferMetadata } from '@s3nd/react'
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import { CodeBoard } from '@/components/code-board'
@@ -35,6 +36,10 @@ export default async function PickupPage({ params }: PageProps<'/[code]'>) {
   if (!meta) notFound()
 
   const isFile = meta.kind === 'file'
+  const requestHeaders = await headers()
+  const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? 'drop.s3nd.sh'
+  const protocol = requestHeaders.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+  const remote = `${protocol}://${host}/api/transfers`
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pt-12 pb-16 sm:pt-20">
@@ -69,7 +74,7 @@ export default async function PickupPage({ params }: PageProps<'/[code]'>) {
       </div>
 
       <p className="rise rise-3 text-ink-faint mt-6 font-mono text-[10px] tracking-[0.22em] uppercase">
-        or, from a terminal: s3nd get {meta.code.toLowerCase()} --remote {'<this domain>'}/api/transfers
+        or, from a terminal: s3nd get {meta.code.toLowerCase()} --remote {remote}
       </p>
     </div>
   )

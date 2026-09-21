@@ -9,6 +9,9 @@ import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { providers } from '@/lib/providers'
 import { docs } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { ENDPOINT } = samples.providers
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/providers'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -22,13 +25,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/provider
     keywords: t.keywords,
   })
 }
-
-const ENDPOINT = `const store = createBucket({
-  bucket: 'transfers',
-  endpoint: 'https://…',   // set this, and two defaults follow:
-  // region: 'auto'        // for providers that ignore the region
-  // forcePathStyle: true  // https://endpoint/bucket/key
-})`
 
 export default async function ProvidersPage({ params }: PageProps<'/[locale]/providers'>) {
   const locale = await localeFrom(params)

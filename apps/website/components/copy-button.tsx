@@ -57,16 +57,32 @@ export function useCopied(delay = 1800): [boolean, (text: string) => Promise<voi
   return [copied, copy]
 }
 
-/** A small copy button for a code block: quiet until hovered or focused, loud once it has copied. */
-export function CopyButton({ text, label, className }: { text: string; label?: string; className?: string }) {
+/**
+ * A small copy button for a code block: quiet until hovered or focused, loud
+ * once it has copied. `kind` says what is on the clipboard, the first command
+ * of a transcript or the whole block, so the label and the tooltip can say so.
+ */
+export function CopyButton({
+  text,
+  kind = 'code',
+  label,
+  className,
+}: {
+  text: string
+  kind?: 'command' | 'code'
+  label?: string
+  className?: string
+}) {
   const { ui } = useLocale()
   const [copied, copy] = useCopied()
+  const title = label ?? (kind === 'command' ? ui.copyCommand : ui.copyCode)
 
   return (
     <button
       type="button"
       onClick={() => void copy(text)}
-      aria-label={label ?? ui.copyCode}
+      aria-label={`${title}: ${text.length > 80 ? `${text.slice(0, 80)}…` : text}`}
+      title={title}
       data-copied={copied ? 'true' : undefined}
       className={cx(
         'copy-button border-line-strong bg-canvas/80 text-ink-muted hover:border-accent hover:text-accent inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[10px] font-semibold tracking-[0.18em] uppercase backdrop-blur transition-colors',

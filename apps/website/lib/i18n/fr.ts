@@ -1,4 +1,4 @@
-import { docs, packages, repositoryUrl } from '@/lib/site'
+import { docs, dropTemplate, packages, repositoryUrl } from '@/lib/site'
 
 import type { Dictionary } from './en'
 
@@ -73,7 +73,7 @@ export const fr: Dictionary = {
         { label: 'Exemples', description: 'Exécutables, dans le dépôt, contre un MinIO local.', href: '/examples' },
         {
           label: 'Déployer une drop box',
-          description: 'Un petit WeTransfer sur votre bucket, en un clic sur Vercel.',
+          description: 'Un petit WeTransfer sur votre bucket. À essayer sur drop.s3nd.sh, à déployer en un clic.',
           href: '/drop',
         },
       ],
@@ -145,6 +145,7 @@ export const fr: Dictionary = {
           { label: 'Le protocole', href: docs('/protocol'), external: true },
           { label: 'GitHub', href: repositoryUrl, external: true },
           { label: 'npm', href: packages.cli.npm, external: true },
+          { label: 'La drop box en ligne', href: dropTemplate.live, external: true },
         ],
       },
     ],
@@ -246,6 +247,8 @@ export const fr: Dictionary = {
       eyebrow: 'Votre bucket',
       title: 'Personne au milieu.',
       lead: 'Tous les autres outils du domaine font tourner un relais, hébergent vos fichiers, ou demandent un compte. s3nd est une fine couche au-dessus du stockage objet que vous payez déjà.',
+      figure:
+        'Les octets vont d’une machine à votre bucket et de votre bucket à l’autre. Rien d’autre dans le tableau.',
       facts: [
         {
           label: 'Pas de relais',
@@ -287,6 +290,8 @@ export const fr: Dictionary = {
       eyebrow: 'Et aussi',
       title: 'Pas seulement des fichiers. Tout l’état d’une app.',
       lead: 'Un transfert peut être des données structurées autant que des octets. C’est ainsi qu’une app local-first sans comptes emporte sa base de données sur le nouveau téléphone de l’utilisateur : le navigateur exporte IndexedDB, le serveur en fait un snapshot, l’autre téléphone tape le code.',
+      figure:
+        'L’ancien téléphone exporte, votre serveur fait un snapshot, le nouveau téléphone tape le code et voit ce qu’il s’apprête à restaurer.',
       cards: [
         {
           title: 'Une enveloppe qui se décrit elle-même',
@@ -851,6 +856,25 @@ export const fr: Dictionary = {
     bits: 'bits',
   },
 
+  illustrations: {
+    yourBucket: 'votre bucket',
+    putCaption: 'un PutObject · ifAbsent · expiration sur l’objet',
+    codeHint: 'minuscules, un tiret, ni I L O U',
+    codeResult: '✓ normalisé → K7QP2M4X',
+    getCaption: 'n’importe quelle machine · jusqu’à expiration',
+    noMiddle: 'pas de relais · pas de compte · rien à déployer',
+    machineA: 'machine A',
+    machineB: 'machine B',
+    midCaption: 'machine → bucket → machine. la facture de votre fournisseur, votre règle de rétention.',
+    oldPhone: 'ancien',
+    newPhone: 'nouveau',
+    fromDevice: 'depuis Pixel 8',
+    notes: '200 notes · 12:00',
+    restore: 'restaurer',
+    snapshot: 'snapshot',
+    snapCaption: 'auto-descriptif · refuse un schéma plus récent · montré avant de remplacer',
+  },
+
   drop: {
     metaTitle: 'Déployer une drop box',
     metaDescription:
@@ -867,6 +891,7 @@ export const fr: Dictionary = {
     lead: 'Déposez un fichier, obtenez un code de huit caractères et un lien, récupérez-le sur n’importe quel appareil jusqu’à expiration. Une app Next.js bâtie sur la bibliothèque et les hooks, déployée sur Vercel en un clic avec cinq variables d’environnement.',
     primary: 'Déployer sur Vercel',
     secondary: 'Le template sur GitHub',
+    tertiary: 'Essayer sur drop.s3nd.sh',
     what: {
       eyebrow: 'Ce que vous obtenez',
       title: 'Deux pages et une route.',
@@ -882,7 +907,7 @@ export const fr: Dictionary = {
         },
         {
           title: 'Un seul fichier de route',
-          body: '`createTransferHandler()` sert le protocole à quatre routes, donc la CLI fonctionne aussi contre votre déploiement : `s3nd put --remote https://your.drop/api/transfers`.',
+          body: '`createTransferHandler()` sert le protocole à quatre routes, donc la CLI fonctionne aussi contre votre déploiement : `s3nd put --remote https://drop.s3nd.sh/api/transfers`.',
         },
         {
           title: 'Un mot de passe optionnel',
@@ -899,7 +924,7 @@ export const fr: Dictionary = {
         'Créez un bucket sur R2, S3, Scaleway, Wasabi ou un MinIO que vous hébergez, et une paire de clés avec lecture et écriture sur ce bucket et rien d’autre.',
         'Cliquez sur Déployer, collez les cinq valeurs, attendez le build.',
         'Ajoutez une règle de cycle de vie qui supprime les objets sous le préfixe après un jour ou deux : l’expiration empêche un transfert d’être remis, seule la règle supprime l’objet.',
-        'Lancez `npx @s3nd/cli doctor --remote https://your.drop/api/transfers` et regardez-le faire l’aller-retour d’un vrai transfert.',
+        'Lancez `npx @s3nd/cli doctor --remote https://drop.s3nd.sh/api/transfers` et regardez-le faire l’aller-retour d’un vrai transfert.',
       ],
     },
     limits: {

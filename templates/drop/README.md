@@ -4,6 +4,8 @@ A small WeTransfer on your own bucket. Drop a file, get an eight-character code 
 up on any device until it expires. Two pages and one route, built on [s3nd](https://s3nd.sh), on
 top of the S3-compatible bucket you already have: Cloudflare R2, AWS S3, MinIO, Scaleway, Wasabi.
 
+Try it at [drop.s3nd.sh](https://drop.s3nd.sh), then deploy your own:
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAbderrahmaneMouzoune%2Fs3nd%2Ftree%2Fmain%2Ftemplates%2Fdrop&project-name=s3nd-drop&repository-name=s3nd-drop&env=S3ND_BUCKET%2CS3ND_ENDPOINT%2CS3ND_REGION%2CAWS_ACCESS_KEY_ID%2CAWS_SECRET_ACCESS_KEY&envDescription=An%20S3-compatible%20bucket%20and%20a%20key%20pair%20scoped%20to%20it.%20R2%2C%20S3%2C%20MinIO%2C%20Scaleway%20and%20Wasabi%20all%20work.&envLink=https%3A%2F%2Fs3nd.sh%2Fproviders)
 
 | Page               | Does                                                                                         |
@@ -27,7 +29,7 @@ never existed.
 4. Check it round-trips a real transfer:
 
    ```sh
-   npx @s3nd/cli doctor --remote https://your-deployment.vercel.app/api/transfers
+   npx @s3nd/cli doctor --remote https://your-deployment.vercel.app/api/transfers   # or the live one: https://drop.s3nd.sh/api/transfers
    ```
 
    With a `DROP_PASSWORD` set, add `--token <password>`.
@@ -49,6 +51,7 @@ The bucket is configured through the variables `s3nd` already reads. Everything 
 | `DROP_MAX_SIZE_MB`      |          | `4`      | The largest file accepted. Vercel functions take 4.5 MB per request.                     |
 | `DROP_RAW_MODE`         |          | `stream` | `stream` pipes downloads through the function; `redirect` presigns them from the bucket. |
 | `DROP_NAME`             |          | `drop`   | The name in the header and the page title.                                               |
+| `DROP_URL`              |          | Vercel's | The public URL, for absolute links. Vercel's production domain when unset.               |
 
 **About the password.** Without `DROP_PASSWORD`, anyone who finds the page can drop a file in your
 bucket: fine behind a proxy or on a private network, not fine on the open internet. With it, the

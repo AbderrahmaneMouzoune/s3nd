@@ -10,6 +10,9 @@ import { ButtonLink, Card, Facts, Section, Stamp, TextLink } from '@/components/
 import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { docs } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { FILE_OBJECT, SNAPSHOT_ENVELOPE, ROUTES, CLIENT, CONDITIONAL } = samples.howItWorks
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/how-it-works'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -23,48 +26,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/how-it-w
     keywords: t.keywords,
   })
 }
-
-const FILE_OBJECT = `drop/K7QP2M4X
-  Content-Type:         application/pdf
-  Content-Disposition:  attachment; filename="report.pdf"
-  x-amz-meta-s3nd-kind:        file
-  x-amz-meta-s3nd-expires-at:  2026-08-27T13:00:00.000Z
-  Body:                 the bytes, untouched`
-
-const SNAPSHOT_ENVELOPE = `{
-  "s3nd": 1,              // envelope format, not your data's
-  "app": "notes",
-  "version": 3,           // your schema version
-  "device": "Pixel 8",
-  "createdAt": "2026-08-27T12:00:00.000Z",
-  "expiresAt": "2026-08-27T13:00:00.000Z",
-  "data": { /* whatever you passed */ }
-}                          // gzipped, typically 5–10× smaller`
-
-const ROUTES = `POST   /                # create a transfer, get the code back
-GET    /:code           # metadata; the state inline for a snapshot
-GET    /:code/raw       # the bytes, or a 302 to a presigned URL
-DELETE /:code           # burn it
-
-# every error, same shape
-{ "error": { "code": "NOT_FOUND", "message": "Unknown or expired code." } }`
-
-const CLIENT = `import { createTransferClient } from '@s3nd/protocol'
-
-const transfers = createTransferClient({ baseUrl: '/api/transfers' })
-
-const { code } = await transfers.createFile({ body: file, filename: file.name })
-const meta = await transfers.read(typed)        // null when unknown or expired
-const bytes = await transfers.readBytes(code)   // the file back
-await transfers.remove(code)`
-
-const CONDITIONAL = `// Claim a fresh code: write only if nothing sits under it.
-await store.putSnapshot(code, state, { ifAbsent: true })
-
-// Rewrite a shared backup: fail if someone wrote since you read.
-const current = await store.getSnapshot(\`user-\${userId}\`)
-await store.putSnapshot(\`user-\${userId}\`, merged, { ifMatch: current?.etag })
-// → PRECONDITION_FAILED when another device won. Read again, merge again.`
 
 export default async function HowItWorksPage({ params }: PageProps<'/[locale]/how-it-works'>) {
   const locale = await localeFrom(params)

@@ -8,6 +8,9 @@ import { ButtonLink, Card, Section, TextLink } from '@/components/ui'
 import { getDictionary, localeFrom, localePath } from '@/lib/i18n'
 import { pageMetadata } from '@/lib/metadata'
 import { docs, packages } from '@/lib/site'
+import { samples } from '@/lib/samples'
+
+const { INIT, DOCTOR, PUT_GET, CONFIG_FILE, PROFILES, REMOTE } = samples.cli
 
 export async function generateMetadata({ params }: PageProps<'/[locale]/cli'>): Promise<Metadata> {
   const locale = await localeFrom(params)
@@ -21,78 +24,6 @@ export async function generateMetadata({ params }: PageProps<'/[locale]/cli'>): 
     keywords: t.keywords,
   })
 }
-
-const INIT = `$ s3nd init --provider r2 --bucket transfers
-Wrote /home/you/transfers/s3nd.config.json
-
-Put the three values in .env, and keep it out of git:
-  R2_ACCOUNT_ID=…
-  R2_ACCESS_KEY_ID=…
-  R2_SECRET_ACCESS_KEY=…
-The R2 API token needs Object Read & Write on this bucket, and nothing else.
-Give the bucket a lifecycle rule that deletes objects under "transfers/" after a day or two.
-Run \`s3nd doctor\` — it performs the operations s3nd needs and reports what happened.`
-
-const DOCTOR = `$ s3nd doctor
-Using /home/you/transfers/s3nd.config.json
-✓ Configuration: bucket "transfers", region "auto"
-✓ Credentials: resolved, key ends in 1a2b
-✓ Bucket reachable: HeadBucket succeeded
-✓ Write, read, delete: round-tripped a probe object
-! Expiry cleanup: no enabled expiration rule
-  → Add an S3 lifecycle rule that expires objects under this bucket after a day or
-    two. Without it, expired transfers stay stored and billed.
-
-1 check(s) failed.`
-
-const PUT_GET = `$ s3nd put ./report.pdf
-report.pdf · 284 kB · expires in 1 day
-K7QP2M4X
-
-$ CODE=$(s3nd put ./report.pdf)          # the code is stdout, the rest is stderr
-$ tar cz ./project | s3nd put - --name project.tar.gz
-
-# on the other machine
-$ s3nd get K7QP2M4X
-Wrote /home/you/report.pdf · 284 kB
-
-$ s3nd get K7QP2M4X -o -  | less        # or to stdout
-$ s3nd rm K7QP2M4X
-Burned K7QP2M4X`
-
-const CONFIG_FILE = `{
-  "envFile": ".env",
-  "profiles": {
-    "r2": {
-      "bucket": "transfers",
-      "region": "auto",
-      "endpoint": "https://\${R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-      "expiresIn": "24h",
-      "credentials": { "accessKeyId": "\${R2_ACCESS_KEY_ID}", "secretAccessKey": "\${R2_SECRET_ACCESS_KEY}" }
-    },
-    "local": { "bucket": "transfers", "endpoint": "http://localhost:9000" },
-    "prod":  { "remote": "https://drop.example.com/api/transfers", "token": "\${S3ND_TOKEN}" }
-  }
-}`
-
-const PROFILES = `$ s3nd -p local doctor          # against a MinIO container, offline
-$ s3nd -p r2 put ./report.pdf
-$ s3nd -p prod put ./report.pdf # through your server, with a token
-
-$ s3nd config                   # which value won, and where it came from
-file         /home/you/transfers/s3nd.config.json (profile "r2")
-mode         straight to S3
-bucket       transfers                                 $S3ND_BUCKET
-endpoint     https://8c4….r2.cloudflarestorage.com     s3nd.config.json (r2)
-credentials  …1a2b                                     s3nd.config.json (r2)
-expires in   1 day                                     s3nd.config.json (r2)`
-
-const REMOTE = `$ s3nd --remote https://drop.example.com/api/transfers --token "$TOKEN" put ./report.pdf
-K7QP2M4X
-
-$ s3nd doctor --remote https://drop.example.com/api/transfers --token "$TOKEN"
-✓ Server: https://drop.example.com/api/transfers answered
-✓ Create, read, delete: round-tripped code 8WTXQC8R`
 
 export default async function CliPage({ params }: PageProps<'/[locale]/cli'>) {
   const locale = await localeFrom(params)

@@ -21,10 +21,18 @@ export function languageAlternates(path: string): Record<string, string> {
   return languages
 }
 
+/** The Markdown twin of a page, for agents: `/cli.md`, `/fr/cli.md`, `/index.md` for a home. */
+export function markdownPath(locale: Locale, path: string): string {
+  const localized = localePath(locale, path)
+
+  return localized === '/' ? '/index.md' : localized === `/${locale}` ? `/${locale}/index.md` : `${localized}.md`
+}
+
 /**
  * Every page declares its title, description and path once; this turns that into
- * the full set of tags — canonical, hreflang, Open Graph and Twitter — against
- * the site's `metadataBase`. The Open Graph image is the generated one at the root.
+ * the full set of tags — canonical, hreflang, the Markdown alternate, Open Graph
+ * and Twitter — against the site's `metadataBase`. The Open Graph image is the
+ * generated one at the root.
  */
 export function pageMetadata({ locale, title, description, path, keywords }: PageMetadata): Metadata {
   const canonical = localePath(locale, path)
@@ -33,7 +41,11 @@ export function pageMetadata({ locale, title, description, path, keywords }: Pag
     title,
     description,
     keywords,
-    alternates: { canonical, languages: languageAlternates(path) },
+    alternates: {
+      canonical,
+      languages: languageAlternates(path),
+      types: { 'text/markdown': markdownPath(locale, path) },
+    },
     openGraph: {
       title: `${title} · ${site.domain}`,
       description,
