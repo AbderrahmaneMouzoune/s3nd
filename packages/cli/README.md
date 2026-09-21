@@ -164,7 +164,7 @@ It masks the access key id and never prints the secret or the token.
 ## Against your own server
 
 Every command takes `--remote`, pointing it at a deployment of
-[the transfer protocol](https://github.com/AbderrahmaneMouzoune/bucketcode/blob/main/apps/docs/content/docs/protocol.mdx)
+[the transfer protocol](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
 instead of at S3:
 
 ```sh

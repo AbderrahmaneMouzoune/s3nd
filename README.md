@@ -34,6 +34,12 @@ npm install s3nd
 
 A bun workspace monorepo, driven by Turborepo.
 
+It was called `bucketcode` until the packages were renamed to `s3nd`, and moved here with its
+full history; [the old repository](https://github.com/AbderrahmaneMouzoune/bucketcode) is
+archived. On npm that leaves `bucketcode@0.1.0` as the last release under the old name — it is
+deprecated in favour of `s3nd`, and a snapshot written by it still reads back, which
+[`packages/s3nd/src/snapshot.ts`](./packages/s3nd/src/snapshot.ts) covers.
+
 | Path                                                   | What it is                                                                                                  |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser. |

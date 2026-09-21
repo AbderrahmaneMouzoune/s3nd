@@ -17,7 +17,7 @@ straight into the Next.js App Router.
 ## Setting it up
 
 Point the provider at wherever you mounted
-[the transfer routes](https://github.com/AbderrahmaneMouzoune/bucketcode/blob/main/apps/docs/content/docs/protocol.mdx):
+[the transfer routes](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx):
 
 ```tsx
 import { S3ndProvider } from '@s3nd/react'

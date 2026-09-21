@@ -12,14 +12,14 @@
   ],
   "license": "MIT",
   "author": "Abderrahmane Mouzoune",
-  "homepage": "https://github.com/AbderrahmaneMouzoune/bucketcode/tree/main/packages/protocol#readme",
+  "homepage": "https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/packages/protocol#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AbderrahmaneMouzoune/bucketcode.git",
+    "url": "git+https://github.com/AbderrahmaneMouzoune/s3nd.git",
     "directory": "packages/protocol"
   },
   "bugs": {
-    "url": "https://github.com/AbderrahmaneMouzoune/bucketcode/issues"
+    "url": "https://github.com/AbderrahmaneMouzoune/s3nd/issues"
   },
   "type": "module",
   "main": "./dist/index.cjs",

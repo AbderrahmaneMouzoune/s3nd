@@ -25,9 +25,9 @@ Credentials stay on your server. The browser only ever talks to your own API, so
 policy to write on the bucket and nothing to sign client-side. Works with AWS S3 and any
 S3-compatible storage (Cloudflare R2, MinIO, Scaleway, Wasabi, Ceph).
 
-The [documentation site](https://github.com/AbderrahmaneMouzoune/bucketcode/tree/main/apps/docs)
+The [documentation site](https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/apps/docs)
 covers the whole flow, and a
-[runnable IndexedDB example](https://github.com/AbderrahmaneMouzoune/bucketcode/tree/main/examples/indexeddb-sync)
+[runnable IndexedDB example](https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/examples/indexeddb-sync)
 lives in the same repository.
 
 ## Install
@@ -70,7 +70,7 @@ routinely cuts it by 5–10×. That is headroom against the request limit of wha
 
 ## The routes, without writing them
 
-`createTransferHandler()` serves [the transfer protocol](https://github.com/AbderrahmaneMouzoune/bucketcode/blob/main/apps/docs/content/docs/protocol.mdx):
+`createTransferHandler()` serves [the transfer protocol](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx):
 create a transfer, read it back, burn it. It takes a `Request` and returns a `Response`, so it is a
 Next route handler, a Hono route, `Bun.serve` or a worker without an adapter for any of them.
 
