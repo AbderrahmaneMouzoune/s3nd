@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>s3nd launch film</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #000;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="film" width="1920" height="1080"></canvas>
+    <script type="module">
+      import { renderFrame } from './scene.mjs'
+      import { DURATION, FPS } from './timeline.mjs'
+
+      const fonts = [
+        new FontFace('Display', 'url(../../apps/website/app/fonts/BricolageGrotesque-Variable.woff2)', {
+          weight: '200 800',
+        }),
+        new FontFace('Mono', 'url(../../apps/website/app/fonts/JetBrainsMono-Variable.woff2)', { weight: '100 800' }),
+      ]
+      await Promise.all(fonts.map((f) => f.load().then(() => document.fonts.add(f))))
+
+      const canvas = document.getElementById('film')
+      const ctx = canvas.getContext('2d')
+
+      /** Renders frame `i` and hands it back as a JPEG data URL, for the recorder. */
+      window.frame = (i, quality = 0.95) => {
+        renderFrame(ctx, i / FPS, i)
+        return canvas.toDataURL('image/jpeg', quality)
+      }
+      window.ready = true
+
+      // Opened in a browser rather than by the recorder: play it in real time.
+      if (!navigator.webdriver) {
+        const start = performance.now()
+        const loop = () => {
+          const t = ((performance.now() - start) / 1000) % DURATION
+          renderFrame(ctx, t, Math.floor(t * FPS))
+          requestAnimationFrame(loop)
+        }
+        loop()
+      }
+    </script>
+  </body>
+</html>
