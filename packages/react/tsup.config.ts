@@ -5,7 +5,9 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,
-  sourcemap: true,
+  // Off on purpose: the maps were about 60% of every published tarball, and a
+  // consumer debugging a release reads the source at its tag, not in node_modules.
+  sourcemap: false,
   target: 'es2022',
   // No `treeshake`: it routes the output through Rollup, which strips module
   // level directives — taking the 'use client' banner below with it. esbuild's
