@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/AbderrahmaneMouzoune/s3nd/compare/protocol-v0.1.0...protocol-v0.1.1) (2026-09-22)
+
+
+### Documentation
+
+* a ten-second GIF on each package page, and no more em dashes ([a8a9dee](https://github.com/AbderrahmaneMouzoune/s3nd/commit/a8a9deec40961ab2b890d3fdf62e2a2ff3865be0))
+* npm version badges on the README and every package page ([454f7aa](https://github.com/AbderrahmaneMouzoune/s3nd/commit/454f7aa01f49b56aa65d7553c52056118a0ac4a8))
+
 ## 0.1.0 (2026-09-22)
 
 

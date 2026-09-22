@@ -6,6 +6,21 @@ into `main`. The detailed notes at the bottom were written by hand for the first
 this package was published as `bucketcode`, and are kept because they say what 0.1.0 actually
 contains.
 
+## [0.1.1](https://github.com/AbderrahmaneMouzoune/s3nd/compare/s3nd-v0.1.0...s3nd-v0.1.1) (2026-09-22)
+
+
+### Documentation
+
+* a ten-second GIF on each package page, and no more em dashes ([a8a9dee](https://github.com/AbderrahmaneMouzoune/s3nd/commit/a8a9deec40961ab2b890d3fdf62e2a2ff3865be0))
+* npm version badges on the README and every package page ([454f7aa](https://github.com/AbderrahmaneMouzoune/s3nd/commit/454f7aa01f49b56aa65d7553c52056118a0ac4a8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @s3nd/protocol bumped from ^0.1.0 to ^0.1.1
+
 ## 0.1.0 (2026-09-22)
 
 
