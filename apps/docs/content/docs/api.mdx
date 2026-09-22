@@ -1,6 +1,6 @@
 ---
 title: 'API'
-description: 'createBucket, upload, put, get, getUrl, delete, destroy.'
+description: 'createBucket, the snapshot API, and upload, put, get, head, exists, list, copy, move, getUrl, delete, destroy.'
 ---
 
 The snapshot API is the one most applications use. The file API underneath it stays available for
@@ -75,6 +75,36 @@ const snapshot = await store.getSnapshot<AppState>(code, { maxVersion: SCHEMA_VE
 
 Compression is detected rather than assumed, so a snapshot written with `compress: false` reads
 back the same way.
+
+---
+
+## `hasSnapshot(key, options?)`
+
+Whether a live snapshot is stored under a key, answered with a `HeadObject`: no body crosses the
+wire, which makes it the call for a "is this code valid?" check. A snapshot past its `expiresAt`
+counts as absent, as it does for `getSnapshot()`.
+
+```ts
+if (!(await store.hasSnapshot(code))) return notFound()
+```
+
+Takes `{ prefix, signal }`. Expiry is read from the `s3nd-expires-at` metadata that
+`putSnapshot()` writes since v0.2; a snapshot written by v0.1 has none, so it counts as present
+until `getSnapshot()` opens it.
+
+---
+
+## `deleteSnapshot(key, options?)`
+
+Deletes a snapshot, typically once a restore has succeeded, which is the normal end of a transfer.
+Deleting one that is already gone is a no-op.
+
+```ts
+await store.deleteSnapshot(code, { prefix: 'transfers' })
+```
+
+Takes `{ prefix, signal }`. It does not replace a lifecycle rule for the transfers nobody finishes:
+see [Expiry](/docs/snapshots#expiry).
 
 ---
 
@@ -215,6 +245,73 @@ The body can only be read once. Use `body`, `bytes()` **or** `text()` — exactl
 
 ---
 
+## `head(key, options?)` and `exists(key, options?)`
+
+Everything `get()` reports except the body, from a `HeadObject`: nothing is downloaded. `head()`
+returns `null` for a missing key, `exists()` returns a boolean.
+
+```ts
+const info = await store.head('invoices/2026-01.pdf') // → same fields as get(), minus body/bytes/text
+const known = await store.exists('invoices/2026-01.pdf') // → boolean
+```
+
+Both take `{ prefix, signal }`. A failure other than a missing key throws `GET_FAILED`.
+
+---
+
+## `list(options?)`
+
+Walks the objects in a namespace. `ListObjectsV2` is paginated, so this is an async iterator that
+fetches the next page only when you reach it:
+
+```ts
+for await (const object of store.list({ prefix: 'snapshots', limit: 1000 })) {
+  console.log(object.key, object.size, object.lastModified)
+}
+```
+
+| Option       | Type          | Default                                               |
+| ------------ | ------------- | ----------------------------------------------------- |
+| `prefix`     | `string`      | the bucket-level `prefix` — the namespace to list     |
+| `startsWith` | `string`      | — only keys starting with this, inside the namespace  |
+| `limit`      | `number`      | — the whole namespace; otherwise stop after this many |
+| `signal`     | `AbortSignal` | —                                                     |
+
+Each entry is `{ bucket, key, path, size?, etag?, lastModified? }`. The `key` is relative to the
+namespace listed, so it goes straight back into `get()`, `delete()` or `getSnapshot()` with the same
+`prefix`. `ListObjectsV2` reports no content type or metadata: call `head()` for those. Zero-byte
+"folder" placeholders are skipped.
+
+Throws `LIST_FAILED` when S3 rejects the request, or when `limit` is not a positive integer.
+
+---
+
+## `copy(from, to, options?)` and `move(from, to, options?)`
+
+Copies an object inside the bucket with `CopyObject`. The copy happens on S3's side: no byte
+transits through your runtime, so its request limit does not apply. Content type and metadata
+travel with the object, and whatever is stored at `to` is replaced.
+
+```ts
+// Promote a transfer into a durable backup
+await store.copy(code, `user-${userId}`, { prefix: 'transfers', toPrefix: 'backups' })
+```
+
+| Option     | Type          | Default                                       |
+| ---------- | ------------- | --------------------------------------------- |
+| `prefix`   | `string`      | the bucket-level `prefix`, for both keys      |
+| `toPrefix` | `string`      | `prefix` — the destination's, when it differs |
+| `signal`   | `AbortSignal` | —                                             |
+
+Returns `{ bucket, key, path, etag?, lastModified? }` for the destination, or `null` when the source
+does not exist. Throws `COPY_FAILED` when S3 rejects it, or when `from` and `to` resolve to the same
+object. A single `CopyObject` handles objects up to 5 GB.
+
+`move()` is `copy()` followed by `delete()` of the source. S3 has no rename, so it is two requests
+and not atomic: if the delete fails, it throws `DELETE_FAILED` and both objects exist.
+
+---
+
 ## `getUrl(key, options?)`
 
 Returns the public URL when `publicUrl` is configured, a presigned `GET` otherwise. Signing is
@@ -226,6 +323,7 @@ await store.getUrl('invoices/2026-01.pdf', { expiresIn: 300, download: 'Invoice 
 
 | Option      | Type                             | Default                                                                          |
 | ----------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `prefix`    | `string`                         | the bucket-level `prefix`                                                        |
 | `expiresIn` | `number` (seconds, max `604800`) | `3600`                                                                           |
 | `signed`    | `boolean`                        | `true` unless `publicUrl` is set                                                 |
 | `download`  | `boolean \| string`              | — sets `Content-Disposition: attachment`, with a filename when you pass a string |
@@ -235,12 +333,15 @@ public URL, set `contentDisposition` at upload time instead.
 
 ---
 
-## `delete(key)`
+## `delete(key, options?)`
 
 ```ts
 await store.delete('uploads/a.png')
 await store.delete(['uploads/a.png', 'uploads/b.png']) // batched, 1000 keys per request
+await store.delete('a.png', { prefix: 'avatars' })
 ```
+
+Takes `{ prefix, signal }`.
 
 Deleting a key that does not exist is a no-op, not an error — the same semantics as S3 itself.
 Passing an array batches into `DeleteObjects` calls of 1000 keys; if S3 reports per-key failures,
@@ -253,9 +354,9 @@ Passing an array batches into `DeleteObjects` calls of 1000 keys; if S3 reports 
 The underlying `S3Client`, created on first access. Use it for anything s3nd does not cover:
 
 ```ts
-import { ListObjectsV2Command } from '@aws-sdk/client-s3'
+import { GetObjectTaggingCommand } from '@aws-sdk/client-s3'
 
-const response = await store.client.send(new ListObjectsV2Command({ Bucket: store.bucket, Prefix: 'uploads/' }))
+const response = await store.client.send(new GetObjectTaggingCommand({ Bucket: store.bucket, Key: 'uploads/a.png' }))
 ```
 
 ## `store.destroy()`

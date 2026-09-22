@@ -86,21 +86,60 @@ After that, `getSnapshot()` returns `null` — the same answer as a code that wa
 is exactly what you want to tell the user. An expired snapshot is **never** handed over, even
 while the object is still in the bucket.
 
-s3nd does not delete it. Removing the object is a job for an S3 lifecycle rule on the
-prefix, which runs server-side, costs nothing, and keeps working when your application is not:
+s3nd does not delete it on a timer. Two things do, and a transfer wants both.
 
-```jsonc
+**Delete it when the restore succeeds.** That is the normal end of a transfer, and the code should
+stop working the moment it is used:
+
+```ts
+const snapshot = await store.getSnapshot(code)
+// … the new device imports snapshot.data …
+await store.deleteSnapshot(code)
+```
+
+**A lifecycle rule for the ones nobody came back for.** A transfer that is started and never
+finished leaves its snapshot behind. Removing it is a job for a lifecycle rule on the prefix, which
+runs on the storage side, costs nothing, and keeps working when your application is not.
+
+On AWS S3, save this as `lifecycle.json`:
+
+```json
 {
   "Rules": [
     {
       "ID": "expire-transfer-snapshots",
       "Status": "Enabled",
       "Filter": { "Prefix": "snapshots/" },
-      "Expiration": { "Days": 1 },
-    },
-  ],
+      "Expiration": { "Days": 1 }
+    }
+  ]
 }
 ```
+
+```sh
+aws s3api put-bucket-lifecycle-configuration --bucket my-bucket --lifecycle-configuration file://lifecycle.json
+```
+
+On Cloudflare R2, the same rule through Wrangler (or the bucket's **Settings → Object lifecycle
+rules** in the dashboard):
+
+```sh
+npx wrangler r2 bucket lifecycle add my-bucket expire-transfer-snapshots snapshots/ --expire-days 1
+```
+
+R2 also accepts the S3 JSON above through `put-bucket-lifecycle-configuration` with
+`--endpoint-url`. MinIO takes it through `mc ilm rule add --expire-days 1 --prefix snapshots/`.
+
+Scope the rule to the snapshot prefix, never the whole bucket: a per-account backup under
+`backups/` must not match it.
+
+<Callout type="warn">
+  A lifecycle rule counts in **days**; `expiresIn` counts in seconds. A one-hour code stops working after an hour, but
+  its object stays in the bucket until the rule runs: at least a day, and in practice up to two, since S3 rounds to the
+  next midnight UTC and removes expired objects asynchronously. That is fine, because `getSnapshot()` and
+  `hasSnapshot()` already treat it as gone. It is why `deleteSnapshot()` after a successful restore is worth the extra
+  line.
+</Callout>
 
 There is no default expiry. A transfer code should have a short one; a per-account backup should
 have none. Since s3nd cannot tell which you are doing, it does not guess — passing
