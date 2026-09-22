@@ -70,7 +70,13 @@ const REFERENCE = [
 ]
 
 export default async function HomePage() {
-  const highlighted = await codeToHtml(SAMPLE, { lang: 'ts', theme: 'vesper' })
+  // The stylesheet colours tokens from `--shiki-dark` (the form fumadocs emits
+  // for the pages), so the sample asks for the same dual-theme output.
+  const highlighted = await codeToHtml(SAMPLE, {
+    lang: 'ts',
+    themes: { light: 'vesper', dark: 'vesper' },
+    defaultColor: false,
+  })
 
   return (
     <main className="relative">
