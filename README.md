@@ -266,31 +266,42 @@ commit messages that land on `main`, which follow
 [Conventional Commits](https://www.conventionalcommits.org/). Pull requests are squash-merged, so
 the pull request title is the message that counts — CI checks its shape on every pull request.
 
-| A commit on `main`                         | Takes 0.1.0 to                         |
+| A commit on `main`                         | Takes a package from 0.1.0 to          |
 | ------------------------------------------ | -------------------------------------- |
 | `fix: …`                                   | 0.1.1                                  |
 | `feat: …`                                  | 0.2.0                                  |
 | `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0 — the major bump waits for 1.0.0 |
 | `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                    |
 
-Only commits touching `packages/s3nd` release it; the docs site, the examples and the
-workflows do not.
+The four packages version independently: a commit releases whichever of `packages/*` it touched,
+and a package whose dependency moved is carried along. The docs site, the website, the examples,
+the drop template and the workflows release nothing.
 
 While there is something to release, the [release workflow](./.github/workflows/release.yml) keeps
-a `chore: release x.y.z` pull request open, carrying the version bump and the entry it would add to
-[the changelog](./packages/s3nd/CHANGELOG.md). Merging it is the release: the commit is
-tagged `vx.y.z`, the GitHub release is created from that changelog entry, and the package is
-published to npm with provenance.
+a `chore: release x.y.z` pull request open, carrying the version bumps and the entries they would
+add to the changelogs — [the one for `s3nd`](./packages/s3nd/CHANGELOG.md), and one per package
+beside it. Merging it is the release: each released commit is tagged per package, as
+`s3nd-v0.2.0` or `protocol-v0.2.0`, the GitHub release is created from that changelog entry, and
+the packages are published to npm with provenance.
+
+That publish job builds `packages/*` and nothing else — the Next.js apps in this workspace are
+never part of a tarball, so they are not installed and not built on the way to the registry. CI is
+where they get built.
 
 [`release-please-config.json`](./release-please-config.json) holds the settings;
 [`.release-please-manifest.json`](./.release-please-manifest.json) holds the last released version
-and is rewritten by release-please, so leave it alone.
+of each package and is rewritten by release-please, so leave it alone.
 
 Two repository secrets:
 
-- `NPM_TOKEN`, with publish rights. If you would rather use npm trusted publishing, configure this
-  repository as a trusted publisher on npm and drop the `NODE_AUTH_TOKEN` line from the workflow —
-  the `id-token: write` permission it already grants is what OIDC needs.
+- `NPM_TOKEN`, with publish rights. On an account with two-factor authentication — most of them —
+  it has to be a granular access token with **2FA bypass** enabled; anything else gets a
+  `403 … bypass 2fa enabled is required to publish` back from the registry, and the release stops
+  there. If you would rather not hold a token at all, configure this repository as a trusted
+  publisher on npm and drop the `NODE_AUTH_TOKEN` line from the workflow: the `id-token: write`
+  permission it already grants is what OIDC needs, and there is no 2FA question to answer. Either
+  way it wants an npm newer than the one Node ships — trusted publishing landed in 11.5.1 and Node
+  22 carries 10.x, which is why the workflow installs `npm@latest` before publishing.
 - `RELEASE_PLEASE_TOKEN`, optional: a personal access token with `contents` and `pull-requests`
   write access. GitHub skips workflows on pull requests opened with the default `GITHUB_TOKEN`, so
   without it the release pull request shows no checks.
