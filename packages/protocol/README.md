@@ -60,7 +60,7 @@ if (isTransferError(error) && error.code === 'TOO_LARGE') {
 `NOT_FOUND` deliberately covers an expired code as well as one that never existed: telling them
 apart would let someone probe which codes have been used.
 
-The [protocol documentation](https://github.com/AbderrahmaneMouzoune/bucketcode/blob/main/apps/docs/content/docs/protocol.mdx)
+The [protocol documentation](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
 describes each route and every error code in full.
 
 ## Sync codes
