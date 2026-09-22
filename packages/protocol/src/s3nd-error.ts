@@ -11,6 +11,8 @@ export type S3ndErrorCode =
   | 'UPLOAD_FAILED'
   | 'GET_FAILED'
   | 'DELETE_FAILED'
+  | 'LIST_FAILED'
+  | 'COPY_FAILED'
   | 'URL_FAILED'
   | 'PRECONDITION_FAILED'
   | 'INVALID_SNAPSHOT'

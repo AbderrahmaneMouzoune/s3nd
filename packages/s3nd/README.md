@@ -187,8 +187,27 @@ import { normalizeSyncCode } from '@s3nd/protocol'
 doing the work. If the data is sensitive, encrypt it in the browser before it ever reaches your
 server: `putSnapshot()` stores whatever you hand it, ciphertext included.
 
-Burning a code after a successful restore is a good habit, and there is no separate call for it:
-`store.delete(code)` is the whole of it.
+Burning a code after a successful restore is a good habit: `store.deleteSnapshot(code)` is the
+whole of it. To check a code without downloading the snapshot, `store.hasSnapshot(code)` answers
+from a `HeadObject` and treats an expired snapshot as gone.
+
+`expiresIn` is enforced on read; the object itself stays until a lifecycle rule removes it, and
+lifecycle rules count in days. Scope one to the snapshot prefix:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-transfer-snapshots",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "snapshots/" },
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}
+```
+
+On R2: `npx wrangler r2 bucket lifecycle add my-bucket expire-transfer-snapshots snapshots/ --expire-days 1`.
 
 ## Two devices, one snapshot
 
@@ -222,12 +241,22 @@ is not a snapshot, such as an attachment, an exported PDF or an avatar:
 await store.upload(file) // → { key, path, url?, size?, etag?, contentType }
 await store.put(id, file) // one file per identifier: create or replace
 await store.get(id) // → the file back, or null
+await store.head(id) // → size, type, ETag, metadata, without the body; or null
+await store.exists(id) // → boolean
 await store.getUrl(id) // → public or presigned URL
+await store.copy(from, to) // → server-side, no bytes through your runtime
+await store.move(from, to) // → copy, then delete the source
 await store.delete(id) // → void
+
+for await (const object of store.list({ prefix: 'snapshots' })) {
+  // paginated ListObjectsV2, one page at a time
+}
 ```
 
-Keys round-trip: what `upload()` returns is what you hand back to `get()`, `getUrl()` and
-`delete()`. The configured `prefix` is an internal namespace.
+Keys round-trip: what `upload()` and `list()` return is what you hand back to `get()`, `getUrl()`
+and `delete()`. The configured `prefix` is an internal namespace, and every method takes a
+per-call `prefix` that overrides it. `list()` needs `s3:ListBucket` on the bucket, which nothing
+else does.
 
 Anything the package does not wrap is one command away through `store.client`, which is the plain
 `S3Client`.
@@ -248,6 +277,7 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `MISSING_CONTENT_LENGTH`                                        | A stream uploaded without `contentLength`.                                                              |
 | `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`.                                                                    |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
+| `LIST_FAILED` / `COPY_FAILED`                                   | S3 rejected a `list()` or `copy()`, or its arguments were invalid.                                      |
 
 Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
 raised before anything reaches the network.

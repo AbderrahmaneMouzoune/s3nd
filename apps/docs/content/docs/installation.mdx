@@ -98,4 +98,12 @@ The minimum policy for a bucket used by s3nd:
 already hold. The URL it produces grants exactly the `s3:GetObject` your own credentials have.
 
 Snapshots need nothing beyond these three. `putSnapshot()` is a `PutObject`, `getSnapshot()` is a
-`GetObject`, and the conditional writes ride along as headers on the same call.
+`GetObject`, and the conditional writes ride along as headers on the same call. `head()`,
+`exists()` and `hasSnapshot()` are a `HeadObject`, which `s3:GetObject` covers; `copy()` needs
+`s3:GetObject` on the source and `s3:PutObject` on the destination.
+
+`list()` is the exception: it needs `s3:ListBucket`, granted on the bucket itself
+(`arn:aws:s3:::my-bucket`, no `/*`). Give it only to the credentials that actually enumerate, such
+as a cleanup job, not to a transfer server. On AWS, the same permission also decides what a read of
+a missing key returns: with it, S3 answers 404 and `get()`/`head()` return `null`; without it, S3
+answers 403, which surfaces as `GET_FAILED`.

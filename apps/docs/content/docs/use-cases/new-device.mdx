@@ -101,7 +101,7 @@ The transfer is over once the new device has the data. Nothing should still answ
 export async function DELETE(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
 
-  await store.delete(store.codes.normalize(code))
+  await store.deleteSnapshot(store.codes.normalize(code))
 
   return new Response(null, { status: 204 })
 }
