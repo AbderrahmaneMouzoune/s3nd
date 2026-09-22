@@ -7,7 +7,7 @@
  * what lets `@s3nd/react`, the CLI and a browser bundle share this code
  * without any of them pulling the AWS SDK behind it.
  *
- * A sync code belongs here rather than in `s3nd` because it *is* part of
+ * A sync code belongs here rather than in `@s3nd/core` because it *is* part of
  * the contract: its alphabet and the rules for reading back what someone typed
  * are what the two devices have to agree on.
  */

@@ -20,7 +20,7 @@ The handler takes a `Request` and returns a `Response`, so it mounts anywhere. I
 one file is the whole server:
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 const bucket = createBucket({
   bucket: process.env.S3ND_BUCKET!,

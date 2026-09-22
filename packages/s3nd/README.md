@@ -1,9 +1,9 @@
-# s3nd
+# @s3nd/core
 
 Move a local-first app's data from one device to another, through your own bucket.
 
 ```ts
-import { createBucket } from 's3nd'
+import { createBucket } from '@s3nd/core'
 
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
@@ -33,7 +33,7 @@ lives in the same repository.
 ## Install
 
 ```sh
-npm install s3nd
+npm install @s3nd/core
 ```
 
 Node 20 or later — that is what AWS SDK v3 requires. `@aws-sdk/client-s3` and
@@ -76,7 +76,7 @@ Next route handler, a Hono route, `Bun.serve` or a worker without an adapter for
 
 ```ts
 // app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 export const { GET, POST, DELETE } = createTransferHandler({
   bucket: createBucket({ bucket: 'my-bucket' }),
@@ -140,7 +140,7 @@ The default is eight characters of
 survives being read aloud, written on paper, or typed on a phone. Both halves are configurable:
 
 ```ts
-import { createBucket, syncCodeAlphabets } from 's3nd'
+import { createBucket, syncCodeAlphabets } from '@s3nd/core'
 
 const store = createBucket({
   bucket: 'my-bucket',

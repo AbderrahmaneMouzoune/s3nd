@@ -14,7 +14,7 @@ Pass the ETag you last read as `ifMatch`. The write only lands if the stored sna
 one you based it on:
 
 ```ts
-import { isS3ndError } from 's3nd'
+import { isS3ndError } from '@s3nd/core'
 
 const current = await store.getSnapshot<AppState>(`user-${userId}`)
 

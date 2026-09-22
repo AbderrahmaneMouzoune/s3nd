@@ -1,5 +1,5 @@
 {
-  "name": "s3nd",
+  "name": "@s3nd/core",
   "version": "0.1.0",
   "description": "Move a local-first app's data between devices through your own S3 bucket: snapshots, sync codes and a transfer handler. Works with AWS S3, Cloudflare R2, MinIO and any S3-compatible storage.",
   "keywords": [

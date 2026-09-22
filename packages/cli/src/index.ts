@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { basename, resolve as resolvePath } from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { createBucket, createTransferHandler, isS3ndError, type Bucket } from 's3nd'
+import { createBucket, createTransferHandler, isS3ndError, type Bucket } from '@s3nd/core'
 import { createTransferClient, isTransferError, type TransferClient } from '@s3nd/protocol'
 
 import { resolveConfiguration, type Configuration } from './config.js'

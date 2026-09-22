@@ -15,7 +15,7 @@ Or without installing anything:
 npx @s3nd/cli doctor
 ```
 
-It is built on [`s3nd`](https://www.npmjs.com/package/s3nd) as a primitive, and has no
+It is built on [`@s3nd/core`](https://www.npmjs.com/package/@s3nd/core) as a primitive, and has no
 dependencies of its own beyond it: `node:util`'s `parseArgs` is the whole argument parser.
 
 ## `init`

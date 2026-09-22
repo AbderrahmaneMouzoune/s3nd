@@ -142,13 +142,13 @@ through your own server with `--remote` and a token. The code goes to stdout and
 stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `tar cz ./project | s3nd put - --name project.tar.gz`
 moves a directory. [Every command →](https://doc.s3nd.sh/docs/cli)
 
-**Inside your app** — `s3nd` on the server, `@s3nd/react` in the browser. One route file turns any
+**Inside your app** — `@s3nd/core` on the server, `@s3nd/react` in the browser. One route file turns any
 bucket into a drop box; the hooks send a file or a snapshot and read a code back, with typos repaired
 as the user types. [The library →](https://s3nd.sh/library) · [The hooks →](https://s3nd.sh/react)
 
 ```ts
 // app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 export const { GET, POST, DELETE } = createTransferHandler({
   bucket: createBucket({ bucket: 'drop' }),
@@ -169,7 +169,7 @@ is a self-describing, gzipped envelope around that state, stored under a code th
 next device.
 
 ```ts
-import { createBucket } from 's3nd'
+import { createBucket } from '@s3nd/core'
 
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
@@ -196,30 +196,30 @@ A bun workspace monorepo, driven by Turborepo.
 It was called `bucketcode` until the packages were renamed to `s3nd`, and moved here with its
 full history; [the old repository](https://github.com/AbderrahmaneMouzoune/bucketcode) is
 archived. On npm that leaves `bucketcode@0.1.0` as the last release under the old name — it is
-deprecated in favour of `s3nd`, and a snapshot written by it still reads back, which
+deprecated in favour of the `@s3nd/*` packages, and a snapshot written by it still reads back, which
 [`packages/s3nd/src/snapshot.ts`](./packages/s3nd/src/snapshot.ts) covers.
 
-| Path                                                   | What it is                                                                                                               |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser.              |
-| [`packages/s3nd`](./packages/s3nd)                     | `s3nd` — the S3 primitive: snapshots, files, the handler.                                                                |
-| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                             |
-| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                                 |
-| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                      |
-| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                        |
-| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                             |
-| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                                   |
-| [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket, live at drop.s3nd.sh: the one-click Vercel template, on `s3nd` and `@s3nd/react`. |
+| Path                                                   | What it is                                                                                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser.                    |
+| [`packages/s3nd`](./packages/s3nd)                     | `@s3nd/core` — the S3 primitive: snapshots, files, the handler.                                                                |
+| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                                   |
+| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                                       |
+| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                            |
+| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                              |
+| [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                                   |
+| [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                                         |
+| [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket, live at drop.s3nd.sh: the one-click Vercel template, on `@s3nd/core` and `@s3nd/react`. |
 
 The split follows one constraint: a browser must never end up with a storage client in its
 dependency tree. `@s3nd/protocol` is what both halves share, which is why it exists at all
-rather than living inside `s3nd`.
+rather than living inside `@s3nd/core`.
 
 ```
 @s3nd/protocol   nanoid                      the contract, shared by everything
-s3nd             + aws-sdk, protocol         the S3 primitive
+@s3nd/core       + aws-sdk, protocol         the S3 primitive
 @s3nd/react      + protocol, react (peer)    hooks — no path to S3
-@s3nd/cli        + s3nd                      the binary
+@s3nd/cli        + core                      the binary
 ```
 
 ## Working on it
@@ -246,7 +246,7 @@ local source, and the same `package.json` installs from npm once it is cloned on
 what the Vercel deploy button does.
 
 bun installs and orchestrates; the toolchain itself still runs on Node. That is deliberate rather
-than half-finished: `s3nd` is published for Node, so the test suite runs on Node — CI runs it
+than half-finished: the packages are published for Node, so the test suite runs on Node — CI runs it
 on 20, 22 and 24 — and `.bin/vitest` carries a `#!/usr/bin/env node` shebang, so it picks up
 whichever version is on `PATH`. Switching the runner to `bun test` would trade that coverage for a
 second or two of wall clock.
@@ -279,7 +279,7 @@ the drop template and the workflows release nothing.
 
 While there is something to release, the [release workflow](./.github/workflows/release.yml) keeps
 a `chore: release x.y.z` pull request open, carrying the version bumps and the entries they would
-add to the changelogs — [the one for `s3nd`](./packages/s3nd/CHANGELOG.md), and one per package
+add to the changelogs — [the one for `@s3nd/core`](./packages/s3nd/CHANGELOG.md), and one per package
 beside it. Merging it is the release: each released commit is tagged per package, as
 `s3nd-v0.2.0` or `protocol-v0.2.0`, the GitHub release is created from that changelog entry, and
 the packages are published to npm with provenance.
@@ -295,9 +295,17 @@ and is rewritten by release-please, so leave it alone.
 
 Two repository secrets:
 
-- `NPM_TOKEN`, with publish rights. If you would rather use npm trusted publishing, configure this
-  repository as a trusted publisher on npm and drop the `NODE_AUTH_TOKEN` line from the workflow —
-  the `id-token: write` permission it already grants is what OIDC needs.
+- `NPM_TOKEN`, a granular access token with write access to **all packages** and **Bypass 2FA**
+  enabled. Both halves matter. Without the bypass, publishing fails with a 403 asking for
+  "two-factor authentication or granular access token with bypass 2fa enabled", because the
+  account-level 2FA requirement applies to the token too. And the scope has to cover every package
+  rather than a named list, because a package that has never been published cannot appear in one —
+  which is every package here, the first time.
+  Once the packages exist, [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) is
+  the better answer — configure this repository as a trusted publisher and drop the
+  `NODE_AUTH_TOKEN` line from the workflow, since the `id-token: write` permission it already
+  grants is what OIDC needs. It cannot come first: a trusted publisher is configured per package,
+  and a package that has never been published has no settings to configure.
 - `RELEASE_PLEASE_TOKEN`, optional: a personal access token with `contents` and `pull-requests`
   write access. GitHub skips workflows on pull requests opened with the default `GITHUB_TOKEN`, so
   without it the release pull request shows no checks.

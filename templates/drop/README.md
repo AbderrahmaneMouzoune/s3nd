@@ -60,7 +60,7 @@ the code, so the card gives nothing away that the URL did not.
 
 ## Configuration
 
-The bucket is configured through the variables `s3nd` already reads. Everything else is optional.
+The bucket is configured through the variables `@s3nd/core` already reads. Everything else is optional.
 
 | Variable                | Required | Default  | What it does                                                                             |
 | ----------------------- | :------: | -------- | ---------------------------------------------------------------------------------------- |

@@ -10,7 +10,7 @@ no account to sign into. They read a code off one screen and type it into the ot
 
 ```ts
 // lib/store.ts
-import { createBucket } from 's3nd'
+import { createBucket } from '@s3nd/core'
 
 export const store = createBucket({
   bucket: process.env.S3_BUCKET,
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
 ```ts
 // app/api/sync/[code]/route.ts
-import { isS3ndError } from 's3nd'
+import { isS3ndError } from '@s3nd/core'
 
 import { store, SCHEMA_VERSION } from '@/lib/store'
 

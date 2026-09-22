@@ -69,7 +69,7 @@
     },
     "packages/s3nd": {
       "release-type": "node",
-      "package-name": "s3nd",
+      "package-name": "@s3nd/core",
       "component": "s3nd"
     },
     "packages/react": {

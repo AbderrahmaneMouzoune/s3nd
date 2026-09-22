@@ -7,7 +7,7 @@ Everything s3nd throws is a `S3ndError` carrying a `code` you can branch on, and
 underlying error in `cause`:
 
 ```ts
-import { isS3ndError } from 's3nd'
+import { isS3ndError } from '@s3nd/core'
 
 try {
   await store.putSnapshot(code, state)
@@ -79,7 +79,7 @@ nothing, and it costs no request.
 ## Mapping to HTTP
 
 ```ts
-import { isS3ndError } from 's3nd'
+import { isS3ndError } from '@s3nd/core'
 
 const STATUS: Record<string, number> = {
   FILE_TOO_LARGE: 413,

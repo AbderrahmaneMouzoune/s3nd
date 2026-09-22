@@ -14,7 +14,7 @@ those it is talking to — which is exactly why `s3nd put` works against your ow
 ## Serving it
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 export const { GET, POST, DELETE } = createTransferHandler({
   bucket: createBucket({ bucket: 'my-bucket' }),

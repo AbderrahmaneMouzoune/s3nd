@@ -1,4 +1,4 @@
-import { createBucket, isS3ndError } from 's3nd'
+import { createBucket, isS3ndError } from '@s3nd/core'
 
 /**
  * Exercises a transfer end to end against a real bucket: write a snapshot under

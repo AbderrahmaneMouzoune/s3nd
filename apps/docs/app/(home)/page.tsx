@@ -4,7 +4,7 @@ import { codeToHtml } from 'shiki'
 import { Logo } from '@/components/logo'
 import { repositoryUrl, websiteUrl } from '@/lib/shared'
 
-const SAMPLE = `import { createBucket } from 's3nd'
+const SAMPLE = `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
