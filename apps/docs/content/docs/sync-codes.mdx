@@ -14,7 +14,8 @@ store.codes.normalize('k7-qp2m4x') // "K7QP2M4X"
 ```
 
 `store.codes` pairs generation with the normalization that reads codes back, so the two can never
-disagree about the alphabet. Codes are generated with [nanoid](https://github.com/ai/nanoid).
+disagree about the alphabet. Codes are drawn from `crypto.getRandomValues`,
+with no bias toward any character.
 
 ## Choosing a shape
 
