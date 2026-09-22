@@ -54,7 +54,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -62,23 +62,38 @@ jobs:
 
       # npm, not bun, does the publishing below: provenance is minted from the
       # OIDC token npm exchanges with the registry.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           registry-url: 'https://registry.npmjs.org'
 
-      - run: bun install --frozen-lockfile
+      # Node 22 ships npm 10, which publishes with a token but cannot publish
+      # through OIDC at all: npm trusted publishing needs 11.5.1 or newer.
+      - name: Use an npm new enough to publish through OIDC
+        run: npm install --global npm@latest
 
-      - run: bun run lint
+      # Only the four published packages, here and in every step below. The
+      # docs site, the website, the examples and the drop template are part of
+      # this workspace but none of them ends up in a tarball, and building them
+      # was about fifty seconds of Next.js on every release. `--filter .` keeps
+      # the root devDependencies, which is where turbo and eslint live.
+      - run: bun install --frozen-lockfile --filter './packages/*' --filter .
 
-      - run: bun run type-check
+      - run: bunx turbo lint --filter='./packages/*'
 
-      - run: bunx turbo test
+      - run: bunx turbo type-check --filter='./packages/*'
 
-      - run: bun run build
+      - run: bunx turbo test --filter='./packages/*'
 
-      # Drop NODE_AUTH_TOKEN and configure this repository as a trusted
-      # publisher on npm to publish through OIDC instead of a token.
+      # Deliberately uncached, unlike CI: what goes to the registry is built
+      # here, from this checkout, and never restored from an earlier run.
+      - run: bunx turbo build --filter='./packages/*'
+
+      # NPM_TOKEN has to be a granular access token with 2FA bypass enabled;
+      # npm turns anything else down with a 403 on an account that has two
+      # factor authentication. Or drop NODE_AUTH_TOKEN entirely, configure
+      # this repository as a trusted publisher on npm, and publish through
+      # OIDC — no token, and so no 2FA to answer for.
       - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -100,7 +115,19 @@ jobs:
 
           for path in $ORDER; do
             if printf '%s\n' "$selected" | grep -qx "$path"; then
-              echo "::group::Publishing $path"
+              name=$(jq -r .name "$path/package.json")
+              version=$(jq -r .version "$path/package.json")
+
+              # The manual "Publish" input republishes whatever is on main,
+              # which usually includes versions already on the registry. npm
+              # answers those with a 403, and `set -e` would take the rest of
+              # the loop down with it — including packages that do need going.
+              if npm view "$name@$version" version >/dev/null 2>&1; then
+                echo "$name@$version is already on npm, skipping"
+                continue
+              fi
+
+              echo "::group::Publishing $name@$version"
               (cd "$path" && npm publish --provenance --access public)
               echo '::endgroup::'
             fi

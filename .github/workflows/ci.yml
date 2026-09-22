@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -55,9 +55,20 @@ jobs:
 
       # bun installs and orchestrates, but the toolchain still runs on Node:
       # tsup, eslint and next all ship Node shebangs.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+
+      # Turborepo's own cache, carried between runs. Without it every push
+      # rebuilds all four Next.js apps from scratch, even when the change was
+      # a README. Turbo still hashes every input, so a restored entry is only
+      # reused when the inputs are identical.
+      - name: Restore the turbo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-quality-${{ github.sha }}
+          restore-keys: turbo-quality-
 
       - run: bun install --frozen-lockfile
 
@@ -80,7 +91,7 @@ jobs:
         node-version: ['20', '22', '24']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -90,9 +101,16 @@ jobs:
       # Node, so the suites have to run on Node. `.bin/vitest` carries a
       # `#!/usr/bin/env node` shebang, so it picks up whichever version this
       # step installed — bun only resolves the dependency tree.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
+
+      - name: Restore the turbo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-test-node${{ matrix.node-version }}-${{ github.sha }}
+          restore-keys: turbo-test-node${{ matrix.node-version }}-
 
       - run: bun install --frozen-lockfile
 

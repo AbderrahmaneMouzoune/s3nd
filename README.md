@@ -266,21 +266,28 @@ commit messages that land on `main`, which follow
 [Conventional Commits](https://www.conventionalcommits.org/). Pull requests are squash-merged, so
 the pull request title is the message that counts — CI checks its shape on every pull request.
 
-| A commit on `main`                         | Takes 0.1.0 to                         |
+| A commit on `main`                         | Takes a package from 0.1.0 to          |
 | ------------------------------------------ | -------------------------------------- |
 | `fix: …`                                   | 0.1.1                                  |
 | `feat: …`                                  | 0.2.0                                  |
 | `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0 — the major bump waits for 1.0.0 |
 | `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                    |
 
-Only commits touching `packages/s3nd` release it; the docs site, the examples and the
-workflows do not.
+The four packages version independently: a commit releases whichever of `packages/*` it touched,
+and a package whose dependency moved is carried along. The docs site, the website, the examples,
+the drop template and the workflows release nothing.
 
 While there is something to release, the [release workflow](./.github/workflows/release.yml) keeps
-a `chore: release x.y.z` pull request open, carrying the version bump and the entry it would add to
-[the changelog](./packages/s3nd/CHANGELOG.md). Merging it is the release: the commit is
-tagged `vx.y.z`, the GitHub release is created from that changelog entry, and the package is
-published to npm with provenance.
+a `chore: release x.y.z` pull request open, carrying the version bumps and the entries they would
+add to the changelogs — [the one for `s3nd`](./packages/s3nd/CHANGELOG.md), and one per package
+beside it. Merging it is the release: each released commit is tagged per package, as
+`s3nd-v0.2.0` or `protocol-v0.2.0`, the GitHub release is created from that changelog entry, and
+the packages are published to npm with provenance.
+
+That publish job builds `packages/*` and nothing else — the Next.js apps in this workspace are
+never part of a tarball, so they are not installed and not built on the way to the registry. CI is
+where they get built. It also installs `npm@latest` before publishing, because npm trusted
+publishing landed in 11.5.1 and the npm that comes with Node 22 is 10.x.
 
 [`release-please-config.json`](./release-please-config.json) holds the settings;
 [`.release-please-manifest.json`](./.release-please-manifest.json) holds the last released version
