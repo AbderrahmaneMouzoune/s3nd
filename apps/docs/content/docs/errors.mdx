@@ -34,8 +34,10 @@ try {
 | `MISSING_CONTENT_LENGTH` | A stream was uploaded without `contentLength`.                                                                             |
 | `FILE_TOO_LARGE`         | The body is above the configured `maxSize`.                                                                                |
 | `UPLOAD_FAILED`          | `PutObject` was rejected. Original error in `cause`.                                                                       |
-| `GET_FAILED`             | `GetObject` failed for a reason other than a missing key, or answered without a body.                                      |
+| `GET_FAILED`             | `GetObject` or `HeadObject` failed for a reason other than a missing key, or answered without a body.                      |
 | `DELETE_FAILED`          | `DeleteObject`/`DeleteObjects` was rejected, or S3 reported per-key errors.                                                |
+| `LIST_FAILED`            | `ListObjectsV2` was rejected (often a missing `s3:ListBucket`), or `limit` is not a positive integer.                      |
+| `COPY_FAILED`            | `CopyObject` was rejected, or the source and destination are the same object.                                              |
 | `URL_FAILED`             | Invalid `expiresIn`, signing failure, or a public URL requested with no `publicUrl` configured.                            |
 
 ## Failures that never reach the network

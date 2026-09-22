@@ -52,7 +52,7 @@ result.key // "K7QP2M4X" — the code the user carries
 result.path // "snapshots/K7QP2M4X" — the real object key, for the AWS console
 
 await store.getSnapshot('K7QP2M4X') // reads snapshots/K7QP2M4X
-await store.delete('K7QP2M4X') // deletes snapshots/K7QP2M4X
+await store.deleteSnapshot('K7QP2M4X') // deletes snapshots/K7QP2M4X
 ```
 
 Every method takes a per-call `prefix` that overrides the bucket-level one, which is how you keep

@@ -123,7 +123,8 @@ export interface GetOptions {
   signal?: AbortSignal
 }
 
-export interface StoredFile {
+/** Everything S3 knows about an object, without its body — what `head()` returns. */
+export interface StoredFileInfo {
   bucket: string
   /** The key you asked for, without the configured `prefix`. */
   key: string
@@ -137,6 +138,12 @@ export interface StoredFile {
   lastModified?: Date
   /** Raw S3 user metadata. Keys come back lowercased. */
   metadata: Record<string, string>
+}
+
+/** `get()` options and `head()` options are the same thing. */
+export type HeadOptions = GetOptions
+
+export interface StoredFile extends StoredFileInfo {
   /**
    * The object body. It can only be read once, so use `body`, `bytes()` or
    * `text()` — exactly one of them.
@@ -147,6 +154,8 @@ export interface StoredFile {
 }
 
 export interface GetUrlOptions {
+  /** Prefix for this URL only. Overrides the bucket-level `prefix`. */
+  prefix?: string
   /** Lifetime of a signed URL, in seconds. Default `3600`, max `604800` (7 days). */
   expiresIn?: number
   /**
@@ -159,6 +168,56 @@ export interface GetUrlOptions {
    * filename. Signed URLs only.
    */
   download?: boolean | string
+}
+
+export interface DeleteOptions {
+  /** Prefix for this delete only. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  signal?: AbortSignal
+}
+
+export interface ListOptions {
+  /**
+   * Namespace to list. Overrides the bucket-level `prefix`, exactly as it does
+   * on every other method, so the keys that come back are the ones you would
+   * pass to `get()` with the same `prefix`.
+   */
+  prefix?: string
+  /** Only keys that start with this, inside the namespace, e.g. `"user-42/"`. */
+  startsWith?: string
+  /** Stop after this many objects. Omit to walk the whole namespace. */
+  limit?: number
+  signal?: AbortSignal
+}
+
+/** One entry of `list()`. `ListObjectsV2` reports no content type or metadata. */
+export interface ListedObject {
+  bucket: string
+  /** Relative to the namespace listed: hand it back to `get()` as is. */
+  key: string
+  /** Full object key in the bucket, `prefix` included. */
+  path: string
+  size?: number
+  etag?: string
+  lastModified?: Date
+}
+
+export interface CopyOptions {
+  /** Prefix for both keys. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  /** Prefix for the destination only, e.g. to promote a transfer into `backups/`. */
+  toPrefix?: string
+  signal?: AbortSignal
+}
+
+export interface CopyResult {
+  bucket: string
+  /** The destination key, without its prefix. */
+  key: string
+  /** Full destination key in the bucket, prefix included. */
+  path: string
+  etag?: string
+  lastModified?: Date
 }
 
 /**
@@ -221,6 +280,10 @@ export interface GetSnapshotOptions {
   prefix?: string
   signal?: AbortSignal
 }
+
+export type DeleteSnapshotOptions = DeleteOptions
+
+export type HasSnapshotOptions = HeadOptions
 
 export interface Snapshot<T = unknown> {
   bucket: string

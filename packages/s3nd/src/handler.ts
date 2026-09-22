@@ -342,7 +342,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (request.method === 'GET') return read(code)
 
     if (request.method === 'DELETE') {
-      await bucket.delete(code)
+      await bucket.deleteSnapshot(code)
       return new Response(null, { status: 204 })
     }
 

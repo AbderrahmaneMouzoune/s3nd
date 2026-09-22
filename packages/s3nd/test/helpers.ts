@@ -131,6 +131,57 @@ export function createMemoryClient() {
       }
     }
 
+    if (name === 'HeadObjectCommand') {
+      if (!stored) {
+        throw Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+      }
+
+      return {
+        ContentType: stored.contentType,
+        ContentLength: stored.body.byteLength,
+        LastModified: stored.lastModified,
+        Metadata: stored.metadata ?? {},
+        ETag: `"${stored.etag}"`,
+      }
+    }
+
+    if (name === 'ListObjectsV2Command') {
+      const keys = [...objects.keys()].filter((key) => key.startsWith(input.Prefix ?? '')).sort()
+      const start = input.ContinuationToken ? Number(input.ContinuationToken) : 0
+      const maxKeys = input.MaxKeys ?? 1000
+      const page = keys.slice(start, start + maxKeys)
+      const truncated = start + maxKeys < keys.length
+
+      return {
+        Contents: page.map((key) => {
+          const object = objects.get(key)!
+          return { Key: key, Size: object.body.byteLength, ETag: `"${object.etag}"`, LastModified: object.lastModified }
+        }),
+        IsTruncated: truncated,
+        NextContinuationToken: truncated ? String(start + maxKeys) : undefined,
+      }
+    }
+
+    if (name === 'CopyObjectCommand') {
+      const [, ...rest] = String(input.CopySource).split('/')
+      const sourceKey = rest.map(decodeURIComponent).join('/')
+      const source = objects.get(sourceKey)
+
+      if (!source) {
+        throw Object.assign(new Error('The specified key does not exist.'), {
+          name: 'NoSuchKey',
+          $metadata: { httpStatusCode: 404 },
+        })
+      }
+
+      counter += 1
+      const etag = `etag-${counter}`
+      const lastModified = new Date()
+      objects.set(input.Key, { ...source, etag, lastModified })
+
+      return { CopyObjectResult: { ETag: `"${etag}"`, LastModified: lastModified } }
+    }
+
     if (name === 'DeleteObjectCommand') {
       objects.delete(input.Key)
       return {}
