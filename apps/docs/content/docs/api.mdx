@@ -90,7 +90,7 @@ store.codes.normalize('k7-qp2m4x') // "K7QP2M4X"
 
 | Member               |                                                                                                        |
 | -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `create()`           | A fresh code, generated with [nanoid](https://github.com/ai/nanoid).                                   |
+| `create()`           | A fresh code, drawn from `crypto.getRandomValues` with no bias toward any character.                   |
 | `normalize(input)`   | What someone typed, canonicalized. Throws `INVALID_SYNC_CODE` on anything the alphabet cannot contain. |
 | `alphabet`, `length` | What the scheme was configured with.                                                                   |
 | `entropyBits`        | What a code is worth guessing against — 40 for the default, 13.29 for four digits.                     |

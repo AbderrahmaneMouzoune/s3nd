@@ -445,7 +445,7 @@ export const en = {
         {
           name: packages.protocol.name,
           role: 'The contract',
-          deps: 'nanoid',
+          deps: 'none',
           body: 'The wire format, a fetch-based client, and the sync codes. Nothing here imports a storage client, which is what lets a browser share it.',
         },
         {
@@ -628,7 +628,7 @@ export const en = {
     keywords: ['react file upload code', 's3nd react', 'react hook transfer code', 'one-time code input react'],
     crumb: 'React hooks',
     title: 'Hooks that never see a credential.',
-    lead: 'Send a file or a snapshot, read a code back, and an input that repairs the code as the user types it. Its whole dependency tree is the protocol package and nanoid, with React as a peer. The AWS SDK stays on your server.',
+    lead: 'Send a file or a snapshot, read a code back, and an input that repairs the code as the user types it. Its whole dependency tree is the protocol package, with React as a peer. The AWS SDK stays on your server.',
     primary: 'React guide',
     secondary: 'npm',
     providerTitle: 'point it at the transfer routes',

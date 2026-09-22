@@ -8,7 +8,7 @@ npm install @s3nd/react
 ```
 
 `@s3nd/react` never sees a storage credential and never pulls a storage client. Its whole
-dependency tree is `@s3nd/protocol` and nanoid, with React as a peer — the AWS SDK stays on
+dependency tree is `@s3nd/protocol`, with React as a peer — the AWS SDK stays on
 your server, where `s3nd` runs.
 
 That is the reason it is a separate package. If the hooks lived in `s3nd`, installing them

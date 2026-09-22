@@ -231,7 +231,7 @@ dependency tree. `@s3nd/protocol` is what both halves share, which is why it exi
 rather than living inside `@s3nd/core`.
 
 ```
-@s3nd/protocol   nanoid                      the contract, shared by everything
+@s3nd/protocol   (no dependencies)           the contract, shared by everything
 @s3nd/core       + aws-sdk, protocol         the S3 primitive
 @s3nd/react      + protocol, react (peer)    hooks, no path to S3
 @s3nd/cli        + core                      the binary

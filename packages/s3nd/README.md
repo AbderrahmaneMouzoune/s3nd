@@ -104,8 +104,8 @@ createTransferHandler({
 })
 ```
 
-The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
-nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
+The browser half is a separate package, `@s3nd/protocol`, which has no
+runtime dependencies; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:
 
 ```ts
@@ -141,8 +141,8 @@ until a bill arrives. `put`, `get` and `rm` move files between machines with a c
 ## Sync codes
 
 `store.codes` pairs code generation with the normalization that reads codes back, so the two can
-never disagree about the alphabet. Codes are generated with
-[nanoid](https://github.com/ai/nanoid).
+never disagree about the alphabet. Codes are drawn from `crypto.getRandomValues`, with no bias
+toward any character.
 
 The default is eight characters of
 [Crockford base32](https://www.crockford.com/base32.html): no `I`, `L`, `O` or `U`, so a code

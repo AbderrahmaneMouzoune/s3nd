@@ -18,8 +18,8 @@ npm install @s3nd/protocol
 
 It holds one invariant: **nothing here imports a storage client**. That is what lets
 [`@s3nd/react`](https://www.npmjs.com/package/@s3nd/react), the CLI and a browser bundle
-share this code without any of them pulling the AWS SDK behind it. Its only dependency is
-[nanoid](https://github.com/ai/nanoid).
+share this code without any of them pulling the AWS SDK behind it. It has no runtime
+dependencies: codes come from `crypto.getRandomValues`, which every supported runtime ships.
 
 Most applications do not install this directly: `@s3nd/core` and `@s3nd/react` depend on it
 and re-export what you need. Reach for it when you are writing a client for a runtime neither of
