@@ -1,5 +1,10 @@
 # @s3nd/cli
 
+[![npm](https://img.shields.io/npm/v/%40s3nd%2Fcli?color=ffb000&labelColor=111111&label=npm)](https://www.npmjs.com/package/@s3nd/cli)
+[![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fcli?color=111111&labelColor=111111&label=install%20size)](https://www.npmjs.com/package/@s3nd/cli)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/cli/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+
 Move a file between machines with a code, check that a bucket is actually set up to hold
 transfers, and keep the settings in a file instead of in your shell history.
 

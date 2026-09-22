@@ -1,5 +1,10 @@
 # @s3nd/core
 
+[![npm](https://img.shields.io/npm/v/%40s3nd%2Fcore?color=ffb000&labelColor=111111&label=npm)](https://www.npmjs.com/package/@s3nd/core)
+[![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fcore?color=111111&labelColor=111111&label=install%20size)](https://www.npmjs.com/package/@s3nd/core)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/s3nd/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+
 Move a local-first app's data from one device to another, through your own bucket.
 
 ```ts
@@ -52,7 +57,9 @@ and no peer dependency to satisfy.
   "device": "Pixel 8",
   "createdAt": "2026-08-27T12:00:00.000Z",
   "expiresAt": "2026-08-27T13:00:00.000Z",
-  "data": {/* whatever you passed */},
+  "data": {
+    /* whatever you passed */
+  },
 }
 ```
 

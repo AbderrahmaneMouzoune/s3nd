@@ -1,5 +1,10 @@
 # @s3nd/protocol
 
+[![npm](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=npm)](https://www.npmjs.com/package/@s3nd/protocol)
+[![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fprotocol?color=111111&labelColor=111111&label=install%20size)](https://www.npmjs.com/package/@s3nd/protocol)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+
 The shared vocabulary of every s3nd piece: the wire contract between a server and its
 clients, a client that speaks it, and the sync codes that travel over it.
 

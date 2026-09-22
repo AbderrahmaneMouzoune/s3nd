@@ -7,6 +7,10 @@
 **Send anything with a code, through your own bucket.**
 
 [![CI](https://github.com/AbderrahmaneMouzoune/s3nd/actions/workflows/ci.yml/badge.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/actions/workflows/ci.yml)
+[![@s3nd/core](https://img.shields.io/npm/v/%40s3nd%2Fcore?color=ffb000&labelColor=111111&label=%40s3nd%2Fcore)](https://www.npmjs.com/package/@s3nd/core)
+[![@s3nd/cli](https://img.shields.io/npm/v/%40s3nd%2Fcli?color=ffb000&labelColor=111111&label=%40s3nd%2Fcli)](https://www.npmjs.com/package/@s3nd/cli)
+[![@s3nd/react](https://img.shields.io/npm/v/%40s3nd%2Freact?color=ffb000&labelColor=111111&label=%40s3nd%2Freact)](https://www.npmjs.com/package/@s3nd/react)
+[![@s3nd/protocol](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=%40s3nd%2Fprotocol)](https://www.npmjs.com/package/@s3nd/protocol)
 [![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](./packages/s3nd/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
 
@@ -199,12 +203,19 @@ archived. On npm that leaves `bucketcode@0.1.0` as the last release under the ol
 deprecated in favour of the `@s3nd/*` packages, and a snapshot written by it still reads back, which
 [`packages/s3nd/src/snapshot.ts`](./packages/s3nd/src/snapshot.ts) covers.
 
+### The four published packages
+
+| Package                                 | Version                                                                                                                                                  | Size                                                                                                                                                               | What it is                                                                               |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| [`@s3nd/protocol`](./packages/protocol) | [![@s3nd/protocol](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/protocol) | [![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fprotocol?color=111111&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/protocol) | The wire contract, a client, sync codes. No storage client, so it bundles for a browser. |
+| [`@s3nd/core`](./packages/s3nd)         | [![@s3nd/core](https://img.shields.io/npm/v/%40s3nd%2Fcore?color=ffb000&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/core)             | [![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fcore?color=111111&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/core)         | The S3 primitive: snapshots, files, the handler.                                         |
+| [`@s3nd/react`](./packages/react)       | [![@s3nd/react](https://img.shields.io/npm/v/%40s3nd%2Freact?color=ffb000&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/react)          | [![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Freact?color=111111&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/react)       | Hooks. Depends on the protocol, never on S3.                                             |
+| [`@s3nd/cli`](./packages/cli)           | [![@s3nd/cli](https://img.shields.io/npm/v/%40s3nd%2Fcli?color=ffb000&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/cli)                | [![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fcli?color=111111&labelColor=111111&label=)](https://www.npmjs.com/package/@s3nd/cli)           | The `s3nd` binary, built on the primitive.                                               |
+
+### The rest of the workspace, published nowhere
+
 | Path                                                   | What it is                                                                                                                     |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`packages/protocol`](./packages/protocol)             | `@s3nd/protocol` — the wire contract, a client, sync codes. No storage client, so it bundles for a browser.                    |
-| [`packages/s3nd`](./packages/s3nd)                     | `@s3nd/core` — the S3 primitive: snapshots, files, the handler.                                                                |
-| [`packages/react`](./packages/react)                   | `@s3nd/react` — hooks. Depends on the protocol, never on S3.                                                                   |
-| [`packages/cli`](./packages/cli)                       | `@s3nd/cli` — the `s3nd` binary, built on the primitive.                                                                       |
 | [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                            |
 | [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                              |
 | [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                                   |
@@ -240,7 +251,7 @@ Run the docs site locally with `bun run --filter @s3nd/docs dev` — it listens 
 [localhost:3300](http://localhost:3300), and the drop template is `bun run --filter s3nd-drop dev`, on
 [localhost:3400](http://localhost:3400).
 
-The template depends on `s3nd@^0.1.0` and `@s3nd/react@^0.1.0` rather than on `workspace:*`, on
+The template depends on `@s3nd/core@^0.1.0` and `@s3nd/react@^0.1.0` rather than on `workspace:*`, on
 purpose: bun links the workspace packages while the version matches, so it builds here against the
 local source, and the same `package.json` installs from npm once it is cloned on its own, which is
 what the Vercel deploy button does.
