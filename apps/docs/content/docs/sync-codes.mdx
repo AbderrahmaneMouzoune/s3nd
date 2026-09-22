@@ -121,11 +121,11 @@ same validation as any key, and the configured `prefix` applies:
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
 await store.putSnapshot('K7QP2M4X', state) // stores snapshots/K7QP2M4X
-await store.delete('K7QP2M4X') // burns it, once the transfer is done
+await store.deleteSnapshot('K7QP2M4X') // burns it, once the transfer is done
 ```
 
 Burning a code after a successful restore is a good habit: the transfer is over, and the token
-should stop working. There is no separate call for it — `delete()` is the whole of it.
+should stop working. `deleteSnapshot()` is the whole of it.
 
 ## Outside a store
 
