@@ -111,25 +111,29 @@ function Bucket({
   )
 }
 
-/** A laptop, seen from the front. */
-function Laptop({ x, y, children }: { x: number; y: number; children?: React.ReactNode }) {
+/**
+ * A laptop, seen from the front. `w` is the lid; the screen is 12 narrower.
+ * Size it to the longest line it shows: JetBrains Mono advances 0.6em per
+ * character, so a line of n characters at size s needs 0.6·n·s of glass.
+ */
+function Laptop({ x, y, w = 92, children }: { x: number; y: number; w?: number; children?: React.ReactNode }) {
   return (
     <g>
-      <rect x={x} y={y} width="92" height="58" rx="4" fill={SURFACE} stroke={LINE} strokeWidth="1.5" />
-      <rect x={x + 6} y={y + 6} width="80" height="46" rx="2" fill="#0d0d0c" />
-      <path d={`M${x - 8} ${y + 62} h108 l-4 5 h-100 z`} fill="#1c1b19" stroke={LINE} strokeWidth="1" />
+      <rect x={x} y={y} width={w} height="58" rx="4" fill={SURFACE} stroke={LINE} strokeWidth="1.5" />
+      <rect x={x + 6} y={y + 6} width={w - 12} height="46" rx="2" fill="#0d0d0c" />
+      <path d={`M${x - 8} ${y + 62} h${w + 16} l-4 5 h-${w + 8} z`} fill="#1c1b19" stroke={LINE} strokeWidth="1" />
       {children}
     </g>
   )
 }
 
-/** A phone, upright. */
-function Phone({ x, y, children }: { x: number; y: number; children?: React.ReactNode }) {
+/** A phone, upright. `w` is the body; the screen is 10 narrower. */
+function Phone({ x, y, w = 52, children }: { x: number; y: number; w?: number; children?: React.ReactNode }) {
   return (
     <g>
-      <rect x={x} y={y} width="52" height="96" rx="8" fill={SURFACE} stroke={LINE} strokeWidth="1.5" />
-      <rect x={x + 5} y={y + 8} width="42" height="78" rx="3" fill="#0d0d0c" />
-      <rect x={x + 19} y={y + 90} width="14" height="2" rx="1" fill={LINE} />
+      <rect x={x} y={y} width={w} height="96" rx="8" fill={SURFACE} stroke={LINE} strokeWidth="1.5" />
+      <rect x={x + 5} y={y + 8} width={w - 10} height="78" rx="3" fill="#0d0d0c" />
+      <rect x={x + w / 2 - 7} y={y + 90} width="14" height="2" rx="1" fill={LINE} />
       {children}
     </g>
   )
@@ -214,7 +218,7 @@ function Tile({
 
 /* ─── put ─────────────────────────────────────────────────────────────── */
 
-const PUT_PATH = 'M118 64 C 160 26, 196 26, 232 60'
+const PUT_PATH = 'M140 62 C 176 24, 204 24, 232 54'
 
 export function PutIllustration({ labels, ...props }: FigureProps) {
   return (
@@ -222,18 +226,18 @@ export function PutIllustration({ labels, ...props }: FigureProps) {
       <defs>
         <Hazard id="put-rim" />
       </defs>
-      <Laptop x={18} y={38}>
-        <text x="30" y="58" fill={FAINT} fontFamily={MONO} fontSize="8">
+      <Laptop x={14} y={38} w={118}>
+        <text x="26" y="58" fill={FAINT} fontFamily={MONO} fontSize="7">
           $
         </text>
-        <text x="38" y="58" fill={INK} fontFamily={MONO} fontSize="8">
+        <text x="33" y="58" fill={INK} fontFamily={MONO} fontSize="7">
           s3nd put <tspan fill={AMBER}>./report.pdf</tspan>
         </text>
-        <text x="30" y="72" fill={MUTED} fontFamily={MONO} fontSize="7">
+        <text x="26" y="72" fill={MUTED} fontFamily={MONO} fontSize="7">
           284 kB · expires 1h
         </text>
         <text
-          x="30"
+          x="26"
           y="86"
           fill={AMBER}
           fontFamily={MONO}
@@ -246,8 +250,8 @@ export function PutIllustration({ labels, ...props }: FigureProps) {
         </text>
       </Laptop>
       <Route d={PUT_PATH} />
-      <path d="M226 54 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <Bucket x={226} y={66} rim="put-rim" label={labels.yourBucket} />
+      <path d="M226 48 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Bucket x={226} y={60} rim="put-rim" label={labels.yourBucket} />
       <Packet path={PUT_PATH} dur="2.8s" />
       <text
         x="160"
@@ -304,7 +308,7 @@ export function CodeIllustration({ labels, ...props }: FigureProps) {
 
 /* ─── get ─────────────────────────────────────────────────────────────── */
 
-const GET_PATH = 'M96 60 C 140 26, 180 26, 224 58'
+const GET_PATH = 'M96 60 C 138 26, 178 26, 218 58'
 
 export function GetIllustration({ labels, ...props }: FigureProps) {
   return (
@@ -314,21 +318,21 @@ export function GetIllustration({ labels, ...props }: FigureProps) {
       </defs>
       <Bucket x={22} y={66} rim="get-rim" />
       <Route d={GET_PATH} />
-      <path d="M218 52 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <Phone x={228} y={38}>
-        <text x="236" y="58" fill={FAINT} fontFamily={MONO} fontSize="7">
+      <path d="M212 52 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Phone x={222} y={38} w={62}>
+        <text x="231" y="58" fill={FAINT} fontFamily={MONO} fontSize="7">
           $ s3nd get
         </text>
-        <text x="236" y="69" fill={AMBER} fontFamily={MONO} fontSize="7">
+        <text x="231" y="69" fill={AMBER} fontFamily={MONO} fontSize="7">
           k7qp-2m4x
         </text>
-        <text x="236" y="86" fill={MUTED} fontFamily={MONO} fontSize="6.5">
+        <text x="231" y="86" fill={MUTED} fontFamily={MONO} fontSize="6.5">
           Wrote
         </text>
-        <text x="236" y="96" fill={INK} fontFamily={MONO} fontSize="6.5">
+        <text x="231" y="96" fill={INK} fontFamily={MONO} fontSize="6.5">
           report.pdf
         </text>
-        <text x="236" y="112" fill={OK} fontFamily={MONO} fontSize="8" className="ill-pulse">
+        <text x="231" y="112" fill={OK} fontFamily={MONO} fontSize="8" className="ill-pulse">
           ✓ 284 kB
         </text>
       </Phone>
@@ -444,8 +448,8 @@ export function NoMiddleIllustration({ labels, ...props }: FigureProps) {
 
 /* ─── a snapshot between two phones ───────────────────────────────────── */
 
-const SNAP_LEFT = 'M76 86 C 100 60, 118 60, 134 76'
-const SNAP_RIGHT = 'M226 76 C 242 60, 260 60, 284 86'
+const SNAP_LEFT = 'M84 86 C 104 60, 120 60, 134 76'
+const SNAP_RIGHT = 'M226 76 C 240 60, 258 60, 276 86'
 
 export function SnapshotIllustration({ labels, ...props }: FigureProps) {
   return (
@@ -453,24 +457,24 @@ export function SnapshotIllustration({ labels, ...props }: FigureProps) {
       <defs>
         <Hazard id="snap-rim" />
       </defs>
-      <Phone x={20} y={36}>
-        <text x="28" y="56" fill={FAINT} fontFamily={MONO} fontSize="6.5">
+      <Phone x={16} y={36} w={66}>
+        <text x="24" y="56" fill={FAINT} fontFamily={MONO} fontSize="6.5">
           {labels.oldPhone}
         </text>
-        <text x="28" y="70" fill={INK} fontFamily={MONO} fontSize="6.5">
+        <text x="24" y="70" fill={INK} fontFamily={MONO} fontSize="6.5">
           IndexedDB
         </text>
-        <rect x="28" y="76" width="36" height="3" rx="1" fill={AMBER} />
-        <rect x="28" y="82" width="28" height="3" rx="1" fill={LINE} />
-        <rect x="28" y="88" width="32" height="3" rx="1" fill={LINE} />
-        <text x="28" y="108" fill={AMBER} fontFamily={MONO} fontSize="7" fontWeight="700">
+        <rect x="24" y="76" width="40" height="3" rx="1" fill={AMBER} />
+        <rect x="24" y="82" width="30" height="3" rx="1" fill={LINE} />
+        <rect x="24" y="88" width="36" height="3" rx="1" fill={LINE} />
+        <text x="24" y="108" fill={AMBER} fontFamily={MONO} fontSize="7" fontWeight="700">
           K7QP2M4X
         </text>
       </Phone>
       <Route d={SNAP_LEFT} />
       <Route d={SNAP_RIGHT} />
       <path d="M128 70 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M278 80 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M270 80 l8 6 l-9 4" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       <g className="ill-float">
         <rect x="136" y="60" width="88" height="80" rx="4" fill={SURFACE} stroke={LINE} strokeWidth="1.5" />
         <rect x="136" y="60" width="88" height="7" rx="2" fill="url(#snap-rim)" />
@@ -499,22 +503,22 @@ export function SnapshotIllustration({ labels, ...props }: FigureProps) {
           {labels.snapshot}
         </text>
       </g>
-      <Phone x={288} y={36}>
-        <text x="296" y="56" fill={FAINT} fontFamily={MONO} fontSize="6.5">
+      <Phone x={278} y={36} w={66}>
+        <text x="286" y="56" fill={FAINT} fontFamily={MONO} fontSize="6.5">
           {labels.newPhone}
         </text>
-        <text x="296" y="70" fill={INK} fontFamily={MONO} fontSize="6.5">
+        <text x="286" y="70" fill={INK} fontFamily={MONO} fontSize="6.5">
           k7qp-2m4x
         </text>
-        <text x="296" y="86" fill={MUTED} fontFamily={MONO} fontSize="5.5">
+        <text x="286" y="86" fill={MUTED} fontFamily={MONO} fontSize="5.5">
           {labels.fromDevice}
         </text>
-        <text x="296" y="95" fill={MUTED} fontFamily={MONO} fontSize="5.5">
+        <text x="286" y="95" fill={MUTED} fontFamily={MONO} fontSize="5">
           {labels.notes}
         </text>
-        <rect x="296" y="102" width="36" height="12" rx="2" fill={AMBER} />
+        <rect x="286" y="102" width="40" height="12" rx="2" fill={AMBER} />
         <text
-          x="314"
+          x="306"
           y="110.5"
           textAnchor="middle"
           fill="#0a0a0a"
@@ -553,13 +557,13 @@ export function TerminalGlyph(props: SvgProps) {
       <path d="M1 10 h54" stroke={LINE} strokeWidth="1" />
       <circle cx="7" cy="5.5" r="1.5" fill={LINE} />
       <circle cx="12" cy="5.5" r="1.5" fill={LINE} />
-      <text x="8" y="26" fill={AMBER} fontFamily={MONO} fontSize="9">
+      <text x="7" y="26" fill={AMBER} fontFamily={MONO} fontSize="8">
         $
       </text>
-      <text x="16" y="26" fill={INK} fontFamily={MONO} fontSize="8">
+      <text x="14" y="26" fill={INK} fontFamily={MONO} fontSize="6.5">
         s3nd put
       </text>
-      <rect x="44" y="18" width="5" height="10" fill={AMBER} className="ill-blink" />
+      <rect x="47" y="18" width="4" height="10" fill={AMBER} className="ill-blink" />
     </Frame>
   )
 }
