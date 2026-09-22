@@ -37,7 +37,7 @@ const base: ProviderBase[] = [
     name: 'Cloudflare R2',
     short: 'R2',
     initName: 'r2',
-    library: `import { createBucket } from 's3nd'
+    library: `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({
   bucket: 'transfers',
@@ -67,7 +67,7 @@ const store = createBucket({
     name: 'AWS S3',
     short: 'S3',
     initName: 'aws',
-    library: `import { createBucket } from 's3nd'
+    library: `import { createBucket } from '@s3nd/core'
 
 // Credentials from the AWS provider chain: env, shared config, or the role.
 const store = createBucket({
@@ -89,7 +89,7 @@ const store = createBucket({
     name: 'MinIO',
     short: 'MinIO',
     initName: 'minio',
-    library: `import { createBucket } from 's3nd'
+    library: `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({
   bucket: 'transfers',
@@ -111,7 +111,7 @@ const store = createBucket({
     name: 'Scaleway Object Storage',
     short: 'Scaleway',
     initName: 'scaleway',
-    library: `import { createBucket } from 's3nd'
+    library: `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({
   bucket: 'transfers',
@@ -141,7 +141,7 @@ const store = createBucket({
     name: 'Wasabi',
     short: 'Wasabi',
     initName: 'wasabi',
-    library: `import { createBucket } from 's3nd'
+    library: `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({
   bucket: 'transfers',

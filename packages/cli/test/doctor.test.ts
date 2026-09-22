@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createBucket } from 's3nd'
+import { createBucket } from '@s3nd/core'
 import type { S3Client } from '@aws-sdk/client-s3'
 
 import { runChecks, type Check } from '../src/doctor.js'

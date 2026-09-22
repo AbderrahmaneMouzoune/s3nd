@@ -11,7 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "s3nd": "workspace:*",
+    "@s3nd/core": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

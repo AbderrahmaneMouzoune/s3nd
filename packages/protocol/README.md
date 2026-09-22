@@ -12,7 +12,7 @@ It holds one invariant — **nothing here imports a storage client**. That is wh
 share this code without any of them pulling the AWS SDK behind it. Its only dependency is
 [nanoid](https://github.com/ai/nanoid).
 
-Most applications do not install this directly: `s3nd` and `@s3nd/react` depend on it
+Most applications do not install this directly: `@s3nd/core` and `@s3nd/react` depend on it
 and re-export what you need. Reach for it when you are writing a client for a runtime neither of
 those covers, or implementing the protocol on a server that is not Node.
 
@@ -65,7 +65,7 @@ describes each route and every error code in full.
 
 ## Sync codes
 
-A sync code belongs here rather than in `s3nd` because it _is_ part of the contract: its
+A sync code belongs here rather than in `@s3nd/core` because it _is_ part of the contract: its
 alphabet, and the rules for reading back what someone typed, are what the two devices have to agree
 on.
 

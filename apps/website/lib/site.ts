@@ -38,7 +38,12 @@ export function npm(packageName: string): string {
 }
 
 export const packages = {
-  s3nd: { name: 's3nd', install: 'npm install s3nd', npm: npm('s3nd'), source: github('packages/s3nd') },
+  s3nd: {
+    name: '@s3nd/core',
+    install: 'npm install @s3nd/core',
+    npm: npm('@s3nd/core'),
+    source: github('packages/s3nd'),
+  },
   react: {
     name: '@s3nd/react',
     install: 'npm install @s3nd/react',

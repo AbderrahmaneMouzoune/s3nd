@@ -15,7 +15,7 @@ $ CODE=$(s3nd put ./report.pdf)     # code on stdout, the rest on stderr
 $ s3nd get k7qp-2m4x
 Wrote ./build.tar.gz · 41 MB`,
     APP_SAMPLE: `// app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 export const { GET, POST, DELETE } = createTransferHandler({
   bucket: createBucket({ bucket: 'drop' }),
@@ -35,7 +35,7 @@ await sendFile(file) // → transfer.code`,
 
 $ curl -LOJ -H "Authorization: Bearer $TOKEN" \\
     https://drop.example.com/api/transfers/K7QP2M4X/raw`,
-    SNAPSHOT_SAMPLE: `import { createBucket } from 's3nd'
+    SNAPSHOT_SAMPLE: `import { createBucket } from '@s3nd/core'
 
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
@@ -155,7 +155,7 @@ $ s3nd doctor --remote https://drop.example.com/api/transfers --token "$TOKEN"
 ✓ Create, read, delete: round-tripped code 8WTXQC8R`,
   },
   library: {
-    HERO: `import { createBucket, createTransferHandler } from 's3nd'
+    HERO: `import { createBucket, createTransferHandler } from '@s3nd/core'
 
 const store = createBucket({ bucket: 'drop' })
 
@@ -173,7 +173,7 @@ await store.delete(id)       // → void
 
 store.client                 // the plain S3Client, for anything else`,
     HANDLER: `// app/api/transfers/[[...route]]/route.ts
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 export const { GET, POST, DELETE } = createTransferHandler({
   bucket: createBucket({ bucket: 'drop' }),
@@ -182,14 +182,14 @@ export const { GET, POST, DELETE } = createTransferHandler({
   authorize: (request) => request.headers.get('authorization') === \`Bearer \${process.env.TOKEN}\`,
 })`,
     HONO: `import { Hono } from 'hono'
-import { createBucket, createTransferHandler } from 's3nd'
+import { createBucket, createTransferHandler } from '@s3nd/core'
 
 const transfers = createTransferHandler({ bucket: createBucket(), basePath: '/api/transfers' })
 
 const app = new Hono()
 app.all('/api/transfers', (c) => transfers(c.req.raw))
 app.all('/api/transfers/*', (c) => transfers(c.req.raw))`,
-    BUN: `import { createBucket, createTransferHandler } from 's3nd'
+    BUN: `import { createBucket, createTransferHandler } from '@s3nd/core'
 
 const transfers = createTransferHandler({ bucket: createBucket(), basePath: '/api/transfers' })
 
@@ -212,7 +212,7 @@ await store.put(code, file, { ifAbsent: true })
 // Rewrite a shared object: fail if someone else wrote since you read.
 const current = await store.getSnapshot(\`user-\${userId}\`)
 await store.putSnapshot(\`user-\${userId}\`, merged, { ifMatch: current?.etag })`,
-    ERRORS: `import { isS3ndError } from 's3nd'
+    ERRORS: `import { isS3ndError } from '@s3nd/core'
 
 try {
   await store.upload(body, { filename })

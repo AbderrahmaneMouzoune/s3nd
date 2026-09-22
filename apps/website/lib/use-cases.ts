@@ -70,7 +70,7 @@ Burned K7QP2M4X`,
     code: {
       lang: 'ts',
       title: 'app/api/transfers/[[...route]]/route.ts',
-      source: `import { createBucket, createTransferHandler } from 's3nd'
+      source: `import { createBucket, createTransferHandler } from '@s3nd/core'
 
 const tokens = new Set(process.env.DROP_TOKENS!.split(','))
 

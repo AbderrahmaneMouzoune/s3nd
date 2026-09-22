@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 
 import type { TransferMetadata } from '@s3nd/react'
-import { createTransferHandler, type TransferHandler } from 's3nd'
+import { createTransferHandler, type TransferHandler } from '@s3nd/core'
 
 import { dropConfig } from './config'
 import { store } from './store'

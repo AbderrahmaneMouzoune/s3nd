@@ -9,7 +9,7 @@ npm install @s3nd/react
 
 **It never sees a storage credential, and never pulls a storage client.** Its whole dependency tree
 is `@s3nd/protocol` and `nanoid`, with React as a peer — the AWS SDK stays on your server,
-where `s3nd` runs. That separation is the reason this is its own package.
+where `@s3nd/core` runs. That separation is the reason this is its own package.
 
 React 18 or later. Every export is a client hook, and the build carries `'use client'`, so it drops
 straight into the Next.js App Router.

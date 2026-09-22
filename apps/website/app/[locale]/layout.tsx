@@ -119,7 +119,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
                 name: site.name,
                 url: site.url,
                 logo: `${site.url}/icon.svg`,
-                sameAs: [repositoryUrl, 'https://www.npmjs.com/package/s3nd'],
+                sameAs: [repositoryUrl, 'https://www.npmjs.com/package/@s3nd/core'],
               },
               {
                 '@type': 'WebSite',

@@ -1,4 +1,4 @@
-import { isS3ndError } from 's3nd'
+import { isS3ndError } from '@s3nd/core'
 
 import { store, CODE_TTL_SECONDS, SCHEMA_VERSION } from '@/lib/store'
 
