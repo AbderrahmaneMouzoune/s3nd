@@ -5,6 +5,10 @@
 [![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbderrahmaneMouzoune/s3nd/main/.github/demos/protocol.gif" alt="A terminal drives the four routes with curl: POST creates the transfer and answers with the code K7QP2M4X, GET /k7qp-2m4x returns its metadata, GET /K7QP2M4X/raw downloads the bytes, DELETE burns it, and a last GET answers NOT_FOUND." width="880">
+</p>
+
 The shared vocabulary of every s3nd piece: the wire contract between a server and its
 clients, a client that speaks it, and the sync codes that travel over it.
 
@@ -12,7 +16,7 @@ clients, a client that speaks it, and the sync codes that travel over it.
 npm install @s3nd/protocol
 ```
 
-It holds one invariant — **nothing here imports a storage client**. That is what lets
+It holds one invariant: **nothing here imports a storage client**. That is what lets
 [`@s3nd/react`](https://www.npmjs.com/package/@s3nd/react), the CLI and a browser bundle
 share this code without any of them pulling the AWS SDK behind it. Its only dependency is
 [nanoid](https://github.com/ai/nanoid).
@@ -80,7 +84,7 @@ import { createSyncCodes, syncCodeAlphabets } from '@s3nd/protocol'
 const codes = createSyncCodes()
 codes.create() // "K7QP2M4X"
 codes.normalize('k7-qp2m4x') // "K7QP2M4X"
-codes.normalize('OIL5ABCD') // "0115ABCD" — O, I and L are not in the alphabet
+codes.normalize('OIL5ABCD') // "0115ABCD": O, I and L are not in the alphabet
 codes.entropyBits // 40
 ```
 
@@ -89,7 +93,7 @@ The default is eight characters of [Crockford base32](https://www.crockford.com/
 `createSyncCodes()` pairs generation with normalization so the two can never disagree about the
 alphabet.
 
-Normalizing in the browser, before any request, is what makes the input forgiving — see
+Normalizing in the browser, before any request, is what makes the input forgiving; see
 `useSyncCodeInput` in `@s3nd/react`.
 
 ## License

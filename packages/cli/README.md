@@ -5,6 +5,10 @@
 [![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/cli/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbderrahmaneMouzoune/s3nd/main/.github/demos/cli.gif" alt="Two terminals. On machine A, s3nd put ./report.pdf prints the code K7QP2M4X. On any other machine, s3nd get k7qp-2m4x writes report.pdf back, then s3nd rm burns the code." width="880">
+</p>
+
 Move a file between machines with a code, check that a bucket is actually set up to hold
 transfers, and keep the settings in a file instead of in your shell history.
 
@@ -44,7 +48,7 @@ Run `s3nd doctor` — it performs the operations s3nd needs and reports what hap
 
 ## `doctor`
 
-The command worth running first. S3 misconfiguration fails late and vaguely — a policy that looks
+The command worth running first. S3 misconfiguration fails late and vaguely: a policy that looks
 right, credentials that resolve to nothing, a region the endpoint disagrees with. `doctor` performs
 the operations s3nd actually needs and reports what happened, rather than reading your policy
 and reasoning about it. The probe object is deleted before it returns.
@@ -66,7 +70,7 @@ Using /home/you/transfers/s3nd.config.json
 That last check is the one that earns the command. `expiresIn` stops a transfer being _handed
 over_; only a lifecycle rule deletes the object, and nothing surfaces the gap until a bill does.
 
-Pointed at a server, `doctor` checks the only thing that matters there — a real round trip:
+Pointed at a server, `doctor` checks the only thing that matters there, a real round trip:
 
 ```sh
 $ s3nd doctor --remote https://drop.example.com/api/transfers --token "$TOKEN"
@@ -129,7 +133,7 @@ then `~/.config/s3nd/config.json`:
 }
 ```
 
-`${VAR}` is read from the environment and `envFile` names a file to load first — without
+`${VAR}` is read from the environment and `envFile` names a file to load first, without
 overwriting what the shell already set. So the configuration is committable and the keys are not.
 
 Profiles hold several setups in one file:
@@ -176,7 +180,7 @@ instead of at S3:
 s3nd --remote https://drop.example.com/api/transfers put ./report.pdf
 ```
 
-This is not a second implementation. The CLI has exactly one — the protocol client — wired either to
+This is not a second implementation. The CLI has exactly one, the protocol client, wired either to
 `fetch` or, without `--remote`, straight into the request handler in the same process. The two modes
 cannot drift apart, because there is only one of them.
 

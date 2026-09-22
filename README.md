@@ -11,7 +11,7 @@
 [![@s3nd/cli](https://img.shields.io/npm/v/%40s3nd%2Fcli?color=ffb000&labelColor=111111&label=%40s3nd%2Fcli)](https://www.npmjs.com/package/@s3nd/cli)
 [![@s3nd/react](https://img.shields.io/npm/v/%40s3nd%2Freact?color=ffb000&labelColor=111111&label=%40s3nd%2Freact)](https://www.npmjs.com/package/@s3nd/react)
 [![@s3nd/protocol](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=%40s3nd%2Fprotocol)](https://www.npmjs.com/package/@s3nd/protocol)
-[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](./packages/s3nd/LICENSE)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
 
 ```sh
@@ -26,7 +26,7 @@ Wrote /home/you/report.pdf · 284 kB
 
 The bytes go from one machine to an S3 bucket you own, and from the bucket to the other machine.
 Nothing streams through anyone else's server, nobody signs up for anything, and there is nothing
-to deploy. Eight characters, forty bits, no I, L, O or U — read it over the phone, type it in the
+to deploy. Eight characters, forty bits, no I, L, O or U: read it over the phone, type it in the
 wrong case with a dash in the middle, it still resolves. Works with AWS S3, Cloudflare R2, MinIO,
 Scaleway, Wasabi and any S3-compatible storage.
 
@@ -116,7 +116,7 @@ Open the console on [localhost:9001](http://localhost:9001) (`minioadmin` / `min
 a bucket named `transfers`. Then:
 
 ```sh
-s3nd init --provider minio --bucket transfers   # localhost:9000, minioadmin — no .env to write
+s3nd init --provider minio --bucket transfers   # localhost:9000, minioadmin, no .env to write
 s3nd doctor
 s3nd put ./report.pdf
 ```
@@ -141,12 +141,12 @@ s3nd -p r2 put ./report.pdf
 
 ## Three ways in
 
-**From a terminal** — `@s3nd/cli`. Straight to the bucket with the credentials on that machine, or
+**From a terminal:** `@s3nd/cli`. Straight to the bucket with the credentials on that machine, or
 through your own server with `--remote` and a token. The code goes to stdout and everything else to
 stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `tar cz ./project | s3nd put - --name project.tar.gz`
 moves a directory. [Every command →](https://doc.s3nd.sh/docs/cli)
 
-**Inside your app** — `@s3nd/core` on the server, `@s3nd/react` in the browser. One route file turns any
+**Inside your app:** `@s3nd/core` on the server, `@s3nd/react` in the browser. One route file turns any
 bucket into a drop box; the hooks send a file or a snapshot and read a code back, with typos repaired
 as the user types. [The library →](https://s3nd.sh/library) · [The hooks →](https://s3nd.sh/react)
 
@@ -161,7 +161,7 @@ export const { GET, POST, DELETE } = createTransferHandler({
 })
 ```
 
-**Anything that speaks HTTP** — `@s3nd/protocol`. Four routes, one error format, a typed client
+**Anything that speaks HTTP:** `@s3nd/protocol`. Four routes, one error format, a typed client
 that bundles for a browser because it carries no storage client. `curl` works.
 [The protocol →](https://doc.s3nd.sh/docs/protocol)
 
@@ -186,12 +186,16 @@ const snapshot = await store.getSnapshot(store.codes.normalize(typed), { maxVers
 snapshot?.data // → the state, ready to write back into IndexedDB
 ```
 
-Credentials stay on your server — the browser only ever talks to your own API, so there is no CORS
+Credentials stay on your server. The browser only ever talks to your own API, so there is no CORS
 policy to write on the bucket and nothing to sign client-side. `maxVersion` refuses a snapshot written
 by a newer schema, and a conditional write keeps two devices from claiming the same code.
 
 **[Move to a new device →](https://doc.s3nd.sh/docs/use-cases/new-device)** ·
 **[Run the IndexedDB example →](./examples/indexeddb-sync)**
+
+<p align="center">
+  <img src=".github/demos/react.gif" alt="Two phones side by side. On the old one, a button moves 200 notes to another device and shows the code K7QP2M4X. On the new one, k7qp-2m4x is typed in lowercase with a dash, read as K7QP2M4X, looked up, and the notes are restored." width="880">
+</p>
 
 ## This repository
 
@@ -199,7 +203,7 @@ A bun workspace monorepo, driven by Turborepo.
 
 It was called `bucketcode` until the packages were renamed to `s3nd`, and moved here with its
 full history; [the old repository](https://github.com/AbderrahmaneMouzoune/bucketcode) is
-archived. On npm that leaves `bucketcode@0.1.0` as the last release under the old name — it is
+archived. On npm that leaves `bucketcode@0.1.0` as the last release under the old name; it is
 deprecated in favour of the `@s3nd/*` packages, and a snapshot written by it still reads back, which
 [`packages/s3nd/src/snapshot.ts`](./packages/s3nd/src/snapshot.ts) covers.
 
@@ -216,8 +220,8 @@ deprecated in favour of the `@s3nd/*` packages, and a snapshot written by it sti
 
 | Path                                                   | What it is                                                                                                                     |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`apps/docs`](./apps/docs)                             | The documentation site — guides, use cases, API reference. Served from doc.s3nd.sh.                                            |
-| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh — what it is, the three ways in, use cases, providers, comparisons.                              |
+| [`apps/docs`](./apps/docs)                             | The documentation site: guides, use cases, API reference. Served from doc.s3nd.sh.                                             |
+| [`apps/website`](./apps/website)                       | The marketing site at s3nd.sh: what it is, the three ways in, use cases, providers, comparisons.                               |
 | [`examples/indexeddb-sync`](./examples/indexeddb-sync) | A notes app in IndexedDB, moved between devices with a code.                                                                   |
 | [`examples/node-script`](./examples/node-script)       | Snapshot round-trip, expiry and conflicts in one file.                                                                         |
 | [`templates/drop`](./templates/drop)                   | A small WeTransfer on your own bucket, live at drop.s3nd.sh: the one-click Vercel template, on `@s3nd/core` and `@s3nd/react`. |
@@ -229,13 +233,14 @@ rather than living inside `@s3nd/core`.
 ```
 @s3nd/protocol   nanoid                      the contract, shared by everything
 @s3nd/core       + aws-sdk, protocol         the S3 primitive
-@s3nd/react      + protocol, react (peer)    hooks — no path to S3
+@s3nd/react      + protocol, react (peer)    hooks, no path to S3
 @s3nd/cli        + core                      the binary
 ```
 
 ## Working on it
 
 A [bun](https://bun.com) workspace, with [Turborepo](https://turborepo.dev) running the tasks.
+[CONTRIBUTING.md](./.github/CONTRIBUTING.md) has the conventions a pull request is checked against.
 
 ```sh
 bun install
@@ -246,7 +251,7 @@ bun run lint
 bun run format
 ```
 
-Run the docs site locally with `bun run --filter @s3nd/docs dev` — it listens on
+Run the docs site locally with `bun run --filter @s3nd/docs dev`; it listens on
 [localhost:3100](http://localhost:3100). The website is `bun run --filter @s3nd/website dev`, on
 [localhost:3300](http://localhost:3300), and the drop template is `bun run --filter s3nd-drop dev`, on
 [localhost:3400](http://localhost:3400).
@@ -257,8 +262,8 @@ local source, and the same `package.json` installs from npm once it is cloned on
 what the Vercel deploy button does.
 
 bun installs and orchestrates; the toolchain itself still runs on Node. That is deliberate rather
-than half-finished: the packages are published for Node, so the test suite runs on Node — CI runs it
-on 20, 22 and 24 — and `.bin/vitest` carries a `#!/usr/bin/env node` shebang, so it picks up
+than half-finished: the packages are published for Node, so the test suite runs on Node (CI runs it
+on 20, 22 and 24) and `.bin/vitest` carries a `#!/usr/bin/env node` shebang, so it picks up
 whichever version is on `PATH`. Switching the runner to `bun test` would trade that coverage for a
 second or two of wall clock.
 
@@ -275,14 +280,14 @@ The demo at the top of this page is the CLI's real output for that journey, repl
 Releases are driven by [release-please](https://github.com/googleapis/release-please) and by the
 commit messages that land on `main`, which follow
 [Conventional Commits](https://www.conventionalcommits.org/). Pull requests are squash-merged, so
-the pull request title is the message that counts — CI checks its shape on every pull request.
+the pull request title is the message that counts, and CI checks its shape on every pull request.
 
-| A commit on `main`                         | Takes a package from 0.1.0 to          |
-| ------------------------------------------ | -------------------------------------- |
-| `fix: …`                                   | 0.1.1                                  |
-| `feat: …`                                  | 0.2.0                                  |
-| `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0 — the major bump waits for 1.0.0 |
-| `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                    |
+| A commit on `main`                         | Takes a package from 0.1.0 to         |
+| ------------------------------------------ | ------------------------------------- |
+| `fix: …`                                   | 0.1.1                                 |
+| `feat: …`                                  | 0.2.0                                 |
+| `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0; the major bump waits for 1.0.0 |
+| `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                   |
 
 The four packages version independently: a commit releases whichever of `packages/*` it touched,
 and a package whose dependency moved is carried along. The docs site, the website, the examples,
@@ -290,12 +295,12 @@ the drop template and the workflows release nothing.
 
 While there is something to release, the [release workflow](./.github/workflows/release.yml) keeps
 a `chore: release x.y.z` pull request open, carrying the version bumps and the entries they would
-add to the changelogs — [the one for `@s3nd/core`](./packages/s3nd/CHANGELOG.md), and one per package
+add to the changelogs: [the one for `@s3nd/core`](./packages/s3nd/CHANGELOG.md), and one per package
 beside it. Merging it is the release: each released commit is tagged per package, as
 `s3nd-v0.2.0` or `protocol-v0.2.0`, the GitHub release is created from that changelog entry, and
 the packages are published to npm with provenance.
 
-That publish job builds `packages/*` and nothing else — the Next.js apps in this workspace are
+That publish job builds `packages/*` and nothing else: the Next.js apps in this workspace are
 never part of a tarball, so they are not installed and not built on the way to the registry. CI is
 where they get built. It also installs `npm@latest` before publishing, because npm trusted
 publishing landed in 11.5.1 and the npm that comes with Node 22 is 10.x.
@@ -310,10 +315,10 @@ Two repository secrets:
   enabled. Both halves matter. Without the bypass, publishing fails with a 403 asking for
   "two-factor authentication or granular access token with bypass 2fa enabled", because the
   account-level 2FA requirement applies to the token too. And the scope has to cover every package
-  rather than a named list, because a package that has never been published cannot appear in one —
+  rather than a named list, because a package that has never been published cannot appear in one,
   which is every package here, the first time.
   Once the packages exist, [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) is
-  the better answer — configure this repository as a trusted publisher and drop the
+  the better answer: configure this repository as a trusted publisher and drop the
   `NODE_AUTH_TOKEN` line from the workflow, since the `id-token: write` permission it already
   grants is what OIDC needs. It cannot come first: a trusted publisher is configured per package,
   and a package that has never been published has no settings to configure.
@@ -321,8 +326,8 @@ Two repository secrets:
   write access. GitHub skips workflows on pull requests opened with the default `GITHUB_TOKEN`, so
   without it the release pull request shows no checks.
 
-Running the workflow by hand with **Publish** ticked publishes the version currently on `main` —
-the way out when a release was tagged but the publish step failed.
+Running the workflow by hand with **Publish** ticked publishes the version currently on `main`: the way out
+when a release was tagged but the publish step failed.
 
 ## License
 
