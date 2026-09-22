@@ -55,9 +55,6 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
-  "dependencies": {
-    "nanoid": "^6.0.1"
-  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsup": "^8.5.1",

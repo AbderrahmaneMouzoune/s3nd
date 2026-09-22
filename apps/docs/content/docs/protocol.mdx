@@ -53,7 +53,7 @@ const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typedCode) // null when unknown or expired
 ```
 
-`@s3nd/protocol` is `fetch` and nothing else. Its whole dependency tree is nanoid, and no
+`@s3nd/protocol` is `fetch` and nothing else. It has no runtime dependencies, and no
 path from it reaches the AWS SDK — so it bundles for a browser, a worker or React Native without
 dragging a storage client along. That is the reason it is a separate package rather than a subpath
 of `s3nd`: a subpath would have put the SDK in every front-end's `node_modules`.

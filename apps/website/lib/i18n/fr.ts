@@ -457,7 +457,7 @@ export const fr: Dictionary = {
         {
           name: packages.protocol.name,
           role: 'Le contrat',
-          deps: 'nanoid',
+          deps: 'aucune',
           body: 'Le format sur le fil, un client basé sur fetch, et les codes de synchronisation. Rien ici n’importe de client de stockage, et c’est ce qui permet à un navigateur de le partager.',
         },
         {
@@ -653,7 +653,7 @@ export const fr: Dictionary = {
     ],
     crumb: 'Hooks React',
     title: 'Des hooks qui ne voient jamais un identifiant.',
-    lead: 'Envoyez un fichier ou un snapshot, relisez un code, et un champ qui répare le code au fil de la frappe. Tout son arbre de dépendances, c’est le package protocol et nanoid, avec React en peer. Le SDK AWS reste sur votre serveur.',
+    lead: 'Envoyez un fichier ou un snapshot, relisez un code, et un champ qui répare le code au fil de la frappe. Tout son arbre de dépendances, c’est le package protocol, avec React en peer. Le SDK AWS reste sur votre serveur.',
     primary: 'Guide React',
     secondary: 'npm',
     providerTitle: 'pointez-le sur les routes de transfert',
