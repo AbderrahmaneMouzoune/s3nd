@@ -1,0 +1,247 @@
+@import 'tailwindcss';
+
+/*
+ * The s3nd.sh identity: near-black, warm paper for text, and the amber of a
+ * departure board for anything that matters. Change these and the whole
+ * template follows.
+ */
+@theme {
+  --color-canvas: #0a0a0a;
+  --color-surface: #111111;
+  --color-surface-muted: #171716;
+  --color-ink: #f3efe4;
+  --color-ink-muted: #b3ada1;
+  --color-ink-faint: #7f7a70;
+  --color-line: #262624;
+  --color-line-strong: #3d3b36;
+  --color-accent: #ffb000;
+  --color-accent-bright: #ffcf4d;
+  --color-accent-ink: #0a0a0a;
+  --color-accent-soft: #2b1e05;
+  --color-ok: #6fe3a1;
+  --color-danger: #ff5a4a;
+
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+}
+
+:root {
+  color-scheme: dark;
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+.btn {
+  transition:
+    transform 0.25s var(--ease-out-soft),
+    box-shadow 0.25s var(--ease-out-soft),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-primary {
+  box-shadow:
+    0 0 0 1px rgb(255 176 0 / 0.55),
+    0 10px 30px -12px rgb(255 176 0 / 0.65);
+}
+
+.btn-primary:hover {
+  box-shadow:
+    0 0 0 1px var(--color-accent-bright),
+    0 14px 36px -12px rgb(255 176 0 / 0.85);
+}
+
+/* ─── The split-flap tile ─────────────────────────────────────────────── */
+
+.flap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-accent);
+  background: linear-gradient(180deg, #262523 0%, #1c1b19 49.6%, #111110 50.4%, #181816 100%);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 1px 0 #000,
+    0 8px 18px -10px rgb(0 0 0 / 0.9);
+  text-shadow: 0 0 14px rgb(255 176 0 / 0.35);
+  user-select: none;
+}
+
+.flap::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: 1px;
+  background: #050505;
+}
+
+/* ─── Textures and motion ─────────────────────────────────────────────── */
+
+.hazard {
+  background: repeating-linear-gradient(-45deg, var(--color-accent) 0 12px, var(--color-canvas) 12px 24px);
+  background-size: 34px 34px;
+}
+
+@keyframes hazard-move {
+  to {
+    background-position: 34px 0;
+  }
+}
+
+.hazard-moving {
+  animation: hazard-move 1s linear infinite;
+}
+
+.grid-paper {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 100%);
+}
+
+.perforation {
+  background-image: radial-gradient(circle, var(--color-line-strong) 1.2px, transparent 1.6px);
+  background-size: 10px 10px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 10px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.rise {
+  animation: rise 0.6s var(--ease-out-soft) both;
+}
+
+.rise-1 {
+  animation-delay: 80ms;
+}
+.rise-2 {
+  animation-delay: 160ms;
+}
+.rise-3 {
+  animation-delay: 240ms;
+}
+
+/* The drop zone: a dashed border that marches while a file hovers over it. */
+.dropzone {
+  background-image:
+    linear-gradient(90deg, var(--color-line-strong) 50%, transparent 50%),
+    linear-gradient(90deg, var(--color-line-strong) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-line-strong) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-line-strong) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size:
+    16px 2px,
+    16px 2px,
+    2px 16px,
+    2px 16px;
+  background-position:
+    0 0,
+    0 100%,
+    0 0,
+    100% 0;
+  transition:
+    background-color 0.25s ease,
+    transform 0.25s var(--ease-out-soft);
+}
+
+@keyframes march {
+  to {
+    background-position:
+      16px 0,
+      -16px 100%,
+      0 -16px,
+      100% 16px;
+  }
+}
+
+.dropzone[data-dragging='true'] {
+  background-image:
+    linear-gradient(90deg, var(--color-accent) 50%, transparent 50%),
+    linear-gradient(90deg, var(--color-accent) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-accent) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-accent) 50%, transparent 50%);
+  background-color: var(--color-accent-soft);
+  transform: scale(1.01);
+  animation: march 0.6s linear infinite;
+}
+
+@keyframes flash {
+  from {
+    box-shadow: 0 0 0 0 rgb(111 227 161 / 0.7);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgb(111 227 161 / 0);
+  }
+}
+
+.flash {
+  animation: flash 0.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .hazard-moving,
+  .dropzone[data-dragging='true'],
+  .flash {
+    animation: none;
+  }
+
+  .btn,
+  .btn:hover,
+  .btn:active,
+  .dropzone[data-dragging='true'] {
+    transform: none;
+  }
+}

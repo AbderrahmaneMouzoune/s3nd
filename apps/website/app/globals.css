@@ -1,0 +1,591 @@
+@import 'tailwindcss';
+
+/*
+ * One committed palette: near-black, warm paper for text, and the amber of a
+ * departure board for anything that matters. The site does not switch with the
+ * colour scheme; the identity is the dark board.
+ */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.6), 0 12px 32px -16px rgb(0 0 0 / 0.8);
+  --shadow-tile: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 0 #000, 0 8px 18px -10px rgb(0 0 0 / 0.9);
+}
+
+/* Corners stay tight everywhere: this is hardware, not a SaaS dashboard. */
+@theme {
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+  --radius-3xl: 10px;
+}
+
+:root {
+  color-scheme: dark;
+
+  --canvas: #0a0a0a;
+  --surface: #111111;
+  --surface-muted: #171716;
+  --ink: #f3efe4;
+  --ink-muted: #b3ada1;
+  --ink-faint: #7f7a70;
+  --line: #262624;
+  --line-strong: #3d3b36;
+  --accent: #ffb000;
+  --accent-bright: #ffcf4d;
+  --accent-ink: #0a0a0a;
+  --accent-soft: #2b1e05;
+  --ok: #6fe3a1;
+  --danger: #ff5a4a;
+
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+html {
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Shiki, single dark theme; the panel owns the background. */
+.shiki {
+  background-color: transparent !important;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+.btn {
+  transition:
+    transform 0.25s var(--ease-out-soft),
+    box-shadow 0.25s var(--ease-out-soft),
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* The primary glows: a hairline of amber around it and a soft pool beneath. */
+.btn-primary {
+  box-shadow:
+    0 0 0 1px rgb(255 176 0 / 0.55),
+    0 10px 30px -12px rgb(255 176 0 / 0.65);
+}
+
+.btn-primary:hover {
+  box-shadow:
+    0 0 0 1px var(--accent-bright),
+    0 14px 36px -12px rgb(255 176 0 / 0.85);
+}
+
+.btn-secondary:hover {
+  box-shadow: 0 10px 30px -14px rgb(255 176 0 / 0.35);
+}
+
+/* ─── Links ───────────────────────────────────────────────────────────── */
+
+/* An underline that draws itself from the left. */
+.text-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  padding-bottom: 1px;
+  transition:
+    background-size 0.3s var(--ease-out-soft),
+    color 0.2s ease;
+}
+
+.text-link:hover,
+.text-link:focus-visible {
+  background-size: 100% 1px;
+}
+
+/* ─── Cards ───────────────────────────────────────────────────────────── */
+
+/* The amber bar along the bottom edge that grows in on hover. */
+.card-bar {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s var(--ease-out-soft);
+}
+
+.card-link:hover .card-bar,
+.card-link:focus-visible .card-bar {
+  transform: scaleX(1);
+}
+
+.card-link:hover {
+  box-shadow: 0 16px 40px -24px rgb(0 0 0 / 0.9);
+}
+
+/* ─── Entrance ────────────────────────────────────────────────────────── */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* Hero blocks, one after the other, on load. */
+.rise {
+  animation: rise 0.7s var(--ease-out-soft) both;
+}
+
+.rise-1 {
+  animation-delay: 60ms;
+}
+.rise-2 {
+  animation-delay: 140ms;
+}
+.rise-3 {
+  animation-delay: 220ms;
+}
+.rise-4 {
+  animation-delay: 300ms;
+}
+.rise-5 {
+  animation-delay: 380ms;
+}
+
+/*
+ * Everything below the fold fades up when it scrolls into view. The hidden
+ * state only applies where scripts run, so a browser without JavaScript, or a
+ * crawler, sees the page whole.
+ */
+@media (scripting: enabled) {
+  [data-reveal]:not([data-reveal='in']) {
+    opacity: 0;
+    translate: 0 18px;
+  }
+}
+
+[data-reveal] {
+  transition:
+    opacity 0.7s ease,
+    translate 0.7s var(--ease-out-soft);
+  transition-delay: calc(var(--stagger, 0) * 90ms);
+}
+
+/* ─── Small motions ───────────────────────────────────────────────────── */
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The cursor at the end of a terminal. */
+.caret::after {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 0.1em;
+  vertical-align: -0.15em;
+  background: var(--accent);
+  animation: blink 1.1s steps(1) infinite;
+}
+
+@keyframes flash {
+  from {
+    box-shadow: 0 0 0 0 rgb(111 227 161 / 0.7);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgb(111 227 161 / 0);
+  }
+}
+
+/* A copied command or block: one green ring, outwards, gone. */
+.flash {
+  animation: flash 0.6s ease-out;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 176 0 / 0.45);
+  }
+  60% {
+    box-shadow: 0 0 0 7px rgb(255 176 0 / 0);
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2.2s ease-out infinite;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* The dotted connector in the diagram, moving downwards. */
+.dash-flow {
+  animation: dash-flow 1.2s linear infinite;
+}
+
+/* The copy button on a code block: quiet until the block is hovered. */
+.copy-button {
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.code-block:hover .copy-button,
+.copy-button:focus-visible,
+.copy-button[data-copied='true'] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .copy-button {
+    opacity: 1;
+  }
+}
+
+/* The mega menu panel and its items, on open. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+[data-menu-panel] {
+  animation: menu-in 0.2s var(--ease-out-soft) both;
+}
+
+.menu-item {
+  animation: rise 0.4s var(--ease-out-soft) both;
+  animation-delay: calc(40ms + var(--stagger, 0) * 30ms);
+}
+
+/* The answer in a FAQ entry, on open. */
+.faq[open] .faq-body {
+  animation: rise 0.35s var(--ease-out-soft) both;
+}
+
+/* ─── The split-flap tile ─────────────────────────────────────────────── */
+
+.flap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  background: linear-gradient(180deg, #262523 0%, #1c1b19 49.6%, #111110 50.4%, #181816 100%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  text-shadow: 0 0 14px rgb(255 176 0 / 0.35);
+  user-select: none;
+}
+
+.flap::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: 1px;
+  background: #050505;
+}
+
+.flap[data-blank='true'] {
+  color: var(--line-strong);
+  text-shadow: none;
+}
+
+/* ─── Ticker ──────────────────────────────────────────────────────────── */
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-track {
+  animation: ticker 48s linear infinite;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* ─── Textures ────────────────────────────────────────────────────────── */
+
+/* A row of holes, the tear-off line on a ticket. */
+.perforation {
+  background-image: radial-gradient(circle, var(--line-strong) 1.2px, transparent 1.6px);
+  background-size: 10px 10px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 10px;
+}
+
+/* Amber and black hazard stripes: the edge of something that moves. */
+.hazard {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 12px, var(--canvas) 12px 24px);
+  background-size: 34px 34px;
+}
+
+@keyframes hazard-move {
+  to {
+    background-position: 34px 0;
+  }
+}
+
+.hazard-moving {
+  animation: hazard-move 1.2s linear infinite;
+}
+
+/* Faint engineering grid behind the hero. */
+.grid-paper {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* Long-form text on the comparison and use-case pages. */
+.prose-site > p + p {
+  margin-top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ticker-track,
+  .rise,
+  .menu-item,
+  [data-menu-panel],
+  .faq[open] .faq-body,
+  .caret::after,
+  .pulse-dot,
+  .dash-flow,
+  .hazard-moving,
+  .flash {
+    animation: none;
+  }
+
+  [data-reveal] {
+    transition: none;
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  .btn,
+  .btn:hover,
+  .btn:active {
+    transform: none;
+  }
+}
+
+/* ─── Illustrations ───────────────────────────────────────────────────── */
+
+/* A dashed route, flowing towards its end. */
+.ill-dash {
+  animation: dash-flow 1s linear infinite;
+}
+
+@keyframes dash-back {
+  to {
+    stroke-dashoffset: 12;
+  }
+}
+
+.ill-dash-back {
+  animation: dash-back 1s linear infinite;
+}
+
+@keyframes ill-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.ill-blink {
+  animation: ill-blink 1.1s steps(1) infinite;
+}
+
+.ill-blink-slow {
+  animation: ill-blink 2.4s steps(1) infinite;
+}
+
+@keyframes ill-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.ill-pulse {
+  animation: ill-pulse 2.4s ease-in-out infinite;
+}
+
+.ill-ghost {
+  opacity: 0.55;
+  animation: ill-pulse 4s ease-in-out infinite;
+}
+
+@keyframes ill-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.ill-float {
+  animation: ill-float 3.2s ease-in-out infinite;
+}
+
+.ill-float-small {
+  animation: ill-float 2.4s ease-in-out infinite;
+}
+
+/* A split-flap tile that flips in turn: it collapses, then springs back. */
+@keyframes ill-flip {
+  0%,
+  6% {
+    transform: scaleY(1);
+  }
+  9% {
+    transform: scaleY(0.05);
+  }
+  12%,
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.ill-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ill-flip 6s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 120ms);
+}
+
+/* The expiry ring, running down over six seconds and starting over. */
+@keyframes ill-countdown {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 81.7;
+  }
+}
+
+.ill-countdown {
+  stroke-dasharray: 81.7;
+  animation: ill-countdown 6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ill-dash,
+  .ill-dash-back,
+  .ill-blink,
+  .ill-blink-slow,
+  .ill-pulse,
+  .ill-ghost,
+  .ill-float,
+  .ill-float-small,
+  .ill-tile,
+  .ill-countdown {
+    animation: none;
+  }
+
+  /* The travelling packets are SMIL, which CSS cannot pause: hide them. */
+  .ill-motion {
+    display: none;
+  }
+}
+
+/* ─── Bento cells ─────────────────────────────────────────────────────── */
+
+.bento-figure {
+  background-color: #0d0d0c;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bento-figure svg {
+  display: block;
+  transition: transform 0.5s var(--ease-out-soft);
+}
+
+.bento:hover .bento-figure svg {
+  transform: scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento:hover .bento-figure svg {
+    transform: none;
+  }
+}
