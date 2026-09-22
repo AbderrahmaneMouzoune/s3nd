@@ -25,7 +25,7 @@ burned    gone
 
 ## Worth noticing
 
-- **The compression ratio is the headline.** A realistic dump — many records that look alike — is
+- **The compression ratio is the headline.** A realistic dump (many records that look alike) is
   the best case for gzip, and that ratio is what keeps a real database under your runtime's
   request limit.
 - **The typed code is deliberately messy.** Lowercase, with a dash, exactly what a person produces.

@@ -1,5 +1,14 @@
 # @s3nd/react
 
+[![npm](https://img.shields.io/npm/v/%40s3nd%2Freact?color=ffb000&labelColor=111111&label=npm)](https://www.npmjs.com/package/@s3nd/react)
+[![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Freact?color=111111&labelColor=111111&label=install%20size)](https://www.npmjs.com/package/@s3nd/react)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/react/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbderrahmaneMouzoune/s3nd/main/.github/demos/react.gif" alt="Two phones side by side. On the old one, a button moves 200 notes to another device and shows the code K7QP2M4X. On the new one, k7qp-2m4x is typed in lowercase with a dash, read as K7QP2M4X, looked up, and the notes are restored." width="880">
+</p>
+
 React hooks for moving a local-first app's data between devices: send a snapshot or a file, read a
 code back, and an input that repairs the code as the user types it.
 
@@ -8,7 +17,7 @@ npm install @s3nd/react
 ```
 
 **It never sees a storage credential, and never pulls a storage client.** Its whole dependency tree
-is `@s3nd/protocol` and `nanoid`, with React as a peer — the AWS SDK stays on your server,
+is `@s3nd/protocol` and `nanoid`, with React as a peer; the AWS SDK stays on your server,
 where `@s3nd/core` runs. That separation is the reason this is its own package.
 
 React 18 or later. Every export is a client hook, and the build carries `'use client'`, so it drops
@@ -27,7 +36,7 @@ export default function Providers({ children }) {
 }
 ```
 
-Pass `headers` for a token, or `client` to bring your own — which is also how you drive it in tests,
+Pass `headers` for a token, or `client` to bring your own, which is also how you drive it in tests,
 with no network at all.
 
 ## Sending
@@ -53,7 +62,7 @@ function MoveToAnotherDevice() {
 
 `sendFile` takes a `File` straight off an `<input type="file">`, keeping its name and type.
 
-Failures land in `error` rather than rejecting — an event handler should not need a `try`/`catch`.
+Failures land in `error` rather than rejecting: an event handler should not need a `try`/`catch`.
 The call returns `null` when it failed, for callers that want to branch.
 
 ## Receiving
@@ -98,7 +107,7 @@ folded, and `O`/`I`/`L` read as `0`/`1`/`1` where the alphabet makes that unambi
 const { value, code, isComplete, error, inputProps } = useSyncCodeInput()
 ```
 
-What the user typed stays in `value`, untouched — rewriting the field under the cursor is the one
+What the user typed stays in `value`, untouched; rewriting the field under the cursor is the one
 thing that makes these inputs miserable. `code` is the canonical form to submit, `null` while what
 is typed cannot be one. `inputProps` carries the keyboard and autofill hints a one-time code wants.
 
@@ -120,7 +129,7 @@ useSyncCodeInput({ length: 4, alphabet: '0123456789' }) // inputProps.inputMode 
 `status` is `'idle' | 'pending' | 'success' | 'error'`.
 
 Every call aborts the one before it, a late reply from a superseded call is dropped rather than
-published, and nothing is written after unmount — so a user hammering a button does not end up with
+published, and nothing is written after unmount, so a user hammering a button does not end up with
 whichever request happened to finish last.
 
 ## License

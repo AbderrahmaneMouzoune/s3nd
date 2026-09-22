@@ -1,0 +1,57 @@
+name: Bug report
+description: Something does not do what the documentation says
+labels: [bug]
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - '@s3nd/core'
+        - '@s3nd/cli'
+        - '@s3nd/react'
+        - '@s3nd/protocol'
+        - The drop template
+        - The documentation or the website
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage
+      options:
+        - AWS S3
+        - Cloudflare R2
+        - MinIO
+        - Scaleway
+        - Wasabi
+        - Another S3-compatible service
+        - Through a server (--remote, or the protocol)
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Paste the exact output. `s3nd doctor` and `s3nd config` are the useful ones, and neither prints a secret.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: A command, a snippet or a repository. The in-memory S3 in `packages/s3nd/test/helpers.ts` makes an offline reproduction possible.
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      placeholder: Node 22.12 on macOS 15 · Vercel serverless · Bun 1.3

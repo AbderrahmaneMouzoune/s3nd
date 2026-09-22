@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://doc.s3nd.sh
+    about: Guides, use cases, every CLI command and the protocol. The answer is often already there.
+  - name: Report a security vulnerability
+    url: https://github.com/AbderrahmaneMouzoune/s3nd/security/advisories/new
+    about: Privately, please. It reaches the maintainer alone.

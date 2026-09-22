@@ -1,5 +1,14 @@
 # @s3nd/core
 
+[![npm](https://img.shields.io/npm/v/%40s3nd%2Fcore?color=ffb000&labelColor=111111&label=npm)](https://www.npmjs.com/package/@s3nd/core)
+[![install size](https://img.shields.io/npm/unpacked-size/%40s3nd%2Fcore?color=111111&labelColor=111111&label=install%20size)](https://www.npmjs.com/package/@s3nd/core)
+[![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/s3nd/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AbderrahmaneMouzoune/s3nd/main/.github/demos/core.gif" alt="A terminal runs the round-trip example: a snapshot of 200 notes is stored under the code K7QP2M4X, read back through the sloppily typed k7qp-2m4x, both conditional writes are rejected with PRECONDITION_FAILED, and the code is burned." width="880">
+</p>
+
 Move a local-first app's data from one device to another, through your own bucket.
 
 ```ts
@@ -18,7 +27,7 @@ snapshot?.data // → the state, ready to write back into IndexedDB
 
 Your app keeps everything in IndexedDB: fast, offline, private. Then the user opens it on their
 phone and it is empty, because IndexedDB does not leave the browser it was written in. s3nd
-is the small server-side piece that closes that gap — it snapshots the local state into a bucket
+is the small server-side piece that closes that gap: it snapshots the local state into a bucket
 you control, under a code the user carries across.
 
 Credentials stay on your server. The browser only ever talks to your own API, so there is no CORS
@@ -36,7 +45,7 @@ lives in the same repository.
 npm install @s3nd/core
 ```
 
-Node 20 or later — that is what AWS SDK v3 requires. `@aws-sdk/client-s3` and
+Node 20 or later, which is what AWS SDK v3 requires. `@aws-sdk/client-s3` and
 `@aws-sdk/s3-request-presigner` come along as dependencies, so there is nothing else to install
 and no peer dependency to satisfy.
 
@@ -58,7 +67,7 @@ and no peer dependency to satisfy.
 
 That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` reads it back and:
 
-- returns `null` when there is nothing stored, **or when the snapshot has expired** — an expired
+- returns `null` when there is nothing stored, **or when the snapshot has expired**; an expired
   snapshot is never handed over, even if the object is still sitting in the bucket;
 - throws `SNAPSHOT_TOO_NEW` when the snapshot's `version` is above the `maxVersion` this build
   understands, instead of feeding an old app data it will misread;
@@ -66,7 +75,7 @@ That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` 
   they are about to restore.
 
 Compression is on by default and is not a detail: an IndexedDB dump is repetitive JSON, so gzip
-routinely cuts it by 5–10×. That is headroom against the request limit of whatever runs your API.
+routinely cuts it by 5 to 10×. That is headroom against the request limit of whatever runs your API.
 
 ## The routes, without writing them
 
@@ -85,7 +94,7 @@ export const { GET, POST, DELETE } = createTransferHandler({
 })
 ```
 
-Every route is public unless you pass `authorize` — fine for a personal drop box behind a proxy,
+Every route is public unless you pass `authorize`: fine for a personal drop box behind a proxy,
 not fine for anything else:
 
 ```ts
@@ -96,7 +105,7 @@ createTransferHandler({
 ```
 
 The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
-nanoid — no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
+nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:
 
 ```ts
@@ -113,7 +122,7 @@ hooks: `useSendTransfer`, `useReceiveTransfer`, and an input that repairs the co
 types it.
 
 Writing the routes by hand stays perfectly reasonable when you want different shapes or different
-semantics — the handler is built on the same public methods you would call yourself, and
+semantics: the handler is built on the same public methods you would call yourself, and
 `store.codes`, `putSnapshot()` and `getSnapshot()` are unchanged.
 
 ## The CLI
@@ -125,7 +134,7 @@ this one, so nothing a command line needs ships to your server:
 npx @s3nd/cli doctor
 ```
 
-`doctor` performs the operations s3nd needs and reports what happened — including whether a
+`doctor` performs the operations s3nd needs and reports what happened, including whether a
 lifecycle rule will actually delete your expired transfers, which is the one thing nobody discovers
 until a bill arrives. `put`, `get` and `rm` move files between machines with a code.
 
@@ -136,7 +145,7 @@ never disagree about the alphabet. Codes are generated with
 [nanoid](https://github.com/ai/nanoid).
 
 The default is eight characters of
-[Crockford base32](https://www.crockford.com/base32.html) — no `I`, `L`, `O` or `U`, so a code
+[Crockford base32](https://www.crockford.com/base32.html): no `I`, `L`, `O` or `U`, so a code
 survives being read aloud, written on paper, or typed on a phone. Both halves are configurable:
 
 ```ts
@@ -148,11 +157,11 @@ const store = createBucket({
 })
 
 store.codes.create() // "8143"
-store.codes.entropyBits // 13.29 — what it is worth guessing against
+store.codes.entropyBits // 13.29, what it is worth guessing against
 ```
 
 `normalize()` canonicalizes what someone typed: separators dropped, case folded when the alphabet
-has a single case, and confusable characters repaired when the alphabet makes that unambiguous —
+has a single case, and confusable characters repaired when the alphabet makes that unambiguous:
 `O` reads as zero only when there is no letter `O` to confuse it with. Call it on user input before
 you look anything up.
 
@@ -165,7 +174,7 @@ store.codes.normalize('OIL5ABCD') // → "0115ABCD"
 store; prefer `store.codes` in application code, since configuring the shape in one place is what
 keeps the two sides in agreement.
 
-They are re-exported here from `@s3nd/protocol`, which owns them — a sync code _is_ part of
+They are re-exported here from `@s3nd/protocol`, which owns them: a sync code _is_ part of
 the contract between the two devices. Import them from there when you need them in a browser, so
 the repair can happen as the user types, before any network call:
 
@@ -174,7 +183,7 @@ import { normalizeSyncCode } from '@s3nd/protocol'
 ```
 
 **A sync code is a bearer token.** Anyone who has it can read that snapshot. Give it a short
-`expiresIn` and rate-limit the lookup route — the shorter the code, the more that rate limit is
+`expiresIn` and rate-limit the lookup route; the shorter the code, the more that rate limit is
 doing the work. If the data is sensitive, encrypt it in the browser before it ever reaches your
 server: `putSnapshot()` stores whatever you hand it, ciphertext included.
 
@@ -183,8 +192,8 @@ Burning a code after a successful restore is a good habit, and there is no separ
 
 ## Two devices, one snapshot
 
-For a shared key that both devices write to — a continuous backup rather than a one-shot
-transfer — pass the ETag you last read as `ifMatch`. A device that writes after someone else did
+For a shared key that both devices write to (a continuous backup rather than a one-shot
+transfer), pass the ETag you last read as `ifMatch`. A device that writes after someone else did
 gets `PRECONDITION_FAILED` instead of silently discarding their work:
 
 ```ts
@@ -207,7 +216,7 @@ freshly generated code without a chance of trampling one already in use.
 ## The file API underneath
 
 Snapshots are built on a small set of file primitives, and they stay available for everything that
-is not a snapshot — an attachment, an exported PDF, an avatar:
+is not a snapshot, such as an attachment, an exported PDF or an avatar:
 
 ```ts
 await store.upload(file) // → { key, path, url?, size?, etag?, contentType }
@@ -240,7 +249,7 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`.                                                                    |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
 
-Failures that can be caught locally — a bad code, an oversized body, unserializable data — are
+Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
 raised before anything reaches the network.
 
 ## Size, and where the ceiling is
@@ -261,13 +270,13 @@ createBucket({
   bucket: 'my-bucket', // required (or S3ND_BUCKET / S3_BUCKET)
   region: 'eu-west-3', // or S3ND_REGION / AWS_REGION / AWS_DEFAULT_REGION
   credentials: { accessKeyId: '…', secretAccessKey: '…' }, // omit for the AWS provider chain
-  endpoint: 'https://…', // S3-compatible storage — or S3ND_ENDPOINT / S3_ENDPOINT
+  endpoint: 'https://…', // S3-compatible storage, or S3ND_ENDPOINT / S3_ENDPOINT
   prefix: 'snapshots', // internal namespace, applied on the way in and out
   maxSize: 5 * 1024 * 1024, // reject bigger writes before any network call
 })
 ```
 
-With an `endpoint` set, `region` defaults to `"auto"` and path-style addressing is enabled — what
+With an `endpoint` set, `region` defaults to `"auto"` and path-style addressing is enabled, which is what
 R2, MinIO and Scaleway expect. Every option except `client` falls back to an environment variable,
 so `createBucket()` with no arguments works once `S3_BUCKET` and the usual `AWS_*` variables are
 set.

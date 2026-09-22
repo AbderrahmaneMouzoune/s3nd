@@ -1,0 +1,32 @@
+name: Feature request
+description: Something s3nd should do, or do differently
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and where s3nd stops short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: An API, a flag, a route. A sketch is enough.
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      multiple: true
+      options:
+        - '@s3nd/core'
+        - '@s3nd/cli'
+        - '@s3nd/react'
+        - '@s3nd/protocol'
+        - The drop template
+        - The documentation or the website
