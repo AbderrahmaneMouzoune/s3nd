@@ -24,6 +24,44 @@ export function formatExpiry(expiresAt: string | undefined, now = Date.now()): s
   return `in ${Math.round(seconds / 86400)} days`
 }
 
+/**
+ * `2 d 04 h`, `23 h 14 m`, `04 m 09 s`: the time left, in the two units that
+ * matter at that distance, for a display that ticks.
+ */
+export function formatCountdown(expiresAt: string | undefined, now = Date.now()): string {
+  if (!expiresAt) return 'no expiry'
+
+  const total = Math.round((new Date(expiresAt).getTime() - now) / 1000)
+  if (total <= 0) return 'expired'
+
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const pad = (value: number) => String(value).padStart(2, '0')
+
+  if (days > 0) return `${days} d ${pad(hours)} h`
+  if (hours > 0) return `${hours} h ${pad(minutes)} m`
+
+  return `${pad(minutes)} m ${pad(seconds)} s`
+}
+
+/** `22 Sep 2026, 14:02`, in whatever locale and zone the reader is in. */
+export function formatMoment(iso: string | undefined): string {
+  if (!iso) return ''
+
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return date.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 /** `K7QP 2M4X`: the way a code should be shown, so it can be read out loud. */
 export function groupCode(code: string): string {
   return code.match(/.{1,4}/g)?.join(' ') ?? code

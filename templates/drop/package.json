@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@s3nd/core": "^0.1.0",
+    "@s3nd/protocol": "^0.1.0",
     "@s3nd/react": "^0.1.0",
     "next": "^16.3.3",
     "react": "^19.2.8",

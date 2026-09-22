@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { DROP_HEADERS, encodeHeaderValue } from '@/lib/options'
+
 import { CopyButton } from './copy-button'
 
 /**
@@ -11,10 +13,16 @@ import { CopyButton } from './copy-button'
  */
 export function BurnButton({
   code,
+  passphrase,
   prominent = false,
   onBurned,
 }: {
   code: string
+  /**
+   * The password on this transfer, when the page holding this button knows it
+   * without having unlocked in this browser — the sender's result page does.
+   */
+  passphrase?: string
   prominent?: boolean
   /** Where to go once the object is gone. */
   onBurned: (code: string) => void
@@ -25,7 +33,10 @@ export function BurnButton({
   async function burn() {
     setBurning(true)
     try {
-      await fetch(`/api/transfers/${encodeURIComponent(code)}`, { method: 'DELETE' })
+      await fetch(`/api/transfers/${encodeURIComponent(code)}`, {
+        method: 'DELETE',
+        headers: passphrase ? { [DROP_HEADERS.passphrase]: encodeHeaderValue(passphrase) } : undefined,
+      })
     } finally {
       onBurned(code)
     }
@@ -74,8 +85,21 @@ export function BurnButton({
  * The buttons under a transfer: download it, share it, burn it. Once the
  * download has started, burning steps forward: the file is on this device,
  * and nothing needs to stay in the bucket.
+ *
+ * A one-time code needs none of that — the download burns it on the way out —
+ * so it says so before the click rather than offering the choice after.
  */
-export function PickupActions({ code, filename, isFile }: { code: string; filename?: string; isFile: boolean }) {
+export function PickupActions({
+  code,
+  filename,
+  isFile,
+  oneTime = false,
+}: {
+  code: string
+  filename?: string
+  isFile: boolean
+  oneTime?: boolean
+}) {
   const router = useRouter()
   const [downloaded, setDownloaded] = useState(false)
 
@@ -83,6 +107,19 @@ export function PickupActions({ code, filename, isFile }: { code: string; filena
 
   return (
     <div className="flex w-full flex-col items-center gap-5">
+      {oneTime && !downloaded ? (
+        <p
+          className="border-danger/50 text-ink-muted w-full rounded-lg border px-5 py-4 text-sm text-pretty"
+          role="status"
+        >
+          <span className="text-danger font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
+            One download only.
+          </span>{' '}
+          The code burns as the file goes out: whatever lands on this device is all there is. Looking at the preview
+          costs nothing.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-center gap-3">
         {isFile ? (
           <a
@@ -91,11 +128,11 @@ export function PickupActions({ code, filename, isFile }: { code: string; filena
             download={filename}
             onClick={() => setDownloaded(true)}
           >
-            {downloaded ? 'Download again' : 'Download'} <span aria-hidden="true">↓</span>
+            {downloaded && !oneTime ? 'Download again' : 'Download'} <span aria-hidden="true">↓</span>
           </a>
         ) : null}
         <CopyButton text={() => `${window.location.origin}/${code}`} label="Copy the link" className="py-3.5" />
-        {!downloaded ? <BurnButton code={code} onBurned={burned} /> : null}
+        {!downloaded && !oneTime ? <BurnButton code={code} onBurned={burned} /> : null}
       </div>
 
       {downloaded ? (
@@ -105,13 +142,15 @@ export function PickupActions({ code, filename, isFile }: { code: string; filena
         >
           <div className="min-w-0 flex-1">
             <p className="text-accent font-mono text-[11px] font-semibold tracking-[0.22em] uppercase">
-              Got it? Burn the code.
+              {oneTime ? 'That was the one pickup.' : 'Got it? Burn the code.'}
             </p>
             <p className="text-ink-muted mt-1 text-sm text-pretty">
-              Nobody else can pick it up, and nothing is left in the bucket. Leave it, and it expires on its own.
+              {oneTime
+                ? 'The code is spent and nothing is left in the bucket under it. Check the file arrived before you leave this page.'
+                : 'Nobody else can pick it up, and nothing is left in the bucket. Leave it, and it expires on its own.'}
             </p>
           </div>
-          <BurnButton code={code} prominent onBurned={burned} />
+          {!oneTime ? <BurnButton code={code} prominent onBurned={burned} /> : null}
         </div>
       ) : null}
     </div>

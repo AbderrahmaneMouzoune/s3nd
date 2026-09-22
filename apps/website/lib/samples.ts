@@ -322,7 +322,9 @@ AWS_SECRET_ACCESS_KEY=…
 
 # optional
 DROP_PASSWORD=…              # ask for it before an upload
-DROP_EXPIRES_IN=86400        # seconds, one day
-DROP_MAX_SIZE_MB=4           # under Vercel's 4.5 MB request limit`,
+DROP_EXPIRES_IN=86400        # the default lifetime, in seconds
+DROP_MAX_EXPIRES_IN=604800   # the longest a sender may choose
+DROP_MAX_SIZE_MB=4           # under Vercel's 4.5 MB request limit
+DROP_PREVIEW=true            # show what is behind a code before downloading`,
   },
 } as const
