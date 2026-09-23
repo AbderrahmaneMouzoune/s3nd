@@ -41,3 +41,14 @@ It takes a few minutes. To check a single moment without rendering the whole fil
 node .github/launch/render.mjs still.jpg --stills 12.8,45.9   # writes still-12.80.jpg, still-45.90.jpg
 node .github/launch/render.mjs part.mp4 --from 30 --to 38      # a silent excerpt
 ```
+
+## On the website
+
+The how-it-works page plays a lighter cut from `apps/website/public/film/`: 720p30 in WebM (VP9 + Opus)
+with an MP4 (H.264 + AAC) fallback, and a poster from 13.5s. After a new render:
+
+```sh
+ffmpeg -i s3nd-launch.mp4 -vf scale=1280:720,fps=30 -c:v libvpx-vp9 -b:v 0 -crf 38 -c:a libopus -b:a 128k apps/website/public/film/s3nd-launch.webm
+ffmpeg -i s3nd-launch.mp4 -vf scale=1280:720,fps=30 -c:v libx264 -preset veryslow -crf 25 -c:a aac -b:a 128k -movflags +faststart apps/website/public/film/s3nd-launch.mp4
+ffmpeg -ss 13.5 -i s3nd-launch.mp4 -frames:v 1 -vf scale=1280:720 -q:v 3 apps/website/public/film/s3nd-launch-poster.jpg
+```
