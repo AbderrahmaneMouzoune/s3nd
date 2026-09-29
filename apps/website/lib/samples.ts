@@ -87,18 +87,28 @@ await store.putSnapshot(\`user-\${userId}\`, merged, { ifMatch: current?.etag })
 // → PRECONDITION_FAILED when another device won. Read again, merge again.`,
   },
   cli: {
-    INIT: `$ s3nd init --provider r2 --bucket transfers
-Wrote /home/you/transfers/s3nd.config.json
+    INIT: `$ s3nd setup
+? Where should transfers be stored?
+  1) AWS S3
+  2) Cloudflare R2                  no egress fees
+  …
+? Pick one (number) 2
+  Dashboard → R2 → Overview, "Account ID" in the side panel.
+? Cloudflare account ID 8c4f…
+? Bucket name transfers
+  R2 → Manage API tokens → Create API token, with Object Read & Write on this bucket.
+? Access key ID 5d1e…1a2b
+? Secret access key (hidden) ••••••••••••••••
 
-Put the three values in .env, and keep it out of git:
-  R2_ACCOUNT_ID=…
-  R2_ACCESS_KEY_ID=…
-  R2_SECRET_ACCESS_KEY=…
-The R2 API token needs Object Read & Write on this bucket, and nothing else.
-Give the bucket a lifecycle rule that deletes objects under "transfers/" after a day or two.
-Run \`s3nd doctor\` — it performs the operations s3nd needs and reports what happened.`,
+✓ Saved ~/.config/s3nd/config.json (readable by you only)
+  Cloudflare R2 · bucket "transfers" · credentials: key …1a2b
+
+Checking it works…
+✓ Write, read, delete: round-tripped a probe object
+Ready. Send something:
+  s3nd put ./a-file`,
     DOCTOR: `$ s3nd doctor
-Using /home/you/transfers/s3nd.config.json
+Using ~/.config/s3nd/config.json
 ✓ Configuration: bucket "transfers", region "auto"
 ✓ Credentials: resolved, key ends in 1a2b
 ✓ Bucket reachable: HeadBucket succeeded

@@ -56,7 +56,7 @@ export default async function CliPage({ params }: PageProps<'/[locale]/cli'>) {
         }
         aside={
           <div className="space-y-3">
-            <Command>npx @s3nd/cli doctor</Command>
+            <Command>s3nd setup</Command>
             <CodeBlock code={PUT_GET} lang="sh" />
           </div>
         }

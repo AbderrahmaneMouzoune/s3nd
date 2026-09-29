@@ -100,7 +100,7 @@ export function loadConfigFile(options: LoadOptions): LoadedConfig {
     if (profile) {
       throw new CliError(
         `--profile "${profile}" was given, but no configuration file was found.`,
-        `Run \`s3nd init\` to write one, or point at it with --config <path>.`,
+        `Run \`s3nd setup\` to write one, or point at it with --config <path>.`,
       )
     }
 
@@ -142,13 +142,18 @@ export function loadConfigFile(options: LoadOptions): LoadedConfig {
 
 function requireFile(path: string): string {
   if (!existsSync(path)) {
-    throw new CliError(`No configuration file at ${path}.`, 'Run `s3nd init` to write one.')
+    throw new CliError(`No configuration file at ${path}.`, 'Run `s3nd setup` to write one.')
   }
 
   return path
 }
 
 function discover(cwd: string, env: Env): string | undefined {
+  return findProjectConfig(cwd) ?? (existsSync(machineConfigPath(env)) ? machineConfigPath(env) : undefined)
+}
+
+/** The nearest project file, walking up from `cwd`. Wins over the machine's own file when there is one. */
+export function findProjectConfig(cwd: string): string | undefined {
   let directory = resolvePath(cwd)
 
   for (;;) {
@@ -158,15 +163,16 @@ function discover(cwd: string, env: Env): string | undefined {
     }
 
     const parent = dirname(directory)
-    if (parent === directory) break
+    if (parent === directory) return undefined
     directory = parent
   }
+}
 
-  const home = env.XDG_CONFIG_HOME
+/** Where `s3nd setup` writes, and the file every directory falls back to. */
+export function machineConfigPath(env: Env): string {
+  return env.XDG_CONFIG_HOME
     ? join(env.XDG_CONFIG_HOME, 's3nd', 'config.json')
     : join(homedir(), '.config', 's3nd', 'config.json')
-
-  return existsSync(home) ? home : undefined
 }
 
 function parseFile(path: string): ConfigFile {
@@ -379,7 +385,7 @@ function distance(a: string, b: string): number {
   return previous[b.length]!
 }
 
-function didYouMean(value: string, candidates: string[]): string {
+export function didYouMean(value: string, candidates: string[]): string {
   const lowered = value.toLowerCase()
   const [best] = candidates
     .map((candidate) => ({ candidate, score: distance(lowered, candidate.toLowerCase()) }))

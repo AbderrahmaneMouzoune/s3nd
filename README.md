@@ -59,39 +59,38 @@ on this bucket and nothing else. It hands back an access key id and a secret acc
 the account id too: it is the first part of the S3 endpoint R2 shows you,
 `https://<account-id>.r2.cloudflarestorage.com`.
 
-**3 · `s3nd init`.** It writes a configuration file that references the secrets instead of holding
-them, then `doctor` performs every operation s3nd needs against the real bucket and reports what
+**3 · `s3nd setup`.** It asks where transfers go (pick Cloudflare R2), the account id, the bucket
+and the two keys, saves them in `~/.config/s3nd/config.json` (readable by you only, used from any
+directory), then performs every operation s3nd needs against the real bucket and reports what
 happened:
 
 ```sh
 npm install -g @s3nd/cli
-s3nd init --provider r2 --bucket transfers
-
-cat > .env <<'EOF'
-R2_ACCOUNT_ID=…
-R2_ACCESS_KEY_ID=…
-R2_SECRET_ACCESS_KEY=…
-EOF
-echo .env >> .gitignore
-
-s3nd doctor
+s3nd setup
 ```
 
 ```
+✓ Saved ~/.config/s3nd/config.json (readable by you only)
+  Cloudflare R2 · bucket "transfers" · credentials: key …1a2b
+
+Checking it works…
 ✓ Configuration: bucket "transfers", region "auto", endpoint https://8c4….r2.cloudflarestorage.com
 ✓ Credentials: resolved, key ends in 1a2b
 ✓ Bucket reachable: HeadBucket succeeded
 ✓ Write, read, delete: round-tripped a probe object
-! Expiry cleanup: no enabled expiration rule
+! Expiry cleanup: no lifecycle configuration
   → Add an S3 lifecycle rule that expires objects under "transfers/" after a day or two.
 ```
+
+Rather keep the setup with a project, committed? `s3nd init` asks the same questions and writes
+`./s3nd.config.json`, with the keys in a `.env` beside it.
 
 That last line is worth acting on before the first real transfer: `expiresIn` stops a transfer being
 _handed over_ after a day, but only a lifecycle rule deletes the object. In the dashboard,
 **your bucket → Settings → Object lifecycle rules**, expire objects under the prefix `transfers/`
 after two days. Run `s3nd doctor` again and it turns green.
 
-Then send something. On the other machine, the same `s3nd.config.json` and `.env` are all it needs:
+Then send something. The other machine needs the same answers to `s3nd setup`, and nothing else:
 
 ```sh
 s3nd put ./report.pdf          # → K7QP2M4X
@@ -116,8 +115,7 @@ Open the console on [localhost:9001](http://localhost:9001) (`minioadmin` / `min
 a bucket named `transfers`. Then:
 
 ```sh
-s3nd init --provider minio --bucket transfers   # localhost:9000, minioadmin, no .env to write
-s3nd doctor
+s3nd setup --provider minio --bucket transfers   # Enter keeps localhost:9000 and minioadmin
 s3nd put ./report.pdf
 ```
 

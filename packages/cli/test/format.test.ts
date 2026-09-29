@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createStyle, formatBytes, formatDuration, parseDuration } from '../src/format.js'
+import { createStyle, formatBytes, formatDuration, parseDuration, tildify } from '../src/format.js'
 
 describe('formatBytes', () => {
   it('reads the way a person checks a file', () => {
@@ -60,5 +60,13 @@ describe('createStyle', () => {
 
   it('colours when a terminal is reading', () => {
     expect(createStyle({ isTTY: true }, {}).green('ok')).toBe('\u001B[32mok\u001B[39m')
+  })
+})
+
+describe('tildify', () => {
+  it('shortens paths under the home directory, and only those', () => {
+    expect(tildify('/home/you/.config/s3nd/config.json', '/home/you')).toBe('~/.config/s3nd/config.json')
+    expect(tildify('/home/youth/file', '/home/you')).toBe('/home/youth/file')
+    expect(tildify('/etc/s3nd.json', '/home/you')).toBe('/etc/s3nd.json')
   })
 })

@@ -30,7 +30,7 @@ const en: FaqEntry[] = [
   {
     question: 'Which storage providers work?',
     answer:
-      'AWS S3 and anything that speaks the S3 API: Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage and the rest. Set an endpoint and s3nd switches the two defaults those providers expect. s3nd init writes a starter configuration per provider, and s3nd doctor proves it works before you rely on it.',
+      'AWS S3 and anything that speaks the S3 API: Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage and the rest. Set an endpoint and s3nd switches the two defaults those providers expect. s3nd setup asks for what each provider needs, and s3nd doctor proves it works before you rely on it.',
     link: { label: 'Storage providers', href: '/providers' },
   },
   {
@@ -90,7 +90,7 @@ const fr: FaqEntry[] = [
   {
     question: 'Quels fournisseurs de stockage fonctionnent ?',
     answer:
-      'AWS S3 et tout ce qui parle l’API S3 : Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage et les autres. Définissez un endpoint et s3nd bascule les deux valeurs par défaut que ces fournisseurs attendent. s3nd init écrit une configuration de départ par fournisseur, et s3nd doctor prouve qu’elle fonctionne avant que vous ne vous y fiiez.',
+      'AWS S3 et tout ce qui parle l’API S3 : Cloudflare R2, MinIO, Scaleway Object Storage, Wasabi, Ceph, Garage et les autres. Définissez un endpoint et s3nd bascule les deux valeurs par défaut que ces fournisseurs attendent. s3nd setup demande ce dont chaque fournisseur a besoin, et s3nd doctor prouve que ça fonctionne avant que vous ne vous y fiiez.',
     link: { label: 'Fournisseurs de stockage', href: '/providers' },
   },
   {
