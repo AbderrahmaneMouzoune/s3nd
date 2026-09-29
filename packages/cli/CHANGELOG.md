@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0](https://github.com/AbderrahmaneMouzoune/s3nd/compare/cli-v0.1.0...cli-v0.2.0) (2026-09-29)
+
+
+### Features
+
+* **cli:** guided setup that works from any directory ([47e2678](https://github.com/AbderrahmaneMouzoune/s3nd/commit/47e2678b9b7519917553a77353d72ab8ea88414f))
+* **cli:** guided setup that works from any directory ([5b2ec72](https://github.com/AbderrahmaneMouzoune/s3nd/commit/5b2ec72bca76ae1ebbcd7a7b0ef1116a8ff752cf))
+* **cli:** pick the provider with the arrow keys ([2836150](https://github.com/AbderrahmaneMouzoune/s3nd/commit/2836150a1cec4471a657bed91034ded5d39cd7f5))
+
+
+### Documentation
+
+* a ten-second GIF on each package page, and no more em dashes ([a8a9dee](https://github.com/AbderrahmaneMouzoune/s3nd/commit/a8a9deec40961ab2b890d3fdf62e2a2ff3865be0))
+* npm version badges on the README and every package page ([454f7aa](https://github.com/AbderrahmaneMouzoune/s3nd/commit/454f7aa01f49b56aa65d7553c52056118a0ac4a8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @s3nd/core bumped from ^0.1.0 to ^0.1.1
+    * @s3nd/protocol bumped from ^0.1.0 to ^0.1.1
+
 ## 0.1.0 (2026-09-22)
 
 
