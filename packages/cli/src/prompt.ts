@@ -60,9 +60,12 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
   let waiting: { resolve: (line: string) => void; reject: (error: Error) => void } | undefined
   let ended = false
   let muted = false
+  /** A list is open: readline's own echo and the empty line Enter makes are not answers. */
+  let selecting = false
   let prompt = ''
 
   rl.on('line', (line) => {
+    if (selecting) return
     if (waiting) {
       const current = waiting
       waiting = undefined
@@ -82,7 +85,8 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
   })
 
   rl.on('SIGINT', () => {
-    output.write('\n')
+    // The cursor is hidden while a list is open; an interrupt must not leave it that way.
+    output.write(terminal ? `${SHOW_CURSOR}\n` : '\n')
     const current = waiting
     waiting = undefined
     current?.reject(new Cancelled())
@@ -94,6 +98,7 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
   const internals = rl as unknown as { _writeToOutput(text: string): void; line: string }
   const write = internals._writeToOutput.bind(rl)
   internals._writeToOutput = (text: string) => {
+    if (selecting) return
     if (!muted || text.includes('\n')) return write(text)
 
     write(`\r\u001B[2K${prompt}${'•'.repeat(internals.line.length)}`)
@@ -162,11 +167,86 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
     }
   }
 
+  /**
+   * A list moved through with the arrow keys, at a terminal. Once picked, it
+   * folds back into one line holding the answer, so the transcript reads like
+   * every other question.
+   */
+  function select<T extends string>(question: string, choices: Choice<T>[], start: number): Promise<T> {
+    let index = start
+    const width = Math.max(...choices.map((choice) => choice.label.length))
+    // A pseudo-terminal can report 0 columns; that means unknown, not narrow.
+    const columns = Math.max(20, (output as { columns?: number }).columns || 80)
+
+    // One row per screen line, or the redraw would miscount after a wrap.
+    const row = (choice: Choice<T>, active: boolean) => {
+      const room = columns - 5 - width
+      const hint =
+        !choice.hint || room < 8 ? '' : choice.hint.length > room ? `${choice.hint.slice(0, room - 1)}…` : choice.hint
+      const text = hint ? `${choice.label.padEnd(width)}  ${style.dim(hint)}` : choice.label
+
+      return active ? `${style.yellow('❯')} ${style.bold(text)}` : `  ${text}`
+    }
+
+    const draw = (again: boolean) => {
+      if (again) output.write(`\u001B[${choices.length + 1}A`)
+      choices.forEach((choice, position) => output.write(`\r\u001B[2K${row(choice, position === index)}\n`))
+      output.write(`\r\u001B[2K${style.dim('  ↑↓ to move · Enter to pick')}\n`)
+    }
+
+    output.write(`${HIDE_CURSOR}${style.bold('?')} ${question}\n`)
+    draw(false)
+    selecting = true
+
+    return new Promise<T>((resolve, reject) => {
+      const finish = () => {
+        input.off('keypress', onKey)
+        selecting = false
+        waiting = undefined
+      }
+
+      const onKey = (text: string | undefined, key: { name?: string; ctrl?: boolean } = {}) => {
+        if (key.ctrl) return // Ctrl+C arrives as readline's SIGINT, which rejects through \`waiting\`.
+
+        if (key.name === 'up' || key.name === 'k') index = (index + choices.length - 1) % choices.length
+        else if (key.name === 'down' || key.name === 'j' || key.name === 'tab') index = (index + 1) % choices.length
+        else if (key.name === 'home') index = 0
+        else if (key.name === 'end') index = choices.length - 1
+        else if (text && /^[1-9]$/.test(text) && Number(text) <= choices.length) index = Number(text) - 1
+        else if (key.name === 'return' || key.name === 'enter') {
+          finish()
+          output.write(`\u001B[${choices.length + 2}A\r\u001B[J`)
+          output.write(`${style.bold('?')} ${question} ${style.yellow(choices[index]!.label)}\n${SHOW_CURSOR}`)
+          resolve(choices[index]!.value)
+          return
+        } else return
+
+        draw(true)
+      }
+
+      waiting = {
+        resolve: () => undefined,
+        reject: (error) => {
+          finish()
+          output.write(SHOW_CURSOR)
+          reject(error)
+        },
+      }
+      input.on('keypress', onKey)
+    })
+  }
+
   return {
     text: (question, options = {}) => ask(question, options, false),
     secret: (question, options = {}) => ask(question, options, true),
 
     async choose(question, choices, defaultValue) {
+      const start = Math.max(
+        0,
+        choices.findIndex((choice) => choice.value === defaultValue),
+      )
+      if (terminal) return select(question, choices, start)
+
       output.write(`${style.bold('?')} ${question}\n`)
 
       const width = Math.max(...choices.map((choice) => choice.label.length))
@@ -175,7 +255,7 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
         output.write(`  ${style.dim(`${index + 1})`)} ${text}\n`)
       })
 
-      const fallback = defaultValue ? choices.findIndex((choice) => choice.value === defaultValue) + 1 : undefined
+      const fallback = defaultValue ? start + 1 : undefined
 
       for (;;) {
         const answer = (await readLine(label('Pick one', fallback ? `(${fallback})` : '(number)'))).trim()
@@ -207,6 +287,9 @@ export function createPrompter({ input, output, style }: PrompterOptions): Promp
     },
   }
 }
+
+const HIDE_CURSOR = '\u001B[?25l'
+const SHOW_CURSOR = '\u001B[?25h'
 
 /** A number from the list, or a value or label typed out — or enough of one to be unambiguous. */
 function pick<T extends string>(answer: string, choices: Choice<T>[]): T | undefined {

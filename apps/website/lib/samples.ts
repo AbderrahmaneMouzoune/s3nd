@@ -89,10 +89,11 @@ await store.putSnapshot(\`user-\${userId}\`, merged, { ifMatch: current?.etag })
   cli: {
     INIT: `$ s3nd setup
 ? Where should transfers be stored?
-  1) AWS S3
-  2) Cloudflare R2                  no egress fees
+  AWS S3
+❯ Cloudflare R2                  no egress fees
+  Scaleway
   …
-? Pick one (number) 2
+  ↑↓ to move · Enter to pick
   Dashboard → R2 → Overview, "Account ID" in the side panel.
 ? Cloudflare account ID 8c4f…
 ? Bucket name transfers

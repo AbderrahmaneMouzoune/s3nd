@@ -21,24 +21,30 @@ argument parser.
 
 ## `setup` and `init`
 
-`setup` asks where transfers are stored, the bucket and the keys, one question at a time, with
-where to find each value. It writes `~/.config/s3nd/config.json`, readable by you only and used
-from any directory, then checks the bucket live:
+`setup` asks where transfers are stored (a list you move through with the arrow keys), the bucket
+and the keys, one question at a time, with where to find each value. It writes `~/.config/s3nd/config.json`, readable by you only and used
+from any directory, then checks the bucket live. The provider list, while it is open:
+
+```
+? Where should transfers be stored?
+  AWS S3
+❯ Cloudflare R2                  no egress fees
+  Scaleway
+  Wasabi
+  MinIO                          on this machine or self-hosted
+  Another S3-compatible service  Backblaze B2, DigitalOcean Spaces, Hetzner…
+  A s3nd server                  someone else runs it; you only need its URL
+  ↑↓ to move · Enter to pick
+```
+
+Once picked it folds into one line, and the whole run reads:
 
 ```
 $ s3nd setup
 Set up s3nd on this machine
 Saved to ~/.config/s3nd/config.json, used from any directory. Ctrl+C leaves without writing.
 
-? Where should transfers be stored?
-  1) AWS S3
-  2) Cloudflare R2                  no egress fees
-  3) Scaleway
-  4) Wasabi
-  5) MinIO                          on this machine or self-hosted
-  6) Another S3-compatible service  Backblaze B2, DigitalOcean Spaces, Hetzner…
-  7) A s3nd server                  someone runs the transfer routes; you only need a URL
-? Pick one (number) 2
+? Where should transfers be stored? Cloudflare R2
   Dashboard → R2 → Overview, "Account ID" in the side panel. The S3 API URL works too.
 ? Cloudflare account ID 8c4f…
   An existing bucket. The check at the end tells you if it is not reachable.

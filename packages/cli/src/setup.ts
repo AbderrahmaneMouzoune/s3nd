@@ -45,7 +45,7 @@ export const PROVIDER_CHOICES: Choice<Provider>[] = [
   { value: 'wasabi', label: 'Wasabi' },
   { value: 'minio', label: 'MinIO', hint: 'on this machine or self-hosted' },
   { value: 'other', label: 'Another S3-compatible service', hint: 'Backblaze B2, DigitalOcean Spaces, Hetzner…' },
-  { value: 'remote', label: 'A s3nd server', hint: 'someone runs the transfer routes; you only need a URL' },
+  { value: 'remote', label: 'A s3nd server', hint: 'someone else runs it; you only need its URL' },
 ]
 
 const KEY_NAMES: Record<Exclude<Provider, 'remote'>, [string, string]> = {
