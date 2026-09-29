@@ -40,10 +40,13 @@ export default async function CliPage({ params }: PageProps<'/[locale]/cli'>) {
         lead={t.lead}
         actions={
           <>
-            <ButtonLink href={docs('/cli')} size="lg" external>
+            <Command variant="primary" className="w-full sm:w-auto">
+              {packages.cli.install}
+            </Command>
+            <ButtonLink href={docs('/cli')} variant="secondary" size="lg" external>
               {t.primary}
             </ButtonLink>
-            <ButtonLink href={docs('/no-server')} variant="secondary" size="lg" external>
+            <ButtonLink href={docs('/no-server')} variant="ghost" size="lg" external>
               {t.secondary}
             </ButtonLink>
             <ButtonLink href={packages.cli.npm} variant="ghost" size="lg" external>
@@ -53,10 +56,7 @@ export default async function CliPage({ params }: PageProps<'/[locale]/cli'>) {
         }
         aside={
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-3">
-              <Command>{packages.cli.install}</Command>
-              <Command>npx @s3nd/cli doctor</Command>
-            </div>
+            <Command>npx @s3nd/cli doctor</Command>
             <CodeBlock code={PUT_GET} lang="sh" />
           </div>
         }
