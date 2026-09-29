@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/demo.gif" alt="A terminal on machine A: s3nd init, s3nd doctor, then s3nd put ./report.pdf prints the code K7QP2M4X. A second terminal opens on another machine: s3nd get k7qp-2m4x writes report.pdf back, s3nd rm burns the code." width="880">
+  <img src=".github/demo.gif" alt="A terminal on machine A: s3nd setup picks Cloudflare R2 from a list with the arrow keys, asks for the account ID, bucket and keys, and checks the bucket; then s3nd put ./report.pdf prints the code K7QP2M4X. A second terminal opens on another machine: s3nd get k7qp-2m4x writes report.pdf back, s3nd rm burns the code." width="880">
 </p>
 
 # s3nd
@@ -270,8 +270,8 @@ conditional headers, so snapshots genuinely round-trip without credentials or ne
 integration check against the real protocol, point an example at
 [the MinIO container above](#minio-on-your-machine-no-cloud-account).
 
-The demo at the top of this page is the CLI's real output for that journey, replayed in
-`.github/demo.gif`.
+The demo at the top of this page is the CLI's real output for that journey, a few lines shortened
+to fit, replayed in `.github/demo.gif`.
 
 ## Releasing
 
