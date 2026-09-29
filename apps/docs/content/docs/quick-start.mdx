@@ -1,14 +1,213 @@
 ---
 title: 'Quick start'
-description: 'Two routes on the server, two calls in the browser.'
+description: 'Four ways in, depending on what you are building. Pick yours; each one gets you to a working code in a few minutes.'
 ---
 
-The whole flow is two routes on your server and two calls from the browser.
+s3nd is four packages, and the right one depends on **where the transfer starts**. Pick the line
+that sounds like what you are building:
 
-## The bucket
+<Cards>
+  <Card title="Move files from a terminal" href="#from-a-terminal">
+    Between your own machines, or out of CI. One global install, nothing to deploy. `@s3nd/cli`
+  </Card>
+  <Card title="Send and receive in a React app" href="#in-a-react-app">
+    A button that hands out a code, a field that takes one. `@s3nd/react` in the browser, `@s3nd/core` on your server.
+  </Card>
+  <Card title="Write snapshots from server code" href="#from-your-server">
+    Your own routes call the bucket directly: Next.js, Hono, Express, a job. `@s3nd/core`
+  </Card>
+  <Card title="Talk to a s3nd server from elsewhere" href="#from-another-runtime">
+    React Native, a worker, a script, another framework. `@s3nd/protocol`: `fetch` and nothing else.
+  </Card>
+</Cards>
 
-```ts
-// lib/store.ts
+| You are building            | Install                      | Runs on                      | Needs a server |
+| --------------------------- | ---------------------------- | ---------------------------- | -------------- |
+| A terminal workflow, CI     | `npm install -g @s3nd/cli`   | your machines                | no             |
+| A React app                 | `@s3nd/react` + `@s3nd/core` | browser + your server        | yes, yours     |
+| Server-side code            | `@s3nd/core`                 | Node 20+, Bun, Deno, workers | it is one      |
+| A client in another runtime | `@s3nd/protocol`             | anything with `fetch`        | yes, any s3nd  |
+
+The first three need a bucket you can write to: AWS S3, Cloudflare R2, MinIO, Scaleway, Wasabi or
+any other S3-compatible storage. [Providers](/docs/providers) says what each one wants. The last
+one only needs the URL of a server that already has one.
+
+## From a terminal
+
+<Steps>
+<Step>
+
+### Install the CLI
+
+```sh
+npm install -g @s3nd/cli
+```
+
+</Step>
+<Step>
+
+### Answer a few questions
+
+```sh
+s3nd setup
+```
+
+It asks where transfers are stored, the bucket and the keys, with where to find each one. The
+answers go to `~/.config/s3nd/config.json`, readable by you only and used from any directory,
+and it ends by writing, reading and deleting a probe object to prove the bucket works.
+
+Skip this step if you like: the first command that needs a bucket offers to run it.
+
+</Step>
+<Step>
+
+### Send, then receive
+
+```sh
+s3nd put ./report.pdf     # prints a code: K7QP2M4X
+```
+
+```sh
+s3nd get k7qp-2m4x        # on the other machine; case and dashes do not matter
+```
+
+</Step>
+</Steps>
+
+Next: [the CLI reference](/docs/cli), or [Without a server](/docs/no-server) for the whole R2
+setup, CI included.
+
+## In a React app
+
+A browser cannot hold your bucket's keys, so this path has two halves: four routes on your server,
+and hooks in the browser that talk to them. The AWS SDK never reaches the client bundle.
+
+<Steps>
+<Step>
+
+### Install both halves
+
+```sh
+npm install @s3nd/core @s3nd/react
+```
+
+</Step>
+<Step>
+
+### Mount the routes on your server
+
+```ts title="app/api/transfers/[[...route]]/route.ts"
+import { createBucket, createTransferHandler } from '@s3nd/core'
+
+export const { GET, POST, DELETE } = createTransferHandler({
+  bucket: createBucket({ bucket: process.env.S3_BUCKET, region: process.env.AWS_REGION }),
+  app: 'notes',
+  expiresIn: 3600,
+})
+```
+
+The handler takes a `Request` and returns a `Response`, so the same line works in Hono, Bun or a
+worker. Every route is public until you pass `authorize`: [Setting up a server](/docs/server).
+
+</Step>
+<Step>
+
+### Point the provider at them
+
+```tsx title="app/providers.tsx"
+'use client'
+
+import { S3ndProvider } from '@s3nd/react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return <S3ndProvider baseUrl="/api/transfers">{children}</S3ndProvider>
+}
+```
+
+</Step>
+<Step>
+
+### Send on one device, receive on the other
+
+<Tabs items={['Sending', 'Receiving']}>
+<Tab value="Sending">
+
+```tsx
+import { useSendTransfer } from '@s3nd/react'
+
+export function MoveToAnotherDevice() {
+  const { send, transfer, isPending } = useSendTransfer()
+
+  return (
+    <>
+      <button onClick={() => send(exportState())} disabled={isPending}>
+        Move to another device
+      </button>
+      {transfer && <p>Type this on the other device: {transfer.code}</p>}
+    </>
+  )
+}
+```
+
+</Tab>
+<Tab value="Receiving">
+
+```tsx
+import { useReceiveTransfer, useSyncCodeInput } from '@s3nd/react'
+
+export function RestoreFromCode() {
+  const input = useSyncCodeInput()
+  const { load, data, notFound } = useReceiveTransfer()
+
+  return (
+    <>
+      <input {...input.inputProps} placeholder="K7QP2M4X" />
+      <button onClick={() => input.code && load(input.code)} disabled={!input.isComplete}>
+        Look it up
+      </button>
+      {notFound && <p>Unknown or expired code.</p>}
+      {data && <button onClick={() => importState(data)}>Replace my data</button>}
+    </>
+  )
+}
+```
+
+</Tab>
+</Tabs>
+
+`exportState` and `importState` are yours: only your app knows its own storage. The
+[IndexedDB example](https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/examples/indexeddb-sync)
+has a complete pair.
+
+</Step>
+</Steps>
+
+Next: [React](/docs/react) for every hook and option, [The transfer protocol](/docs/protocol) for
+what the routes do.
+
+## From your server
+
+When your own routes decide what gets stored, call the bucket directly. No protocol, no client
+package: a code, a snapshot, and your own two endpoints.
+
+<Steps>
+<Step>
+
+### Install the core
+
+```sh
+npm install @s3nd/core
+```
+
+Credentials come from the options, the usual `AWS_*` variables, or the platform's role:
+[Installation](/docs/installation).
+
+</Step>
+<Step>
+
+### Create the bucket once
+
+```ts title="lib/store.ts"
 import { createBucket } from '@s3nd/core'
 
 export const store = createBucket({
@@ -21,28 +220,23 @@ export const store = createBucket({
 export const SCHEMA_VERSION = 3
 ```
 
-Codes come from `store.codes`, in whatever shape `syncCode` configures — eight Crockford base32
-characters unless you say otherwise. Configuring it on the store is what keeps generation and
-normalization agreeing about the alphabet. See [Sync codes](/docs/sync-codes).
+`createBucket()` is cheap, since the `S3Client` is built on the first request, so module scope is
+fine. `maxSize` below your platform's request limit turns an oversized snapshot into a clean 413.
 
-`createBucket()` is cheap — the underlying `S3Client` is built on the first request — so calling
-it at module scope is fine. `maxSize` set below your platform's request limit turns an oversized
-snapshot into a clean 413 rather than a truncated request.
+</Step>
+<Step>
 
-## Sending
+### Store a snapshot under a fresh code
 
-```ts
-// app/api/sync/route.ts
+```ts title="app/api/sync/route.ts"
 import { store, SCHEMA_VERSION } from '@/lib/store'
 
 export async function POST(request: Request) {
-  const state = await request.json()
   const code = store.codes.create()
 
-  await store.putSnapshot(code, state, {
+  await store.putSnapshot(code, await request.json(), {
     app: 'notes',
     version: SCHEMA_VERSION,
-    device: request.headers.get('user-agent') ?? undefined,
     expiresIn: 60 * 60,
     ifAbsent: true,
   })
@@ -51,79 +245,56 @@ export async function POST(request: Request) {
 }
 ```
 
-Two options are doing quiet work. `expiresIn` keeps a transfer code from outliving the transfer —
-it is a bearer token, and a short life is most of its security. `ifAbsent` refuses to write if
-something already sits under that code, so a collision fails loudly instead of overwriting a
-stranger's snapshot.
+`expiresIn` keeps a code from outliving the transfer: it is a bearer token, and a short life is
+most of its security. `ifAbsent` makes a collision fail loudly instead of overwriting a stranger's
+snapshot.
 
-## Receiving
+</Step>
+<Step>
 
-```ts
-// app/api/sync/[code]/route.ts
+### Hand it back on the other device
+
+```ts title="app/api/sync/[code]/route.ts"
 import { store, SCHEMA_VERSION } from '@/lib/store'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
-
   const snapshot = await store.getSnapshot(store.codes.normalize(code), { maxVersion: SCHEMA_VERSION })
 
-  if (!snapshot) {
-    return Response.json({ error: 'Unknown or expired code' }, { status: 404 })
-  }
+  if (!snapshot) return Response.json({ error: 'Unknown or expired code' }, { status: 404 })
 
-  return Response.json({
-    data: snapshot.data,
-    createdAt: snapshot.createdAt,
-    device: snapshot.device,
-  })
+  return Response.json({ data: snapshot.data, createdAt: snapshot.createdAt })
 }
 ```
 
-`store.codes.normalize()` is what makes a typed code work: it drops separators, folds case, and
-repairs the characters people misread. Call it on user input, always.
+`store.codes.normalize()` is what makes a typed code work: separators dropped, case folded, the
+characters people misread repaired. Call it on user input, always. `maxVersion` makes a snapshot
+from a newer build throw rather than land in an app that would misread it.
 
-`getSnapshot()` returns `null` for a code that was never used _and_ for one that has expired — the
-receiving device does not need to tell those apart. `maxVersion` makes a snapshot from a newer
-build throw rather than land in an app that will misread it.
+</Step>
+</Steps>
 
-## The client half
+Next: [Snapshots](/docs/snapshots) for what is in the envelope, [Sync codes](/docs/sync-codes) for
+how guessable a code really is, [Two devices, one snapshot](/docs/two-devices) for when both sides
+write.
 
-Reading IndexedDB out and writing it back in is your application's code, because only it knows its
-own object stores. The shape:
+## From another runtime
+
+Anything with `fetch` can talk to a s3nd server, whether `createTransferHandler()` runs it or
+something written in Go does:
+
+```sh
+npm install @s3nd/protocol
+```
 
 ```ts
-export async function sendToOtherDevice() {
-  const state = await exportDatabase() // your dump: { [storeName]: records[] }
+import { createTransferClient } from '@s3nd/protocol'
 
-  const response = await fetch('/api/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(state),
-  })
+const transfers = createTransferClient({ baseUrl: 'https://drop.example.com/api/transfers' })
 
-  const { code } = await response.json()
-  return code // show it to the user
-}
-
-export async function restoreFromCode(code: string) {
-  const response = await fetch(`/api/sync/${encodeURIComponent(code)}`)
-
-  if (!response.ok) throw new Error('Unknown or expired code')
-
-  const { data, createdAt, device } = await response.json()
-
-  // Confirm before replacing: a restore overwrites what is on this device.
-  await importDatabase(data)
-
-  return { createdAt, device }
-}
+const { code } = await transfers.createSnapshot({ data: state, version: 3 })
+const incoming = await transfers.read(typedCode) // null when unknown or expired
 ```
 
-The [IndexedDB example](https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/examples/indexeddb-sync)
-has a complete `exportDatabase` / `importDatabase` pair against a real object store.
-
-## Next
-
-- [Snapshots](/docs/snapshots) — what is in the envelope and why.
-- [Sync codes](/docs/sync-codes) — alphabet, normalization, and how guessable a code really is.
-- [Two devices, one snapshot](/docs/two-devices) — when both sides write.
+Its whole dependency tree is nanoid; no path from it reaches the AWS SDK, so it bundles for React
+Native or a worker as is. Next: [The transfer protocol](/docs/protocol).
