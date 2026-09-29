@@ -159,7 +159,7 @@ export const fr: Dictionary = {
     primary: 'Installer la CLI',
     secondary: 'L’intégrer à votre app',
     ghost: 'GitHub',
-    commands: ['npm install -g @s3nd/cli', 's3nd init --provider r2 --bucket drop', 's3nd put ./anything.zip'],
+    commands: ['npm install -g @s3nd/cli', 's3nd setup', 's3nd put ./anything.zip'],
   },
 
   notFound: {
@@ -493,10 +493,10 @@ export const fr: Dictionary = {
     secondary: 'Sans serveur',
     ghost: 'npm',
     initDoctor: {
-      eyebrow: 'init et doctor',
-      title: 'La commande à lancer en premier.',
-      lead: 'Une mauvaise configuration S3 échoue tard et vaguement. doctor effectue les opérations dont s3nd a réellement besoin et rapporte ce qui s’est passé, plutôt que de lire votre policy et de raisonner dessus. L’objet sonde est supprimé avant de rendre la main.',
-      initTitle: 'un point de départ par fournisseur',
+      eyebrow: 'setup et doctor',
+      title: 'Quelques questions, puis la preuve que ça marche.',
+      lead: 'setup demande où stocker les transferts, le bucket et les clés, les enregistre pour cette machine et lance doctor. Une mauvaise configuration S3 échoue tard et vaguement ; doctor effectue les opérations dont s3nd a réellement besoin et rapporte ce qui s’est passé, plutôt que de lire votre policy et de raisonner dessus. L’objet sonde est supprimé avant de rendre la main.',
+      initTitle: 'une question à la fois, puis depuis n’importe quel dossier',
       doctorTitle: 'et la vérification qui justifie la commande',
       body: 'Cette dernière vérification est celle que personne ne découvre avant l’arrivée d’une facture. `expiresIn` empêche un transfert d’être remis ; seule une règle de cycle de vie supprime l’objet. Pointé sur un serveur, `doctor` vérifie la seule chose qui compte là-bas, un vrai aller-retour, et sort avec un code non nul en cas d’échec, donc il sert de smoke test de déploiement.',
     },

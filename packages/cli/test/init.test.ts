@@ -20,7 +20,8 @@ afterEach(() => {
 
 describe('writeStarter', () => {
   it.each(PROVIDERS)('writes a %s config the loader accepts', (provider) => {
-    const { path } = writeStarter({ cwd: root, provider, bucket: 'transfers', force: false })
+    const overrides = provider === 'other' ? { endpoint: 'https://s3.example.com' } : {}
+    const { path } = writeStarter({ cwd: root, provider, bucket: 'transfers', overrides, force: false })
 
     // Every `${…}` a template can carry, so validation is what is under test
     // rather than this machine's environment.
@@ -33,12 +34,14 @@ describe('writeStarter', () => {
       WASABI_ACCESS_KEY: 'key',
       WASABI_SECRET_KEY: 'secret',
       S3ND_TOKEN: 'token',
+      S3ND_ACCESS_KEY_ID: 'key',
+      S3ND_SECRET_ACCESS_KEY: 'secret',
     })
 
     const { settings } = resolveConfiguration({ config: path }, { cwd: root, env })
 
     expect(settings.bucket ?? settings.remote).toBeTruthy()
-    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(starter(provider, 'transfers').config)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(starter(provider, 'transfers', overrides).config)
   })
 
   it('keeps the secrets out of the file it writes', () => {
@@ -46,6 +49,17 @@ describe('writeStarter', () => {
 
     expect(config.credentials?.accessKeyId).toBe('${R2_ACCESS_KEY_ID}')
     expect(config.envFile).toBe('.env')
+  })
+
+  it('lets flags pin the region and the endpoint', () => {
+    const { config } = starter('wasabi', 'transfers', { region: 'us-east-1', endpoint: 'https://s3.wasabisys.com' })
+
+    expect(config.region).toBe('us-east-1')
+    expect(config.endpoint).toBe('https://s3.wasabisys.com')
+  })
+
+  it('will not guess the endpoint of an unnamed service', () => {
+    expect(() => starter('other', 'transfers')).toThrow(/needs its endpoint/)
   })
 
   it('refuses to overwrite what is already there', () => {

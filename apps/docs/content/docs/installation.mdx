@@ -3,6 +3,9 @@ title: 'Installation'
 description: 'Install s3nd and give it credentials.'
 ---
 
+Not sure which package you need? [Quick start](/docs/quick-start) starts from what you are building
+and installs only that.
+
 ```sh
 npm install @s3nd/core
 ```
@@ -24,7 +27,7 @@ others instead, or as well:
 
 | Package          | Install it when                                                   |
 | ---------------- | ----------------------------------------------------------------- |
-| `s3nd`           | Your server talks to the bucket. Brings the AWS SDK.              |
+| `@s3nd/core`     | Your server talks to the bucket. Brings the AWS SDK.              |
 | `@s3nd/react`    | Your React app sends or receives transfers. Never pulls the SDK.  |
 | `@s3nd/cli`      | You want the `s3nd` command. Install it globally.                 |
 | `@s3nd/protocol` | You are writing a client or server for a runtime the others miss. |

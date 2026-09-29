@@ -33,6 +33,20 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
   const region = await resolve(config?.region)
   const endpoint = await resolveEndpoint(config?.endpoint)
 
+  // The name an older `s3nd init` wrote when it was not given one. It is
+  // never the bucket anybody meant, and every check after this would only
+  // say so less clearly.
+  if (bucket.bucket === 'my-bucket') {
+    checks.push({
+      name: 'Configuration',
+      status: 'fail',
+      detail: 'bucket "my-bucket" is a placeholder, not a bucket you created',
+      fix: 'Run `s3nd setup` to answer with the real one.',
+    })
+
+    return checks
+  }
+
   checks.push({
     name: 'Configuration',
     status: 'ok',
@@ -57,14 +71,16 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
       detail: hasCredentials
         ? `resolved, key ends in ${credentials.accessKeyId!.slice(-4)}`
         : 'the provider chain returned nothing',
-      fix: hasCredentials ? undefined : 'Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or configure a profile.',
+      fix: hasCredentials
+        ? undefined
+        : 'Run `s3nd setup` to save keys for this machine, or export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.',
     })
   } catch (error) {
     checks.push({
       name: 'Credentials',
       status: 'fail',
       detail: describe(error),
-      fix: 'Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or configure a profile.',
+      fix: 'Run `s3nd setup` to save keys for this machine, or export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.',
     })
   }
 
@@ -184,6 +200,7 @@ async function resolveEndpoint(value: unknown): Promise<string | undefined> {
   if (typeof value === 'function') return resolveEndpoint(await (value as () => Promise<unknown>)())
   if (typeof value === 'string') return `endpoint ${value}`
 
-  const url = value as { hostname?: string; protocol?: string }
-  return url?.hostname ? `endpoint ${url.protocol ?? 'https:'}//${url.hostname}` : undefined
+  const url = value as { hostname?: string; protocol?: string; port?: number | string }
+  const port = url?.port ? `:${url.port}` : ''
+  return url?.hostname ? `endpoint ${url.protocol ?? 'https:'}//${url.hostname}${port}` : undefined
 }

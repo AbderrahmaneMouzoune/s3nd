@@ -152,7 +152,7 @@ export const en = {
     primary: 'Install the CLI',
     secondary: 'Put it in your app',
     ghost: 'GitHub',
-    commands: ['npm install -g @s3nd/cli', 's3nd init --provider r2 --bucket drop', 's3nd put ./anything.zip'],
+    commands: ['npm install -g @s3nd/cli', 's3nd setup', 's3nd put ./anything.zip'],
   },
 
   notFound: {
@@ -481,10 +481,10 @@ export const en = {
     secondary: 'Without a server',
     ghost: 'npm',
     initDoctor: {
-      eyebrow: 'init and doctor',
-      title: 'The command worth running first.',
-      lead: 'S3 misconfiguration fails late and vaguely. doctor performs the operations s3nd actually needs and reports what happened, rather than reading your policy and reasoning about it. The probe object is deleted before it returns.',
-      initTitle: 'a starting point per provider',
+      eyebrow: 'setup and doctor',
+      title: 'A few questions, then proof it works.',
+      lead: 'setup asks where transfers go, the bucket and the keys, saves them for this machine and runs doctor. S3 misconfiguration fails late and vaguely; doctor performs the operations s3nd actually needs and reports what happened, rather than reading your policy and reasoning about it. The probe object is deleted before it returns.',
+      initTitle: 'one question at a time, from any directory after',
       doctorTitle: 'and the check that earns the command',
       body: 'That last check is the one nobody discovers until a bill arrives. `expiresIn` stops a transfer being handed over; only a lifecycle rule deletes the object. Pointed at a server, `doctor` checks the one thing that matters there, a real round trip, and exits non-zero on failure, so it works as a deployment smoke test.',
     },

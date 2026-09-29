@@ -4,7 +4,7 @@ import { dirname, resolve as resolvePath } from 'node:path'
 import type { ConfigFile } from './config.js'
 import { CliError } from './errors.js'
 
-export const PROVIDERS = ['aws', 'r2', 'minio', 'scaleway', 'wasabi', 'remote'] as const
+export const PROVIDERS = ['aws', 'r2', 'scaleway', 'wasabi', 'minio', 'other', 'remote'] as const
 
 export type Provider = (typeof PROVIDERS)[number]
 
@@ -16,11 +16,28 @@ export interface Starter {
 
 const DOCTOR = 'Run `s3nd doctor` — it performs the operations s3nd needs and reports what happened.'
 
+/** What a flag can pin in a starter without answering a single question. */
+export interface StarterOverrides {
+  region?: string
+  endpoint?: string
+  remote?: string
+}
+
 /**
  * A starting point per provider, written with `${…}` references rather than
  * secrets: the file is meant to be committed, the env file it points at is not.
  */
-export function starter(provider: Provider, bucket: string): Starter {
+export function starter(provider: Provider, bucket: string, overrides: StarterOverrides = {}): Starter {
+  const base = template(provider, bucket, overrides)
+
+  if (overrides.region && provider !== 'remote') base.config.region = overrides.region
+  if (overrides.endpoint && provider !== 'remote') base.config.endpoint = overrides.endpoint
+  if (overrides.remote && provider === 'remote') base.config.remote = overrides.remote
+
+  return base
+}
+
+function template(provider: Provider, bucket: string, overrides: StarterOverrides): Starter {
   switch (provider) {
     case 'r2':
       return {
@@ -101,6 +118,30 @@ export function starter(provider: Provider, bucket: string): Starter {
         next: ['Put WASABI_ACCESS_KEY and WASABI_SECRET_KEY in .env.', DOCTOR],
       }
 
+    case 'other':
+      if (!overrides.endpoint) {
+        throw new CliError(
+          'An S3-compatible service needs its endpoint.',
+          'Pass --endpoint https://…, or run `s3nd setup` in a terminal to be asked for it.',
+        )
+      }
+
+      return {
+        config: {
+          bucket,
+          region: 'auto',
+          endpoint: overrides.endpoint,
+          prefix: 'transfers',
+          expiresIn: '24h',
+          envFile: '.env',
+          credentials: {
+            accessKeyId: '${S3ND_ACCESS_KEY_ID}',
+            secretAccessKey: '${S3ND_SECRET_ACCESS_KEY}',
+          },
+        },
+        next: ['Put S3ND_ACCESS_KEY_ID and S3ND_SECRET_ACCESS_KEY in .env.', DOCTOR],
+      }
+
     case 'remote':
       return {
         config: {
@@ -138,6 +179,7 @@ export interface WriteStarterOptions {
   cwd: string
   provider: Provider
   bucket: string
+  overrides?: StarterOverrides
   /** Where to write. Defaults to `s3nd.config.json` in the working directory. */
   path?: string
   force: boolean
@@ -154,7 +196,7 @@ export function writeStarter(options: WriteStarterOptions): { path: string; next
     )
   }
 
-  const { config, next } = starter(options.provider, options.bucket)
+  const { config, next } = starter(options.provider, options.bucket, options.overrides)
 
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8')

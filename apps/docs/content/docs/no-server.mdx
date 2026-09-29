@@ -44,10 +44,16 @@ stolen. Scope it that way now rather than after.
 
 ```sh
 npm install -g @s3nd/cli
-s3nd init --provider r2 --bucket transfers
+s3nd setup
 ```
 
-That writes `s3nd.config.json`, next to whatever directory you ran it in:
+Pick Cloudflare R2, then paste the account id, the bucket name and the two keys as it asks for them.
+They go to `~/.config/s3nd/config.json`, readable by you only, and every directory on this machine
+uses that file. Setup ends by running [`doctor`](#checking-it-before-trusting-it) against the real bucket.
+
+That is the whole setup for one person's machines. For a setup that lives in a repository instead,
+shared and committed, `s3nd init --provider r2 --bucket transfers` asks the same questions and writes
+`s3nd.config.json` next to the code:
 
 ```json title="s3nd.config.json"
 {
@@ -73,6 +79,8 @@ R2_ACCOUNT_ID=8c4…
 R2_ACCESS_KEY_ID=b31…
 R2_SECRET_ACCESS_KEY=7f2…
 ```
+
+`init` writes that `.env` for you, and warns when no `.gitignore` beside it lists `.env` yet:
 
 ```sh
 echo ".env" >> .gitignore
@@ -146,12 +154,11 @@ and from R2 to the other machine.
 
 Three ways to give it the same answers, in increasing order of how much you trust it:
 
-**Copy the two files.** `s3nd.config.json` and `.env` into any directory; the CLI finds the
-config by walking up from where it runs.
+**Run `s3nd setup` there too.** Same answers, its own `~/.config/s3nd/config.json`. Or skip even
+that: the first `s3nd get` on an unconfigured machine offers to run it, then fetches the code.
 
-**Make it machine-wide.** Put the same configuration at `~/.config/s3nd/config.json` — it is the
-fallback when no project file is found, so `s3nd put` works from anywhere on that machine. Point
-`envFile` at an absolute path, since the relative one resolves against the config file.
+**Copy the project's two files.** `s3nd.config.json` and `.env` into any directory; the CLI finds
+the config by walking up from where it runs.
 
 **Environment only.** No file at all:
 

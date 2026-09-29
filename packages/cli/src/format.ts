@@ -1,3 +1,6 @@
+import { homedir } from 'node:os'
+import { sep } from 'node:path'
+
 import { CliError } from './errors.js'
 
 const UNITS = ['B', 'kB', 'MB', 'GB', 'TB']
@@ -102,4 +105,12 @@ export function createStyle(stream: { isTTY?: boolean }, env: Record<string, str
     bold: wrap(1, 22),
     dim: wrap(2, 22),
   }
+}
+
+/** `/home/you/.config/s3nd/config.json` reads as `~/.config/s3nd/config.json`. */
+export function tildify(path: string, home = homedir()): string {
+  if (!home) return path
+  if (path === home) return '~'
+
+  return path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path
 }

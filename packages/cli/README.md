@@ -14,41 +14,90 @@ transfers, and keep the settings in a file instead of in your shell history.
 
 ```sh
 npm install -g @s3nd/cli
-s3nd init --provider r2 --bucket transfers
-s3nd doctor
+s3nd setup
+s3nd put ./report.pdf
 ```
 
-Or without installing anything:
+`setup` asks a few questions, saves the answers for this machine and checks the bucket works.
+From then on every command works from any directory. Or without installing anything:
 
 ```sh
-npx @s3nd/cli doctor
+npx @s3nd/cli setup
 ```
 
 It is built on [`@s3nd/core`](https://www.npmjs.com/package/@s3nd/core) as a primitive, and has no
 dependencies of its own beyond it: `node:util`'s `parseArgs` is the whole argument parser.
 
-## `init`
+## `setup` and `init`
 
-Writes a starting point for the provider you name, then says what is left to do:
+`setup` asks where transfers are stored (a list you move through with the arrow keys), the bucket
+and the keys, one question at a time, with where to find each value. It writes `~/.config/s3nd/config.json`, readable by you only and used
+from any directory, then checks the bucket live. The provider list, while it is open:
 
-```sh
-$ s3nd init --provider r2 --bucket transfers
-Wrote /home/you/transfers/s3nd.config.json
-
-Put the three values in .env, and keep it out of git:
-  R2_ACCOUNT_ID=…
-  R2_ACCESS_KEY_ID=…
-  R2_SECRET_ACCESS_KEY=…
-The R2 API token needs Object Read & Write on this bucket, and nothing else.
-Give the bucket a lifecycle rule that deletes objects under "transfers/" after a day or two.
-Run `s3nd doctor` — it performs the operations s3nd needs and reports what happened.
+```
+? Where should transfers be stored?
+  AWS S3
+❯ Cloudflare R2                  no egress fees
+  Scaleway
+  Wasabi
+  MinIO                          on this machine or self-hosted
+  Another S3-compatible service  Backblaze B2, DigitalOcean Spaces, Hetzner…
+  A s3nd server                  someone else runs it; you only need its URL
+  ↑↓ to move · Enter to pick
 ```
 
-`--provider` takes `aws`, `r2`, `minio`, `scaleway`, `wasabi` or `remote`.
+Once picked it folds into one line, and the whole run reads:
+
+```
+$ s3nd setup
+Set up s3nd on this machine
+Saved to ~/.config/s3nd/config.json, used from any directory. Ctrl+C leaves without writing.
+
+? Where should transfers be stored? Cloudflare R2
+  Dashboard → R2 → Overview, "Account ID" in the side panel. The S3 API URL works too.
+? Cloudflare account ID 8c4f…
+  An existing bucket. The check at the end tells you if it is not reachable.
+? Bucket name transfers
+  R2 → Manage API tokens → Create API token, with Object Read & Write on this bucket.
+? Access key ID 5d1e…1a2b
+? Secret access key (hidden) ••••••••••••••••
+
+✓ Saved ~/.config/s3nd/config.json (readable by you only)
+  Cloudflare R2 · bucket "transfers" · credentials: key …1a2b
+
+Checking it works…
+✓ Configuration: bucket "transfers", region "auto", endpoint https://8c4f….r2.cloudflarestorage.com
+✓ Credentials: resolved, key ends in 1a2b
+✓ Bucket reachable: HeadBucket succeeded
+✓ Write, read, delete: round-tripped a probe object
+! Expiry cleanup: no lifecycle configuration
+  → Add an S3 lifecycle rule that expires objects under "transfers/" after a day or two.
+
+Ready. Send something:
+  s3nd put ./a-file
+```
+
+`init` asks the same questions for a project instead: it writes `./s3nd.config.json`, meant to be
+committed, with `${…}` references to the keys, and the keys themselves in a `.env` beside it. It
+warns when no `.gitignore` there lists `.env`.
+
+A flag answers its question in advance: `--provider` (`aws`, `r2`, `scaleway`, `wasabi`, `minio`,
+`other` or `remote`), `--bucket`, `--region`, `--endpoint`, `--remote`. An existing file is only
+replaced once you say so, or with `--force`. Ctrl+C leaves without writing anything.
+
+Nobody at the keyboard (a pipe, CI, or `--yes`), nothing is asked: the flags write a starter with
+`${…}` references, and a missing `--bucket` is an error rather than a placeholder.
+
+```sh
+s3nd init --yes --provider r2 --bucket transfers
+```
+
+You rarely need to type `setup` at all. Any command that needs a bucket, run on a machine with
+none configured, offers to set one up on the spot and then carries on with what you asked for.
 
 ## `doctor`
 
-The command worth running first. S3 misconfiguration fails late and vaguely: a policy that looks
+The check `setup` ends with, on demand. S3 misconfiguration fails late and vaguely: a policy that looks
 right, credentials that resolve to nothing, a region the endpoint disagrees with. `doctor` performs
 the operations s3nd actually needs and reports what happened, rather than reading your policy
 and reasoning about it. The probe object is deleted before it returns.
