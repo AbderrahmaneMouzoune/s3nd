@@ -340,6 +340,11 @@ export const fr: Dictionary = {
     lead: 's3nd est délibérément petit. Cette page en fait le tour complet : ce qu’est un transfert, ce qu’est un code, le protocole entre un serveur et ses clients, et pourquoi les packages sont découpés ainsi.',
     primary: 'Installer la CLI',
     secondary: 'La spec du protocole',
+    film: {
+      label: 'Le film de lancement de s3nd',
+      play: 'Voir le film de lancement',
+      meta: '0:56 · avec le son',
+    },
     scene: {
       title: 'Deux machines. Votre bucket entre les deux. Rien d’autre.',
       eyebrow: 'tout le transfert · 14 s · en boucle',

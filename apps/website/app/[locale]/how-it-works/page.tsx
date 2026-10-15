@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 
 import { CodeBlock } from '@/components/code-block'
 import { Cta } from '@/components/cta'
+import { LaunchFilm } from '@/components/launch-film'
 import { PageHero } from '@/components/page-hero'
 import { Rich } from '@/components/rich-text'
 import { TwoMachines } from '@/components/two-machines'
@@ -50,6 +51,7 @@ export default async function HowItWorksPage({ params }: PageProps<'/[locale]/ho
             </ButtonLink>
           </>
         }
+        aside={<LaunchFilm t={t.film} />}
         below={<TwoMachines t={t.scene} />}
       />
 

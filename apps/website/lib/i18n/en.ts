@@ -328,6 +328,11 @@ export const en = {
     lead: 's3nd is deliberately small. This page is the whole of it: what a transfer is, what a code is, the protocol between a server and its clients, and why the packages are split the way they are.',
     primary: 'Install the CLI',
     secondary: 'The protocol spec',
+    film: {
+      label: 'The s3nd launch film',
+      play: 'Watch the launch film',
+      meta: '0:56 · sound on',
+    },
     scene: {
       title: 'Two machines. Your bucket between them. Nothing else.',
       eyebrow: 'the whole transfer · 14 s · on a loop',
