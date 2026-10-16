@@ -8,3 +8,5 @@ node_modules/
 bun.lock
 # written by release-please, in its own markdown style
 CHANGELOG.md
+# written by api-extractor, which compares them byte for byte
+*.api.md
