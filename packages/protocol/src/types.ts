@@ -58,6 +58,14 @@ export type TransferErrorCode =
   | 'UNSUPPORTED_PROTOCOL'
   | 'INTERNAL'
 
+/**
+ * What a `TransferError` can carry: a code a server answered with, or
+ * `TIMEOUT`, which only `createTransferClient()` raises when a request takes
+ * longer than its `timeout`. A server never sends `TIMEOUT`, so it has no HTTP
+ * status and is not a `TransferErrorCode`.
+ */
+export type TransferClientErrorCode = TransferErrorCode | 'TIMEOUT'
+
 /** The body of every non-2xx response. */
 export interface TransferErrorBody {
   error: {

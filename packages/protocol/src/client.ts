@@ -16,6 +16,13 @@ export interface TransferClientConfig {
   headers?: Record<string, string>
   /** Swap the implementation in tests, or to add retries. Defaults to global `fetch`. */
   fetch?: typeof globalThis.fetch
+  /**
+   * Milliseconds a call may take, reading the response included, before it
+   * rejects with a `TransferError` coded `TIMEOUT`. No limit by default. A
+   * call's own `signal` still works alongside it, and still rejects with its
+   * own `AbortError`.
+   */
+  timeout?: number
 }
 
 /** Uploading structured state: it comes back inline from `read()`. */
@@ -47,6 +54,89 @@ export interface TransferClient {
   readBytes(code: string, options?: { signal?: AbortSignal }): Promise<Uint8Array | null>
   /** Burns a code. Deleting one that is already gone is not an error. */
   remove(code: string, options?: { signal?: AbortSignal }): Promise<void>
+}
+
+const TRANSFER_KINDS: readonly unknown[] = ['snapshot', 'file']
+
+/**
+ * The fields every transfer body has, checked rather than cast: a wrong
+ * `baseUrl`, or a proxy answering in place of the server, should fail here
+ * and say so, not surface later as a code reading "undefined".
+ */
+function isTransferShape(value: unknown): value is { code: string; kind: string; createdAt: string } {
+  if (typeof value !== 'object' || value === null) return false
+
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.code === 'string' &&
+    candidate.code.length > 0 &&
+    TRANSFER_KINDS.includes(candidate.kind) &&
+    typeof candidate.createdAt === 'string'
+  )
+}
+
+function isJson(response: Response): boolean {
+  const type = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? ''
+  return type === 'application/json' || type.endsWith('+json')
+}
+
+/**
+ * Reads a 2xx body that the protocol says is a transfer. An SSO login page or
+ * a misrouted request answers 200 with HTML, which `response.json()` would
+ * report as an unrelated `SyntaxError`.
+ */
+async function readTransfer<T>(response: Response, what: string): Promise<T> {
+  if (!isJson(response)) {
+    throw new TransferError(
+      'INTERNAL',
+      `Expected ${what} as JSON, but the server answered ${response.status} with ${response.headers.get('content-type') ?? 'no content type'}. Is \`baseUrl\` pointing at the transfer routes?`,
+      { status: response.status },
+    )
+  }
+
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch (error) {
+    if (isAbortError(error)) throw error
+    throw new TransferError('INTERNAL', `The server answered ${what} that is not valid JSON.`, {
+      status: response.status,
+      cause: error,
+    })
+  }
+
+  if (!isTransferShape(payload)) {
+    throw new TransferError(
+      'INTERNAL',
+      `The server answered ${what} without a string \`code\`, a known \`kind\` and a \`createdAt\`.`,
+      { status: response.status },
+    )
+  }
+
+  return payload as T
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')
+}
+
+/**
+ * `AbortSignal.any` where the runtime has it (Node 20.3+, every current
+ * browser), and the same thing by hand on the Node 20 releases before it.
+ */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals)
+
+  const controller = new AbortController()
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+      break
+    }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+  }
+
+  return controller.signal
 }
 
 function joinUrl(baseUrl: string, path: string): string {
@@ -88,6 +178,11 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
   const doFetch = config.fetch ?? globalThis.fetch
   const baseHeaders = config.headers ?? {}
 
+  const { timeout } = config
+  if (timeout !== undefined && !(Number.isFinite(timeout) && timeout > 0)) {
+    throw new TypeError('`timeout` must be a positive number of milliseconds.')
+  }
+
   if (typeof doFetch !== 'function') {
     throw new TransferError(
       'INTERNAL',
@@ -112,6 +207,32 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
     return response
   }
 
+  /**
+   * Runs a whole call, request and response body, under `timeout`. Running
+   * out answers `TIMEOUT`, which an interface shows as a failure; the caller
+   * aborting is not a failure and rejects as the abort it is.
+   */
+  async function withTimeout<T>(
+    signal: AbortSignal | undefined,
+    call: (signal?: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    if (timeout === undefined) return call(signal)
+
+    const deadline = new AbortController()
+    const timer = setTimeout(() => deadline.abort(), timeout)
+
+    try {
+      return await call(signal ? anySignal([signal, deadline.signal]) : deadline.signal)
+    } catch (error) {
+      if (deadline.signal.aborted && !signal?.aborted) {
+        throw new TransferError('TIMEOUT', `The server did not answer within ${timeout} ms.`, { cause: error })
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   /** 404 is a value here, not an error: an unknown code is an ordinary outcome. */
   async function sendAllowingMissing(path: string, init: RequestInit): Promise<Response | null> {
     try {
@@ -123,53 +244,57 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
   }
 
   return {
-    async createSnapshot(input) {
+    createSnapshot(input) {
       const body: CreateSnapshotBody = { data: input.data, version: input.version, device: input.device }
 
-      const response = await send('', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: input.signal,
-      })
+      return withTimeout(input.signal, async (signal) => {
+        const response = await send('', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        })
 
-      return (await response.json()) as CreatedTransfer
+        return readTransfer<CreatedTransfer>(response, 'the created transfer')
+      })
     },
 
-    async createFile(input) {
-      const response = await send('', {
-        method: 'POST',
-        headers: {
-          'content-type': input.contentType ?? 'application/octet-stream',
-          [FILENAME_HEADER]: encodeURIComponent(input.filename),
-        },
-        body: input.body as BodyInit,
-        signal: input.signal,
-      })
+    createFile(input) {
+      return withTimeout(input.signal, async (signal) => {
+        const response = await send('', {
+          method: 'POST',
+          headers: {
+            'content-type': input.contentType ?? 'application/octet-stream',
+            [FILENAME_HEADER]: encodeURIComponent(input.filename),
+          },
+          body: input.body as BodyInit,
+          signal,
+        })
 
-      return (await response.json()) as CreatedTransfer
+        return readTransfer<CreatedTransfer>(response, 'the created transfer')
+      })
     },
 
-    async read(code, options = {}) {
-      const response = await sendAllowingMissing(`/${encodeURIComponent(code)}`, {
-        method: 'GET',
-        signal: options.signal,
-      })
+    read(code, options = {}) {
+      return withTimeout(options.signal, async (signal) => {
+        const response = await sendAllowingMissing(`/${encodeURIComponent(code)}`, { method: 'GET', signal })
 
-      return response ? ((await response.json()) as TransferMetadata) : null
+        return response ? readTransfer<TransferMetadata>(response, 'a transfer') : null
+      })
     },
 
-    async readBytes(code, options = {}) {
-      const response = await sendAllowingMissing(`/${encodeURIComponent(code)}/raw`, {
-        method: 'GET',
-        signal: options.signal,
-      })
+    readBytes(code, options = {}) {
+      return withTimeout(options.signal, async (signal) => {
+        const response = await sendAllowingMissing(`/${encodeURIComponent(code)}/raw`, { method: 'GET', signal })
 
-      return response ? new Uint8Array(await response.arrayBuffer()) : null
+        return response ? new Uint8Array(await response.arrayBuffer()) : null
+      })
     },
 
-    async remove(code, options = {}) {
-      await sendAllowingMissing(`/${encodeURIComponent(code)}`, { method: 'DELETE', signal: options.signal })
+    remove(code, options = {}) {
+      return withTimeout(options.signal, async (signal) => {
+        await sendAllowingMissing(`/${encodeURIComponent(code)}`, { method: 'DELETE', signal })
+      })
     },
   }
 }

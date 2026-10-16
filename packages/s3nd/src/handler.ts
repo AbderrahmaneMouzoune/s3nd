@@ -546,7 +546,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     } catch (error) {
       // A TransferError raised here is already an answer: a code the sync code
       // rules refused, or a path that cannot hold one.
-      if (isTransferError(error)) return fail(error.code, error.message)
+      // TIMEOUT is a client's verdict; a server never answers with it.
+      if (isTransferError(error) && error.code !== 'TIMEOUT') return fail(error.code, error.message)
 
       const named = isS3ndError(error) ? fromS3ndError(error) : null
       if (named) return named
