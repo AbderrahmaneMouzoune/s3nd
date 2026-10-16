@@ -48,8 +48,14 @@ export function assertValidKey(key: unknown): asserts key is string {
 export function normalizePrefix(prefix: string | undefined): string | undefined {
   if (prefix == null) return undefined
 
-  const trimmed = prefix.replace(/^\/+|\/+$/g, '')
-  return trimmed.length > 0 ? trimmed : undefined
+  // Index walking rather than /^\/+|\/+$/: the trailing half of that regex
+  // backtracks quadratically on a long run of slashes that is not at the end.
+  let start = 0
+  let end = prefix.length
+  while (start < end && prefix[start] === '/') start++
+  while (end > start && prefix[end - 1] === '/') end--
+
+  return end > start ? prefix.slice(start, end) : undefined
 }
 
 export function joinKey(prefix: string | undefined, key: string): string {
