@@ -2,7 +2,7 @@ import { Readable } from 'node:stream'
 
 import type { Bucket } from './bucket.js'
 import { S3ndError, isS3ndError } from '@s3nd/protocol'
-import { FILENAME_HEADER, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
+import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
 import type { CreatedTransfer, CreateSnapshotBody, TransferErrorCode, TransferMetadata } from '@s3nd/protocol'
 
 /** Marks a stored object as opaque bytes rather than a snapshot envelope. */
@@ -90,6 +90,38 @@ function fromS3ndError(error: S3ndError): Response | null {
       return fail('INVALID_SYNC_CODE', error.message)
     default:
       return null
+  }
+}
+
+/**
+ * Whether a request speaks a protocol version this handler can answer. No
+ * header is a yes: that is a 0.x client, which spoke version 1 without saying
+ * so. Anything that is not a whole number at most `PROTOCOL_VERSION` is a no.
+ */
+function speaksOurVersion(request: Request): boolean {
+  const announced = request.headers.get(PROTOCOL_HEADER)
+  if (announced === null) return true
+
+  const trimmed = announced.trim()
+  return /^\d+$/.test(trimmed) && Number(trimmed) <= PROTOCOL_VERSION
+}
+
+/**
+ * Stamps the protocol version on a response. Some responses have immutable
+ * headers (`Response.redirect`, or whatever `authorize` built), so those are
+ * rebuilt around the same body rather than mutated.
+ */
+function withProtocolVersion(response: Response): Response {
+  const version = String(PROTOCOL_VERSION)
+
+  try {
+    response.headers.set(PROTOCOL_HEADER, version)
+    return response
+  } catch {
+    const headers = new Headers(response.headers)
+    headers.set(PROTOCOL_HEADER, version)
+
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
   }
 }
 
@@ -324,6 +356,15 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const segments = segmentsOf(request)
     if (segments === null) return fail('NOT_FOUND', 'No transfer route matches this path.')
 
+    // Before authorize: a client from the future should learn that much
+    // whatever its credentials, and nothing below may read its payload.
+    if (!speaksOurVersion(request)) {
+      return fail(
+        'UNSUPPORTED_PROTOCOL',
+        `This server speaks s3nd protocol version ${PROTOCOL_VERSION}; the request announced "${request.headers.get(PROTOCOL_HEADER)?.slice(0, 32)}".`,
+      )
+    }
+
     if (config.authorize) {
       const allowed = await config.authorize(request)
       if (allowed instanceof Response) return allowed
@@ -361,7 +402,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
   }
 
-  const handler = async (request: Request): Promise<Response> => {
+  const handler = async (request: Request): Promise<Response> => withProtocolVersion(await answer(request))
+
+  async function answer(request: Request): Promise<Response> {
     try {
       return await route(request)
     } catch (error) {

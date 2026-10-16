@@ -1,5 +1,5 @@
 import { parseTransferErrorBody, TransferError } from './transfer-error.js'
-import { FILENAME_HEADER } from './types.js'
+import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION } from './types.js'
 import type { CreatedTransfer, CreateSnapshotBody, TransferMetadata } from './types.js'
 
 export interface TransferClientConfig {
@@ -8,7 +8,11 @@ export interface TransferClientConfig {
    * or a same-origin `/api/transfers`.
    */
   baseUrl: string
-  /** Sent on every request — an API key, a session cookie header, a bearer token. */
+  /**
+   * Sent on every request — an API key, a session cookie header, a bearer
+   * token. The `s3nd-protocol` header is the client's own and cannot be
+   * overridden here.
+   */
   headers?: Record<string, string>
   /** Swap the implementation in tests, or to add retries. Defaults to global `fetch`. */
   fetch?: typeof globalThis.fetch
@@ -94,7 +98,13 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
   async function send(path: string, init: RequestInit): Promise<Response> {
     const response = await doFetch(joinUrl(config.baseUrl, path), {
       ...init,
-      headers: { ...baseHeaders, ...(init.headers as Record<string, string> | undefined) },
+      headers: {
+        ...baseHeaders,
+        ...(init.headers as Record<string, string> | undefined),
+        // Lets a server refuse a version it does not speak, rather than
+        // misreading a payload whose shape it does not know.
+        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+      },
     })
 
     if (!response.ok) throw await toTransferError(response)
