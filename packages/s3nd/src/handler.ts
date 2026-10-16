@@ -18,6 +18,8 @@ const KIND_METADATA_KEY = 's3nd-kind'
 const EXPIRES_METADATA_KEY = 's3nd-expires-at'
 const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
+/** A redirect is followed at once; its signed URL need not outlive that. */
+const MAX_REDIRECT_EXPIRES_IN = 300
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
 const CODE_ATTEMPTS = 5
 
@@ -147,6 +149,23 @@ function decodeHeaderValue(value: string | null): string | undefined {
   }
 }
 
+/**
+ * The sender names the file, and every client that reads it back may write it
+ * under that name — so it is a name and nothing more: no directory, from either
+ * kind of separator, no control characters, no leading dots.
+ */
+function safeFilename(received: string | undefined): string | undefined {
+  const name = received
+    ?.split(/[\\/]/)
+    .pop()!
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+
+  return name ? name : undefined
+}
+
 /** The AWS SDK hands back a Node stream; `Response` wants a web one. */
 function toWebStream(body: unknown): ReadableStream {
   if (typeof (body as ReadableStream)?.getReader === 'function') return body as ReadableStream
@@ -251,7 +270,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   }
 
   async function createFile(request: Request): Promise<Response> {
-    const filename = decodeHeaderValue(request.headers.get(FILENAME_HEADER)) ?? 'file'
+    const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
     const bytes = new Uint8Array(await request.arrayBuffer())
 
     if (bytes.byteLength === 0) {
@@ -335,12 +354,32 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
   async function readRaw(code: string): Promise<Response> {
     if (rawMode === 'redirect') {
-      const url = await bucket.getUrl(code, { download: true })
+      // Signing reads nothing, so check what stream mode would have checked
+      // first: that the object is there, is a file, and has not expired.
+      const head = await bucket.head(code)
+      if (!head || head.metadata[KIND_METADATA_KEY] !== 'file') return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const expiresAt = head.metadata[EXPIRES_METADATA_KEY]
+      const remaining = expiresAt ? Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000) : Infinity
+      if (!(remaining >= 1)) return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const url = await bucket.getUrl(code, {
+        download: true,
+        expiresIn: Math.min(remaining, MAX_REDIRECT_EXPIRES_IN),
+      })
       return Response.redirect(url, 302)
     }
 
     const file = await bucket.get(code)
     if (!file) return fail('NOT_FOUND', 'Unknown or expired code.')
+
+    // A snapshot's bytes are its gzipped envelope, and its expiry lives inside
+    // that envelope where this route cannot see it. It has no raw form: answer
+    // exactly as for an unknown code, so /raw says nothing about what a code holds.
+    if (file.metadata[KIND_METADATA_KEY] !== 'file') {
+      discard(file.body)
+      return fail('NOT_FOUND', 'Unknown or expired code.')
+    }
 
     const expiresAt = file.metadata[EXPIRES_METADATA_KEY]
     if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
@@ -382,6 +421,11 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
     if (rawCode === undefined) {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
+
+      // A filename means a file, whatever its type: a `.json` picked from a
+      // file input is sent as `application/json`, and is still a file. Only a
+      // nameless JSON body is a snapshot.
+      if (request.headers.has(FILENAME_HEADER)) return createFile(request)
 
       return (request.headers.get('content-type') ?? '').includes('application/json')
         ? createSnapshot(request)

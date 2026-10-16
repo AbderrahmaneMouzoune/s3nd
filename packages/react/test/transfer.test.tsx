@@ -2,7 +2,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
-import { TransferError, type CreatedTransfer, type TransferClient, type TransferMetadata } from '@s3nd/protocol'
+import {
+  FILENAME_HEADER,
+  TransferError,
+  createTransferClient,
+  type CreatedTransfer,
+  type TransferClient,
+  type TransferMetadata,
+} from '@s3nd/protocol'
 
 import { S3ndProvider, useReceiveTransfer, useSendTransfer, useTransferClient } from '../src/index.js'
 
@@ -89,6 +96,23 @@ describe('useSendTransfer', () => {
     })
 
     expect(client.createFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'chosen.txt' }))
+  })
+
+  it('sends a JSON file as a file, named, so the server cannot take it for a snapshot', async () => {
+    // The real client, over a fetch that records what goes on the wire.
+    const fetch = vi.fn(async () => Response.json(created('ABCD1234', 'file'), { status: 201 }))
+    const client = createTransferClient({ baseUrl: '/api/transfers', fetch })
+    const { result } = renderHook(() => useSendTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.sendFile(new File(['{"data":1}'], 'x.json', { type: 'application/json' }))
+    })
+
+    const headers = new Headers((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].headers)
+    // The protocol's rule: a filename header makes it a file, whatever the type.
+    expect(headers.get(FILENAME_HEADER)).toBe('x.json')
+    expect(headers.get('content-type')).toBe('application/json')
+    expect(result.current.transfer?.kind).toBe('file')
   })
 
   it('surfaces a failure as state rather than a rejection', async () => {

@@ -91,13 +91,17 @@ All four are relative to wherever you mounted the handler, `/api/transfers` by d
 
 Creates a transfer and returns the code. What you send decides what it holds.
 
-With an `X-S3nd-Filename` header, the body is the raw bytes and the transfer is a **file**, whatever
-its content type: the original filename travels percent-encoded in that header. That is what lets
-a `.json` file travel as a file.
+The server decides what the transfer is, in this order:
 
-Without it, `Content-Type: application/json` means the body is `{ data, version?, device? }` and
-the transfer is a **snapshot** — structured state, handed back inline on read. Any other content
-type is a file named `file`.
+1. **`X-S3nd-Filename` present**: a **file**, whatever the `Content-Type`. The body is the raw
+   bytes, and the header carries the original filename, percent-encoded. A `.json` file is sent
+   as `application/json` and stays a file.
+2. **Otherwise, `Content-Type: application/json`**: a **snapshot**. The body is
+   `{ data, version?, device? }`, structured state handed back inline on read.
+3. **Otherwise**: a **file** named `file`.
+
+`createFile()` always sends the filename and `createSnapshot()` never does, so a client built on
+`@s3nd/protocol` lands on the right side without thinking about it.
 
 ```json title="201"
 { "code": "K7QP2M4X", "kind": "snapshot", "createdAt": "…", "expiresAt": "…", "size": 412 }
@@ -136,6 +140,10 @@ payload never transits your server twice.
 
 `/raw` serves files only: on a snapshot code it answers `NOT_FOUND`. A snapshot's state comes from
 `GET /:code`.
+
+Files only. A snapshot has no raw form, so its code answers `404 NOT_FOUND` with the same body as
+an unknown or expired code: `/raw` says nothing about what a code holds. A snapshot's state comes
+from `GET /:code`.
 
 ### `DELETE /:code`
 
