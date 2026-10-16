@@ -1,0 +1,37 @@
+# Weekly, grouped, so the updates arrive as a handful of pull requests rather
+# than one per package. The @aws-sdk/* caret is the one that matters most: it
+# is what moved under the packages in the checksum change (#8).
+version: 2
+updates:
+  # bun rather than npm: the npm ecosystem would bump package.json and leave
+  # bun.lock behind, and `bun install --frozen-lockfile` in CI would refuse it.
+  # bun.lock at the root covers every workspace.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      aws-sdk:
+        patterns: ['@aws-sdk/*']
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']

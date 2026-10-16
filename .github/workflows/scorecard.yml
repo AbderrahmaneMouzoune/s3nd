@@ -1,0 +1,45 @@
+name: Scorecard
+
+on:
+  push:
+    branches: [main]
+  # Branch protection is one of the checks, and changing it does not push.
+  branch_protection_rule:
+  schedule:
+    - cron: '41 5 * * 1'
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Upload the results to code scanning, and publish them so the README
+      # badge has something to show.
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scorecard
+          path: results.sarif
+          retention-days: 5
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
