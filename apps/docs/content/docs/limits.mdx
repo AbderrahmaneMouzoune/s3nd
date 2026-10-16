@@ -3,8 +3,9 @@ title: 'How big can a snapshot be'
 description: 'A snapshot goes through your server, so your runtime sets the ceiling.'
 ---
 
-A snapshot travels from the browser to your API, and only then to S3. Your runtime's request limit
-is therefore the ceiling:
+A snapshot travels from the browser to your API as plain JSON, and is only gzipped there, on its
+way to S3. Your runtime's request limit therefore applies to the uncompressed JSON, and it is the
+ceiling:
 
 | Runtime                                                    | Max request body                  |
 | ---------------------------------------------------------- | --------------------------------- |
@@ -14,33 +15,47 @@ is therefore the ceiling:
 | Next.js Pages Router API routes (`bodyParser`)             | **1 MB** by default, configurable |
 | Long-running Node server (Express, Fastify, Docker…)       | whatever you configure            |
 
-That is the compressed size, and compression is doing a lot of work here.
+The platform enforces it before any s3nd code runs. A 4.5 MB limit is still something like tens of
+thousands of ordinary records; most local-first apps never come close.
 
 ## What gzip buys you
 
 An IndexedDB dump is the same keys repeated over every record, which is the best case for gzip.
-In practice a dump compresses 5–10×, so a 4.5 MB limit accommodates something like 20–45 MB of
-raw JSON — tens of thousands of ordinary records. Most local-first apps never come close.
+In practice a dump compresses 5–10×, which is what you pay S3 for and what `maxSize` measures.
 
 Measure yours rather than guessing:
 
 ```ts
 const result = await store.putSnapshot(code, state)
 
-console.log(result.size) // bytes actually stored
+console.log(result.size) // bytes actually stored, after gzip
 ```
 
 ## Failing early
 
-Set `maxSize` below your platform's limit. s3nd checks it before sending anything, so an
-oversized snapshot costs a comparison instead of a truncated request:
+Three limits, measured on two different things:
+
+| Limit                          | Measures                            | Who enforces it                |
+| ------------------------------ | ----------------------------------- | ------------------------------ |
+| Your platform's request limit  | the incoming body, raw JSON         | the platform, before s3nd runs |
+| The handler's `maxRequestSize` | the incoming body, raw JSON         | `createTransferHandler()`      |
+| `maxSize` on the bucket        | the bytes written to S3, after gzip | `upload()` and `putSnapshot()` |
+
+`maxSize` is measured **after gzip** for a snapshot (unless `compress: false`), on the same bytes
+`result.size` reports. It guards the bucket, not the request: calibrate it on what you are willing
+to store. Copying your platform's request limit into it does nothing, since a body that fits the
+request compresses to a fraction of it. s3nd checks it before sending anything, so an oversized
+snapshot costs a comparison instead of a write:
 
 ```ts
 const store = createBucket({
   bucket: process.env.S3_BUCKET,
-  maxSize: 4 * 1024 * 1024, // under Vercel's 4.5 MB
+  maxSize: 2 * 1024 * 1024, // 2 MB stored, gzipped
 })
 ```
+
+To bound the request itself, on a self-hosted server with no platform limit in front of it, set
+`maxRequestSize` on the handler; see [the server](/docs/server).
 
 ```ts
 try {

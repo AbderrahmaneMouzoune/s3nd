@@ -34,7 +34,7 @@ createBucket({
 | `forcePathStyle` | —                                                 | Defaults to `true` with a custom `endpoint`, `false` otherwise.                                                            |
 | `publicUrl`      | `S3ND_PUBLIC_URL`, `S3_PUBLIC_URL`                | Must be an absolute URL. Trailing slash optional.                                                                          |
 | `prefix`         | —                                                 | Applied by every method.                                                                                                   |
-| `maxSize`        | —                                                 | In bytes. Enforced before any network call.                                                                                |
+| `maxSize`        | —                                                 | In bytes of what is stored, so after gzip for a snapshot. Enforced before any network call.                                |
 | `syncCode`       | —                                                 | `{ length, alphabet }`. Defaults to eight Crockford base32 characters — see [Configuring codes](/docs/code-configuration). |
 | `client`         | —                                                 | An `S3Client` you built yourself.                                                                                          |
 
@@ -89,7 +89,9 @@ than no URL at all.
 ## Size caps
 
 `maxSize` is checked against the body size before anything is sent, so an oversized upload costs
-you nothing:
+you nothing. It measures the bytes written to S3: for `putSnapshot()` that is the gzipped envelope
+(unless you pass `compress: false`), not the JSON you handed it. `SnapshotResult.size` reports the
+same number, so you can measure a real dump against it.
 
 ```ts
 const store = createBucket({ bucket: 'my-bucket', maxSize: 4 * 1024 * 1024 })
@@ -97,8 +99,10 @@ const store = createBucket({ bucket: 'my-bucket', maxSize: 4 * 1024 * 1024 })
 await store.upload(tooBig) // throws S3ndError { code: 'FILE_TOO_LARGE' }
 ```
 
-Set it below your runtime's own request limit and you get a clean 413 instead of a truncated
-request. See [How big can a snapshot be](/docs/limits).
+`maxSize` guards what lands in the bucket, not the request that carried it there. Your platform's
+request limit applies earlier, to the incoming body, before any s3nd code runs; to bound that body
+yourself, set the handler's `maxRequestSize` (see [the server](/docs/server)). See
+[How big can a snapshot be](/docs/limits).
 
 ## Bringing your own client
 
