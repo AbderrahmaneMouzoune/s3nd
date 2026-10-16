@@ -55,7 +55,9 @@ const store = createBucket({
 ```
 
 To bound the request itself, on a self-hosted server with no platform limit in front of it, set
-`maxRequestSize` on the handler; see [the server](/docs/server).
+`maxRequestSize` on the handler. It is checked on `Content-Length` before anything is read, then on
+the bytes as they arrive, and on a snapshot's JSON before it is parsed. Unset, it defaults to the
+bucket's `maxSize` for files and to no limit for snapshots; see [the server](/docs/server).
 
 ```ts
 try {
