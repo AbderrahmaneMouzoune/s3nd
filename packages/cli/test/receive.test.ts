@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -68,5 +68,48 @@ describe('writeReceived', () => {
     await writeReceived(path, 'theirs', true)
 
     expect(readFileSync(path, 'utf8')).toBe('theirs')
+  })
+
+  it('streams a body to the file and reports what it wrote', async () => {
+    const path = join(root, 'big.bin')
+    const seen: number[] = []
+
+    const written = await writeReceived(path, new Blob([new Uint8Array(100_000)]).stream(), false, (n) => seen.push(n))
+
+    expect(written).toBe(100_000)
+    expect(readFileSync(path).byteLength).toBe(100_000)
+    expect(seen.at(-1)).toBe(100_000)
+  })
+
+  it('never leaves a half-written file when the stream fails', async () => {
+    const path = join(root, 'big.bin')
+    let pulls = 0
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        if (pulls > 3) controller.error(new Error('connection reset'))
+        else controller.enqueue(new Uint8Array(1000))
+      },
+    })
+
+    await expect(writeReceived(path, failing, false)).rejects.toThrow('connection reset')
+
+    expect(readdirSync(root)).toEqual([])
+  })
+
+  it('keeps the file already there intact when a forced write fails', async () => {
+    const path = join(root, 'report.pdf')
+    writeFileSync(path, 'mine')
+    const failing = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('half'))
+        controller.error(new Error('connection reset'))
+      },
+    })
+
+    await expect(writeReceived(path, failing, true)).rejects.toThrow('connection reset')
+
+    expect(readFileSync(path, 'utf8')).toBe('mine')
+    expect(readdirSync(root)).toEqual(['report.pdf'])
   })
 })

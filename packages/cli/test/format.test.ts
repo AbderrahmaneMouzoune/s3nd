@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { createStyle, formatBytes, formatDuration, parseDuration, tildify } from '../src/format.js'
+import {
+  createProgress,
+  createStyle,
+  formatBytes,
+  formatDuration,
+  parseDuration,
+  renderProgress,
+  tildify,
+} from '../src/format.js'
 
 describe('formatBytes', () => {
   it('reads the way a person checks a file', () => {
@@ -68,5 +76,61 @@ describe('tildify', () => {
     expect(tildify('/home/you/.config/s3nd/config.json', '/home/you')).toBe('~/.config/s3nd/config.json')
     expect(tildify('/home/youth/file', '/home/you')).toBe('/home/youth/file')
     expect(tildify('/etc/s3nd.json', '/home/you')).toBe('/etc/s3nd.json')
+  })
+})
+
+describe('renderProgress', () => {
+  it('shows a bar, a percentage, bytes and throughput against a known total', () => {
+    const line = renderProgress({ loaded: 5_000_000, total: 20_000_000 }, 2000)
+
+    expect(line).toContain('█'.repeat(6) + '░'.repeat(18))
+    expect(line).toContain(' 25%')
+    expect(line).toContain('5.0 MB / 20 MB')
+    expect(line).toContain('2.5 MB/s')
+  })
+
+  it('shows bytes and throughput alone when the total is unknown', () => {
+    expect(renderProgress({ loaded: 1500 }, 1000)).toBe('1.5 kB · 1.5 kB/s')
+  })
+
+  it('never goes past 100%', () => {
+    expect(renderProgress({ loaded: 30, total: 20 }, 1000)).toContain('100%')
+  })
+})
+
+describe('createProgress', () => {
+  function sink() {
+    const writes: string[] = []
+    return { writes, stream: { write: (text: string) => writes.push(text) } }
+  }
+
+  it('writes nothing when disabled, as under --json or off a terminal', () => {
+    const { writes, stream } = sink()
+    const progress = createProgress(stream, false)
+
+    progress.update({ loaded: 1, total: 2 })
+    progress.finish()
+
+    expect(writes).toEqual([])
+  })
+
+  it('redraws in place, at most every 100 ms, and always draws the last step', () => {
+    const { writes, stream } = sink()
+    let now = 0
+    const progress = createProgress(stream, true, () => now)
+
+    progress.update({ loaded: 1, total: 10 })
+    now = 50
+    progress.update({ loaded: 2, total: 10 })
+    now = 120
+    progress.update({ loaded: 3, total: 10 })
+    now = 130
+    progress.update({ loaded: 10, total: 10 })
+    progress.finish()
+
+    expect(writes).toHaveLength(4)
+    expect(writes.slice(0, 3).every((text) => text.startsWith('\r') && text.endsWith('\u001B[K'))).toBe(true)
+    expect(writes[2]).toContain('100%')
+    expect(writes[3]).toBe('\r\u001B[K')
   })
 })

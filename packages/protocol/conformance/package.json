@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "main": "../dist/conformance/index.cjs",
+  "module": "../dist/conformance/index.js",
+  "types": "../dist/conformance/index.d.cts"
+}

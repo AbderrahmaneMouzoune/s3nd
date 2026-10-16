@@ -4,9 +4,8 @@ import type { Readable } from 'node:stream'
 import type { SyncCodeOptions } from '@s3nd/protocol'
 
 /**
- * Everything `upload()` accepts. Streams are part of the signature from v0.1
- * so adding multipart support later is not a breaking change — see the
- * `contentLength` note in `UploadOptions`.
+ * Everything `upload()` accepts. A stream does not need its length: without
+ * one, it goes through a multipart upload.
  */
 export type UploadBody = string | Uint8Array | ArrayBuffer | ArrayBufferView | Blob | Readable | ReadableStream
 
@@ -41,8 +40,29 @@ export interface BucketConfig {
   publicUrl?: string
   /** Prefix prepended to every key, e.g. `"uploads"` or `"tenant-42/avatars"`. */
   prefix?: string
-  /** Rejects uploads above this size, in bytes, before any network call. */
+  /**
+   * Rejects uploads above this size, in bytes: before any network call when
+   * the size is known, while streaming otherwise (the multipart upload is then
+   * aborted and nothing is stored).
+   *
+   * Measured on the bytes written to S3: for `putSnapshot()` that is the
+   * gzipped envelope (unless `compress: false`), not the JSON passed in. It
+   * guards the bucket, not the request: a platform's request limit applies
+   * earlier, to the incoming body, before any s3nd code runs. To bound that
+   * body, use the handler's `maxRequestSize`.
+   */
   maxSize?: number
+  /**
+   * Bodies above this many bytes go through a multipart upload instead of a
+   * single `PutObject`. Default 16 MiB.
+   */
+  multipartThreshold?: number
+  /**
+   * Size of each multipart part, in bytes. At least 5 MiB, S3's floor; default
+   * 8 MiB. Up to four parts are in flight at once, so memory stays around four
+   * times this, whatever the size of the body.
+   */
+  partSize?: number
   /**
    * Shape of the codes `store.codes` produces and accepts. Defaults to eight
    * Crockford base32 characters.
@@ -61,6 +81,8 @@ export interface ResolvedConfig {
   publicUrl?: string
   prefix?: string
   maxSize?: number
+  multipartThreshold: number
+  partSize: number
   syncCode?: SyncCodeOptions
   client?: S3Client
 }
@@ -75,9 +97,10 @@ export interface UploadOptions {
   /** Overrides the detected content type. */
   contentType?: string
   /**
-   * Byte size of the body. Required for streams: a single `PutObject` cannot
-   * use chunked encoding. Ignored for buffers, strings and blobs, whose size
-   * is already known.
+   * Byte size of a stream body. Optional: a stream without it goes through a
+   * multipart upload, and a stream with it under `multipartThreshold` goes in
+   * one `PutObject`. Ignored for buffers, strings and blobs, whose size is
+   * already known.
    */
   contentLength?: number
   cacheControl?: string
@@ -89,9 +112,16 @@ export interface UploadOptions {
    * Only write if the object still carries this ETag. Optimistic concurrency:
    * a second device that wrote in the meantime makes this fail rather than
    * silently overwriting.
+   *
+   * Needs a backend that supports conditional writes (`If-Match` on
+   * `PutObject`). One that refuses the header throws
+   * `CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores it overwrites.
    */
   ifMatch?: string
-  /** Only write if nothing is stored under the key yet. */
+  /**
+   * Only write if nothing is stored under the key yet (`If-None-Match: *`).
+   * Same backend caveat as `ifMatch`.
+   */
   ifAbsent?: boolean
   signal?: AbortSignal
 }
@@ -109,7 +139,7 @@ export interface UploadResult {
   /** Full object key in the bucket, `prefix` included. */
   path: string
   contentType: string
-  /** Byte size, when known. */
+  /** Byte size: the one known upfront, or the one counted while streaming. */
   size?: number
   /** ETag without the surrounding quotes. */
   etag?: string
@@ -123,7 +153,8 @@ export interface GetOptions {
   signal?: AbortSignal
 }
 
-export interface StoredFile {
+/** Everything S3 knows about an object, without its body — what `head()` returns. */
+export interface StoredFileInfo {
   bucket: string
   /** The key you asked for, without the configured `prefix`. */
   key: string
@@ -137,6 +168,12 @@ export interface StoredFile {
   lastModified?: Date
   /** Raw S3 user metadata. Keys come back lowercased. */
   metadata: Record<string, string>
+}
+
+/** `get()` options and `head()` options are the same thing. */
+export type HeadOptions = GetOptions
+
+export interface StoredFile extends StoredFileInfo {
   /**
    * The object body. It can only be read once, so use `body`, `bytes()` or
    * `text()` — exactly one of them.
@@ -146,7 +183,37 @@ export interface StoredFile {
   text(): Promise<string>
 }
 
+export interface PresignUploadOptions {
+  /** The exact byte size the client will send. Signed: S3 refuses any other. */
+  contentLength: number
+  /** Signed too. Guessed from the key, then `filename`, when omitted. */
+  contentType?: string
+  /** Stored as metadata, so `get()` hands it back. */
+  filename?: string
+  metadata?: Record<string, string>
+  cacheControl?: string
+  /** Lifetime of the URL, in seconds. Default `3600`, max `604800` (7 days). */
+  expiresIn?: number
+  /** Prefix for this upload only. Overrides the bucket-level `prefix`. */
+  prefix?: string
+}
+
+/** A signed `PUT`: send the bytes to `url`, with `method` and `headers`. */
+export interface PresignedPut {
+  bucket: string
+  key: string
+  path: string
+  url: string
+  method: 'PUT'
+  /** To send exactly. `Content-Length`, which the browser sets itself, comes on top. */
+  headers: Record<string, string>
+  /** When S3 stops accepting `url`. */
+  expiresAt: Date
+}
+
 export interface GetUrlOptions {
+  /** Prefix for this URL only. Overrides the bucket-level `prefix`. */
+  prefix?: string
   /** Lifetime of a signed URL, in seconds. Default `3600`, max `604800` (7 days). */
   expiresIn?: number
   /**
@@ -159,6 +226,56 @@ export interface GetUrlOptions {
    * filename. Signed URLs only.
    */
   download?: boolean | string
+}
+
+export interface DeleteOptions {
+  /** Prefix for this delete only. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  signal?: AbortSignal
+}
+
+export interface ListOptions {
+  /**
+   * Namespace to list. Overrides the bucket-level `prefix`, exactly as it does
+   * on every other method, so the keys that come back are the ones you would
+   * pass to `get()` with the same `prefix`.
+   */
+  prefix?: string
+  /** Only keys that start with this, inside the namespace, e.g. `"user-42/"`. */
+  startsWith?: string
+  /** Stop after this many objects. Omit to walk the whole namespace. */
+  limit?: number
+  signal?: AbortSignal
+}
+
+/** One entry of `list()`. `ListObjectsV2` reports no content type or metadata. */
+export interface ListedObject {
+  bucket: string
+  /** Relative to the namespace listed: hand it back to `get()` as is. */
+  key: string
+  /** Full object key in the bucket, `prefix` included. */
+  path: string
+  size?: number
+  etag?: string
+  lastModified?: Date
+}
+
+export interface CopyOptions {
+  /** Prefix for both keys. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  /** Prefix for the destination only, e.g. to promote a transfer into `backups/`. */
+  toPrefix?: string
+  signal?: AbortSignal
+}
+
+export interface CopyResult {
+  bucket: string
+  /** The destination key, without its prefix. */
+  key: string
+  /** Full destination key in the bucket, prefix included. */
+  path: string
+  etag?: string
+  lastModified?: Date
 }
 
 /**
@@ -195,6 +312,11 @@ export interface PutSnapshotOptions {
   ifMatch?: string
   /** Only write if nothing is stored under the key yet. */
   ifAbsent?: boolean
+  /**
+   * Extra S3 user metadata, beside the envelope: visible to `head()` without
+   * reading the snapshot. Keys s3nd uses itself (`s3nd-…`) are its own.
+   */
+  metadata?: Record<string, string>
   prefix?: string
   signal?: AbortSignal
 }
@@ -211,16 +333,28 @@ export interface SnapshotResult {
   expiresAt?: Date
 }
 
-export interface GetSnapshotOptions {
+export interface GetSnapshotOptions<T = unknown> {
   /**
    * The newest schema version this device understands. A snapshot written by a
    * newer build throws `SNAPSHOT_TOO_NEW` instead of being handed over half
    * understood.
    */
   maxVersion?: number
+  /**
+   * Validates the stored data and returns it typed: a Zod schema's `parse`, a
+   * hand-written guard, anything that throws on data it refuses. Its return
+   * type is the type of `data`, so `getSnapshot()` no longer needs a type
+   * argument. A throw surfaces as `INVALID_SNAPSHOT`, with the original error
+   * as `cause`. Runs after the expiry and `maxVersion` checks.
+   */
+  parse?: (data: unknown) => T
   prefix?: string
   signal?: AbortSignal
 }
+
+export type DeleteSnapshotOptions = DeleteOptions
+
+export type HasSnapshotOptions = HeadOptions
 
 export interface Snapshot<T = unknown> {
   bucket: string

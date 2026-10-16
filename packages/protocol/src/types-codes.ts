@@ -22,8 +22,8 @@ export interface SyncCodes {
   /**
    * What someone typed, turned into the canonical code: separators dropped,
    * case folded when the alphabet allows it, and confusable characters repaired
-   * when the alphabet makes that unambiguous. Throws `INVALID_SYNC_CODE` on
-   * anything the alphabet cannot contain.
+   * when the alphabet makes that unambiguous. Throws a `TransferError` with
+   * `INVALID_SYNC_CODE` on anything the alphabet cannot contain.
    */
   normalize(input: string): string
 }

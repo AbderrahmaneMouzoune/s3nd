@@ -18,8 +18,8 @@ npm install @s3nd/protocol
 
 It holds one invariant: **nothing here imports a storage client**. That is what lets
 [`@s3nd/react`](https://www.npmjs.com/package/@s3nd/react), the CLI and a browser bundle
-share this code without any of them pulling the AWS SDK behind it. Its only dependency is
-[nanoid](https://github.com/ai/nanoid).
+share this code without any of them pulling the AWS SDK behind it. It has no runtime
+dependencies: codes come from `crypto.getRandomValues`, which every supported runtime ships.
 
 Most applications do not install this directly: `@s3nd/core` and `@s3nd/react` depend on it
 and re-export what you need. Reach for it when you are writing a client for a runtime neither of
@@ -38,15 +38,39 @@ const transfers = createTransferClient({
 const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typed) // null when unknown or expired
 const bytes = await transfers.readBytes(code) // for a file transfer
-await transfers.remove(code)
+await transfers.remove(code, { deleteToken }) // the deleteToken createSnapshot() returned
 ```
+
+Files can go straight to the bucket instead of through the server, with progress:
+
+```ts
+const transfers = createTransferClient({ baseUrl: '/api/transfers', upload: 'auto' })
+
+await transfers.createFile({
+  body: file,
+  filename: file.name,
+  onProgress: ({ loaded, total }) => render(loaded / (total ?? loaded)),
+})
+```
+
+`upload` is `'proxy'` (the default: the bytes go in `POST /`), `'presign'` (the server signs a URL,
+the bytes go to the bucket) or `'auto'` (presign when the server offers it). In a browser,
+`onProgress` sends through `XMLHttpRequest`, the only API that reports upload progress.
+`readBytes(code, { onProgress })` counts a download the same way. For a file too large to hold,
+`readStream(code)` hands back `{ body, size, contentType }` with `body` a `ReadableStream`, and
+`createFile()` takes a stream as `body`, with its `size` when you know it.
 
 `fetch` and nothing else, so it runs in a browser, a worker, React Native, Deno or Node without a
 polyfill. Pass your own `fetch` to add retries, or to point it somewhere else in tests.
 
+Pass `timeout` (milliseconds) to bound every call: past it, the call rejects with a `TransferError`
+coded `TIMEOUT`, a code only the client raises. A response that is not the JSON the protocol
+promises (an HTML login page on a 200, a body without a `code`) rejects as `INTERNAL` with a message
+naming what came back.
+
 ## The routes
 
-All four are relative to wherever the server mounted them.
+All of them are relative to wherever the server mounted them.
 
 | Route            | What it does                                                                        |
 | ---------------- | ----------------------------------------------------------------------------------- |
@@ -54,6 +78,11 @@ All four are relative to wherever the server mounted them.
 | `GET /:code`     | Metadata, with the state inline for a snapshot                                      |
 | `GET /:code/raw` | The bytes, or a `302` to a presigned URL                                            |
 | `DELETE /:code`  | Burns the code                                                                      |
+
+A server can also offer presigned uploads: `POST /` with `{ "upload": "presign", … }` hands back a
+URL to send the bytes to, and `POST /:code/complete` makes the code live once they are there.
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md)
+specifies it.
 
 Every non-2xx answer carries `{ "error": { "code", "message" } }`, and the client turns it into a
 `TransferError` with that `code` on it. Branch on the code, never on the message:
@@ -69,8 +98,54 @@ if (isTransferError(error) && error.code === 'TOO_LARGE') {
 `NOT_FOUND` deliberately covers an expired code as well as one that never existed: telling them
 apart would let someone probe which codes have been used.
 
-The [protocol documentation](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
-describes each route and every error code in full.
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md),
+shipped in this package, is the normative specification: every route, header, body, error code and
+rule a server or a client has to follow. The
+[protocol guide](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
+is the readable tour of it.
+
+Every request carries `s3nd-protocol: 1` (`PROTOCOL_HEADER`), and a server answers a newer version
+with `UNSUPPORTED_PROTOCOL` instead of misreading it.
+
+## Checking a server
+
+Every rule of `PROTOCOL.md` comes with a check: `@s3nd/protocol/conformance` runs them against any
+server, whatever it is written in, through `fetch` and nothing else. It returns a report, one
+`{ name, status, detail }` per check with `status` `pass`, `fail` or `skip`, rather than throwing,
+so it needs no test framework:
+
+```ts
+import { runConformance } from '@s3nd/protocol/conformance'
+
+const report = await runConformance({
+  baseUrl: 'https://drop.example.com/api/transfers',
+  headers: { authorization: `Bearer ${token}` },
+  // What the server is configured with. Each one turns a skipped check into a real one.
+  server: { expiresIn: 3600, maxSize: 50 * 1024 * 1024, cors: { origin: 'https://app.example.com' } },
+})
+
+const failed = report.filter((result) => result.status === 'fail')
+```
+
+It covers creating, reading, `/raw` and deleting a snapshot and a file, a `.json` file staying a
+file, unknown, badly encoded and confusable codes, the error body and the status of every error
+code, the version header, and, when the server offers them, presigned uploads and delete tokens.
+Optional features are detected where the protocol makes them visible (a `deleteToken` in the
+`201`, a presign request answered `201` or `400`); the rest is what you tell it in `server`:
+
+| `server` option | What it unlocks                                                                        |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `alphabet`      | The code normalization rules for a custom alphabet (Crockford base32 by default)       |
+| `expiresIn`     | `expiresAt` checked against it; at most `expiryWait` (15 s) and the suite waits it out |
+| `maxSize`       | One byte over it must be `TOO_LARGE`                                                   |
+| `cors.origin`   | The preflight and the CORS headers on errors                                           |
+| `upload`        | Checked against the detected mode, `proxy`, `presign` or `both`                        |
+| `protectDelete` | Checked against whether `DELETE` turns out to need the delete token                    |
+| `rateLimit`     | `requests + 1` reads of one code must end in `RATE_LIMITED`. Runs last                 |
+
+The run creates real transfers and burns each one, so point it at storage it may write to.
+`@s3nd/core` runs it against `createTransferHandler()` in its own CI, in memory and on MinIO.
+`s3nd doctor --remote <url> --conformance` prints the same report.
 
 ## Sync codes
 

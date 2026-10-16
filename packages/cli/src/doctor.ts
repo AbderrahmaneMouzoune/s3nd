@@ -1,9 +1,11 @@
-import { GetBucketLifecycleConfigurationCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { GetBucketCorsCommand, GetBucketLifecycleConfigurationCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { randomUUID } from 'node:crypto'
 
 import type { Bucket } from '@s3nd/core'
+import { runConformance, type ConformanceOptions, type ConformanceResult } from '@s3nd/protocol/conformance'
 
-export type CheckStatus = 'ok' | 'warn' | 'fail'
+/** `skip`: a conformance check that does not apply to this server. */
+export type CheckStatus = 'ok' | 'warn' | 'fail' | 'skip'
 
 export interface Check {
   name: string
@@ -124,8 +126,45 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
   }
 
   checks.push(await checkLifecycle(bucket, prefix))
+  checks.push(await checkCors(bucket))
 
   return checks
+}
+
+const CORS_FIX =
+  'Only needed for presigned uploads from a browser (`upload: "presign"` on the handler): add a CORS rule ' +
+  "allowing PUT from your app's origin, with the content-type header. See https://doc.s3nd.sh/docs/server."
+
+/**
+ * A presigned upload sends the bytes from the browser straight to the bucket,
+ * which the browser only allows when the bucket answers the preflight. Without
+ * a rule, every upload fails with nothing but "network error" to go on.
+ */
+async function checkCors(bucket: Bucket): Promise<Check> {
+  try {
+    const response = await bucket.client.send(new GetBucketCorsCommand({ Bucket: bucket.bucket }))
+
+    const allowsPut = (response.CORSRules ?? []).some(
+      (rule) =>
+        (rule.AllowedMethods ?? []).some((method) => method.toUpperCase() === 'PUT') &&
+        (rule.AllowedHeaders ?? []).some((header) => header === '*' || header.toLowerCase() === 'content-type'),
+    )
+
+    return allowsPut
+      ? { name: 'Browser uploads (CORS)', status: 'ok', detail: 'a CORS rule allows PUT with content-type' }
+      : { name: 'Browser uploads (CORS)', status: 'warn', detail: 'no CORS rule allows PUT', fix: CORS_FIX }
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'NoSuchCORSConfiguration') {
+      return { name: 'Browser uploads (CORS)', status: 'warn', detail: 'no CORS configuration', fix: CORS_FIX }
+    }
+
+    return {
+      name: 'Browser uploads (CORS)',
+      status: 'warn',
+      detail: `could not be read (${describe(error)})`,
+      fix: 'Grant s3:GetBucketCORS to check this automatically, or verify the rule by hand.',
+    }
+  }
 }
 
 /**
@@ -134,10 +173,14 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
  * most common way a s3nd bucket goes wrong.
  */
 async function checkLifecycle(bucket: Bucket, prefix?: string): Promise<Check> {
-  const scope = prefix ? `the "${prefix}" prefix` : 'the bucket'
+  // Keys are written as `<prefix>/<code>`, so that is what a rule's prefix is
+  // matched against, whether the user typed `transfers`, `transfers/` or `/transfers`.
+  const trimmed = prefix?.replace(/^\/+|\/+$/g, '') || undefined
+  const keyPrefix = trimmed ? `${trimmed}/` : ''
+  const scope = trimmed ? `the "${trimmed}" prefix` : 'the bucket'
   const suggestion =
     'Add an S3 lifecycle rule that expires objects under ' +
-    (prefix ? `"${prefix}/"` : 'this bucket') +
+    (trimmed ? `"${keyPrefix}"` : 'this bucket') +
     ' after a day or two. Without it, expired transfers stay stored and billed.'
 
   try {
@@ -149,17 +192,25 @@ async function checkLifecycle(bucket: Bucket, prefix?: string): Promise<Check> {
       return { name: 'Expiry cleanup', status: 'warn', detail: 'no enabled expiration rule', fix: suggestion }
     }
 
-    const covering = rules.filter((rule) => {
-      const rulePrefix = rule.Filter?.Prefix ?? rule.Prefix ?? ''
-      return prefix ? prefix.startsWith(rulePrefix) || rulePrefix === '' : rulePrefix === ''
+    const matching = rules.filter((rule) => {
+      // The console and Terraform write `Filter.And` as soon as a tag or a size
+      // bound joins the prefix; the top-level `Prefix` is the legacy form.
+      const rulePrefix = rule.Filter?.Prefix ?? rule.Filter?.And?.Prefix ?? rule.Prefix ?? ''
+      return keyPrefix.startsWith(rulePrefix)
     })
 
+    // A tag filter only matches objects carrying that tag, and s3nd tags nothing.
+    const covering = matching.filter((rule) => rule.Filter?.Tag == null && (rule.Filter?.And?.Tags ?? []).length === 0)
+
     if (covering.length === 0) {
+      const tagged = matching.length > 0
       return {
         name: 'Expiry cleanup',
         status: 'warn',
-        detail: `${rules.length} expiration rule(s), none covering ${scope}`,
-        fix: suggestion,
+        detail: tagged
+          ? `${matching.length} expiration rule(s) match ${scope} but filter on tags, which s3nd never sets`
+          : `${rules.length} expiration rule(s), none covering ${scope}`,
+        fix: tagged ? `${suggestion} Leave tags out of its filter.` : suggestion,
       }
     }
 
@@ -203,4 +254,23 @@ async function resolveEndpoint(value: unknown): Promise<string | undefined> {
   const url = value as { hostname?: string; protocol?: string; port?: number | string }
   const port = url?.port ? `:${url.port}` : ''
   return url?.hostname ? `endpoint ${url.protocol ?? 'https:'}//${url.hostname}${port}` : undefined
+}
+
+const CONFORMANCE_STATUS: Record<ConformanceResult['status'], CheckStatus> = { pass: 'ok', fail: 'fail', skip: 'skip' }
+
+/** The conformance report, as doctor checks: a failed rule fails `doctor`, a skipped one does not. */
+export function toChecks(report: ConformanceResult[]): Check[] {
+  return report.map((result) => ({
+    name: `Conformance: ${result.name}`,
+    status: CONFORMANCE_STATUS[result.status],
+    detail: result.detail,
+  }))
+}
+
+/**
+ * `doctor --remote … --conformance`: every rule of PROTOCOL.md, against the
+ * server itself. It writes real transfers and burns each one.
+ */
+export async function conformanceChecks(options: ConformanceOptions): Promise<Check[]> {
+  return toChecks(await runConformance(options))
 }

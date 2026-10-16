@@ -4,6 +4,8 @@ dist/
 out/
 .turbo/
 coverage/
+# api-extractor scratch output; the reports themselves live in etc/
+temp/
 *.log
 *.tsbuildinfo
 .DS_Store

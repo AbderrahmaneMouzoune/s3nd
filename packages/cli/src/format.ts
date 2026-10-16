@@ -114,3 +114,70 @@ export function tildify(path: string, home = homedir()): string {
 
   return path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path
 }
+
+export interface ProgressSnapshot {
+  loaded: number
+  total?: number
+}
+
+const BAR_WIDTH = 24
+
+/**
+ * One line of progress: a bar and a percentage when the total is known, then
+ * bytes and throughput. `284 kB/s` is what tells a slow link from a stuck one.
+ */
+export function renderProgress({ loaded, total }: ProgressSnapshot, elapsedMs: number): string {
+  const rate = elapsedMs > 0 ? (loaded * 1000) / elapsedMs : 0
+  const speed = `${formatBytes(Math.round(rate))}/s`
+
+  if (total == null || total <= 0) return `${formatBytes(loaded)} · ${speed}`
+
+  const ratio = Math.min(loaded / total, 1)
+  const filled = Math.round(ratio * BAR_WIDTH)
+  const bar = `${'█'.repeat(filled)}${'░'.repeat(BAR_WIDTH - filled)}`
+
+  return `${bar} ${String(Math.floor(ratio * 100)).padStart(3)}% · ${formatBytes(loaded)} / ${formatBytes(total)} · ${speed}`
+}
+
+export interface Progress {
+  update(progress: ProgressSnapshot): void
+  /** Clears the line, so whatever is printed next starts clean. */
+  finish(): void
+}
+
+const SILENT: Progress = { update: () => {}, finish: () => {} }
+/** Redraws at most this often: a terminal does not need a frame per chunk. */
+const REDRAW_MS = 100
+
+/**
+ * A progress line on `stream`, redrawn in place. Off unless `enabled`, which
+ * the caller sets for a terminal and never for `--json`: a pipeline or a log
+ * file should not fill with carriage returns.
+ */
+export function createProgress(
+  stream: { write(text: string): unknown },
+  enabled: boolean,
+  now: () => number = Date.now,
+): Progress {
+  if (!enabled) return SILENT
+
+  const started = now()
+  let drawn = false
+  let lastDraw = Number.NEGATIVE_INFINITY
+
+  return {
+    update(progress) {
+      const at = now()
+      const done = progress.total != null && progress.loaded >= progress.total
+      if (!done && at - lastDraw < REDRAW_MS) return
+
+      lastDraw = at
+      drawn = true
+      stream.write(`\r${renderProgress(progress, at - started)}\u001B[K`)
+    },
+    finish() {
+      if (drawn) stream.write('\r\u001B[K')
+      drawn = false
+    },
+  }
+}

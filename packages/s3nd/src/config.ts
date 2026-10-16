@@ -1,12 +1,21 @@
 import { S3Client } from '@aws-sdk/client-s3'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import { normalizePrefix } from './key.js'
+import { DEFAULT_MULTIPART_THRESHOLD, DEFAULT_PART_SIZE, MIN_PART_SIZE } from './multipart.js'
 import type { BucketConfig, ResolvedConfig } from './types.js'
 
+/**
+ * `process.env` where there is one. Deno and Bun provide it; a worker without
+ * `nodejs_compat` or an edge function may not, and then configuration has to
+ * be passed explicitly.
+ */
 function env(...names: string[]): string | undefined {
+  const variables = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+  if (!variables) return undefined
+
   for (const name of names) {
-    const value = process.env[name]
+    const value = variables[name]
     if (value != null && value.length > 0) return value
   }
 
@@ -42,6 +51,19 @@ export function resolveConfig(config: BucketConfig = {}): ResolvedConfig {
     throw new S3ndError('INVALID_CONFIG', '`maxSize` must be a positive number of bytes.')
   }
 
+  const partSize = config.partSize ?? DEFAULT_PART_SIZE
+  if (!Number.isInteger(partSize) || partSize < MIN_PART_SIZE) {
+    throw new S3ndError(
+      'INVALID_CONFIG',
+      `\`partSize\` must be a whole number of bytes, at least ${MIN_PART_SIZE} (5 MiB).`,
+    )
+  }
+
+  const multipartThreshold = config.multipartThreshold ?? DEFAULT_MULTIPART_THRESHOLD
+  if (!Number.isFinite(multipartThreshold) || multipartThreshold < 0) {
+    throw new S3ndError('INVALID_CONFIG', '`multipartThreshold` must be a non-negative number of bytes.')
+  }
+
   const endpoint = config.endpoint ?? env('S3ND_ENDPOINT', 'S3_ENDPOINT')
 
   return {
@@ -57,6 +79,8 @@ export function resolveConfig(config: BucketConfig = {}): ResolvedConfig {
     publicUrl: normalizePublicUrl(config.publicUrl ?? env('S3ND_PUBLIC_URL', 'S3_PUBLIC_URL')),
     prefix: normalizePrefix(config.prefix),
     maxSize: config.maxSize,
+    multipartThreshold,
+    partSize,
     syncCode: config.syncCode,
     client: config.client,
   }
@@ -68,6 +92,18 @@ export function createS3Client(config: ResolvedConfig): S3Client {
   return new S3Client({
     ...(config.region ? { region: config.region } : {}),
     ...(config.credentials ? { credentials: config.credentials } : {}),
-    ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: config.forcePathStyle } : {}),
+    ...(config.endpoint
+      ? {
+          endpoint: config.endpoint,
+          forcePathStyle: config.forcePathStyle,
+          // Since 3.729 the SDK adds a CRC32 checksum to every request, as a
+          // trailer on aws-chunked bodies, and validates the ones it gets back.
+          // R2 and older MinIO/Ceph builds reject or mangle that, and a custom
+          // endpoint already means "not AWS" here: send checksums only when an
+          // operation requires one. AWS itself keeps the SDK defaults.
+          requestChecksumCalculation: 'WHEN_REQUIRED' as const,
+          responseChecksumValidation: 'WHEN_REQUIRED' as const,
+        }
+      : {}),
   })
 }

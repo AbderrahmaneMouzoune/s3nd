@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 
 import { normalizeBody } from '../src/body.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 
 describe('normalizeBody', () => {
   it('rejects a missing body', async () => {
@@ -73,13 +73,19 @@ describe('normalizeBody', () => {
     expect(result.contentLength).toBe(3)
   })
 
-  it('refuses a stream of unknown length, and says what to do about it', async () => {
+  it('accepts a stream of unknown length, leaving its length undefined', async () => {
+    const stream = Readable.from([Buffer.from('abc')])
+    const result = await normalizeBody(stream)
+
+    expect(result.body).toBe(stream)
+    expect(result.contentLength).toBeUndefined()
+  })
+
+  it('refuses a nonsensical stream length', async () => {
     const stream = Readable.from([Buffer.from('abc')])
 
-    await expect(normalizeBody(stream)).rejects.toMatchObject({
-      code: 'MISSING_CONTENT_LENGTH',
-    })
-    await expect(normalizeBody(stream)).rejects.toThrowError(/v0\.2/)
+    await expect(normalizeBody(stream, -1)).rejects.toMatchObject({ code: 'INVALID_BODY' })
+    await expect(normalizeBody(stream, Number.NaN)).rejects.toMatchObject({ code: 'INVALID_BODY' })
   })
 
   it('rejects anything else', async () => {

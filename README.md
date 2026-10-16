@@ -13,6 +13,7 @@
 [![@s3nd/protocol](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=%40s3nd%2Fprotocol)](https://www.npmjs.com/package/@s3nd/protocol)
 [![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/AbderrahmaneMouzoune/s3nd/badge)](https://scorecard.dev/viewer/?uri=github.com/AbderrahmaneMouzoune/s3nd)
 
 ```sh
 $ s3nd put ./report.pdf
@@ -141,8 +142,8 @@ s3nd -p r2 put ./report.pdf
 
 **From a terminal:** `@s3nd/cli`. Straight to the bucket with the credentials on that machine, or
 through your own server with `--remote` and a token. The code goes to stdout and everything else to
-stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `tar cz ./project | s3nd put - --name project.tar.gz`
-moves a directory. [Every command →](https://doc.s3nd.sh/docs/cli)
+stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `s3nd put ./project` moves a directory
+as a `.tar.gz`. [Every command →](https://doc.s3nd.sh/docs/cli)
 
 **Inside your app:** `@s3nd/core` on the server, `@s3nd/react` in the browser. One route file turns any
 bucket into a drop box; the hooks send a file or a snapshot and read a code back, with typos repaired
@@ -229,7 +230,7 @@ dependency tree. `@s3nd/protocol` is what both halves share, which is why it exi
 rather than living inside `@s3nd/core`.
 
 ```
-@s3nd/protocol   nanoid                      the contract, shared by everything
+@s3nd/protocol   (no dependencies)           the contract, shared by everything
 @s3nd/core       + aws-sdk, protocol         the S3 primitive
 @s3nd/react      + protocol, react (peer)    hooks, no path to S3
 @s3nd/cli        + core                      the binary
@@ -285,7 +286,9 @@ the pull request title is the message that counts, and CI checks its shape on ev
 | `fix: …`                                   | 0.1.1                                 |
 | `feat: …`                                  | 0.2.0                                 |
 | `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0; the major bump waits for 1.0.0 |
-| `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                   |
+
+From 1.0.0 on, a breaking change is a major release, as the [support policy](#support-policy) says.
+| `chore: …`, `ci: …`, `docs: …`, `test: …` | nowhere, no release |
 
 The four packages version independently: a commit releases whichever of `packages/*` it touched,
 and a package whose dependency moved is carried along. The docs site, the website, the examples,
@@ -326,6 +329,27 @@ Two repository secrets:
 
 Running the workflow by hand with **Publish** ticked publishes the version currently on `main`: the way out
 when a release was tagged but the publish step failed.
+
+## Support policy
+
+**Versioning.** From 1.0.0, every package follows [semantic versioning](https://semver.org)
+strictly: a breaking change to an export, an option, a CLI command or flag, or the wire protocol
+waits for the next major. What counts as the public API is what each package's API report in
+`packages/*/etc/*.api.md` lists, the CLI's documented commands and flags, and
+[`PROTOCOL.md`](./packages/protocol/PROTOCOL.md). A new optional field, a new error code or a new
+option is a minor release, as the protocol's own versioning rules allow. Before 1.0.0, a `1.0.0-rc`
+under the npm `next` tag can still change.
+
+**Node.** The packages need Node 20 or later (their `engines` field), and CI runs them on 20, 22
+and 24. A Node line is dropped only in a major release, and only once it is past its end of life.
+`@s3nd/core` also runs on Bun and Deno, which CI checks.
+
+**Maintenance.** The latest minor of the current major gets bug and security fixes. When a new
+major comes out, the previous one keeps getting security fixes for six months; 0.x releases get
+none once 1.0.0 is out. [`SECURITY.md`](./.github/SECURITY.md) says how to report a vulnerability.
+
+**Upgrading from 0.x.** The [migration guide](https://doc.s3nd.sh/docs/migration) lists every change
+that can break an application, with the code before and after.
 
 ## License
 

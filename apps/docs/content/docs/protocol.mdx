@@ -11,6 +11,13 @@ that answers these routes, not only against `createTransferHandler()`. A server 
 Rails works with every s3nd client. And the CLI pointed at `--remote` cannot tell which of
 those it is talking to — which is exactly why `s3nd put` works against your own deployment.
 
+<Callout>
+  This page is a tour. The normative text is
+  [`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md), shipped in
+  `@s3nd/protocol`: when you implement a server or a client, follow that one. Where the two disagree, `PROTOCOL.md`
+  wins.
+</Callout>
+
 ## Serving it
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
@@ -53,26 +60,74 @@ const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typedCode) // null when unknown or expired
 ```
 
-`@s3nd/protocol` is `fetch` and nothing else. Its whole dependency tree is nanoid, and no
+`@s3nd/protocol` is `fetch` and nothing else. It has no runtime dependencies, and no
 path from it reaches the AWS SDK — so it bundles for a browser, a worker or React Native without
 dragging a storage client along. That is the reason it is a separate package rather than a subpath
 of `s3nd`: a subpath would have put the SDK in every front-end's `node_modules`.
 
+It checks what comes back instead of casting it. A `2xx` that is not JSON (an SSO login page, a
+`baseUrl` pointing at the wrong place) or JSON without a string `code`, a known `kind` and a
+`createdAt` rejects with a `TransferError` coded `INTERNAL`, whose message names the status and the
+content type received, rather than a `SyntaxError` or a code reading "undefined".
+
+A request to a server that never answers waits forever by default. Pass `timeout`, in
+milliseconds, to bound every call, reading the response included:
+
+```ts
+const transfers = createTransferClient({ baseUrl, timeout: 15_000 })
+```
+
+Past it, the call rejects with a `TransferError` coded `TIMEOUT`. That code is the client's own: no
+server sends it, so it is not in the table below, and its type is `TransferClientErrorCode` rather
+than `TransferErrorCode`. A `signal` you pass still works alongside the timeout, and aborting it
+still rejects with the plain `AbortError`, which the React hooks treat as a silent cancel while
+they show `TIMEOUT` as an error.
+
+A file's bytes come back from `readBytes(code)`, or as a stream from `readStream(code)`.
+`readBytes` reports how far the download has got, with the total when the server sent a length:
+
+```ts
+const bytes = await transfers.readBytes(code, { onProgress: ({ loaded, total }) => render(loaded, total) })
+```
+
 In React you rarely call it directly — [the hooks](/docs/react) wrap it.
+
+## The version header
+
+Every request a client sends carries `s3nd-protocol: 1`, and every response the handler sends
+carries it back, errors included. A request announcing a newer version is refused with
+`UNSUPPORTED_PROTOCOL` before anything reads its body, so a future client learns it is talking to
+an older server instead of being misread. A request without the header is answered as version 1,
+which is what clients from before the header speak.
+
+```ts
+import { PROTOCOL_HEADER, PROTOCOL_VERSION } from '@s3nd/protocol'
+// 's3nd-protocol', 1
+```
+
+A new optional field or a new error code does not bump the version; clients ignore fields they do
+not know and treat an unknown error code as `INTERNAL`.
 
 ## The routes
 
-All four are relative to wherever you mounted the handler, `/api/transfers` by default.
+All of them are relative to wherever you mounted the handler, `/api/transfers` by default.
 
 ### `POST /`
 
 Creates a transfer and returns the code. What you send decides what it holds.
 
-With `Content-Type: application/json`, the body is `{ data, version?, device? }` and the transfer
-is a **snapshot** — structured state, handed back inline on read.
+The server decides what the transfer is, in this order:
 
-With any other content type, the body is the raw bytes and the transfer is a **file**. The original
-filename travels percent-encoded in `X-S3nd-Filename`.
+1. **`X-S3nd-Filename` present**: a **file**, whatever the `Content-Type`. The body is the raw
+   bytes, and the header carries the original filename, percent-encoded. A `.json` file is sent
+   as `application/json` and stays a file.
+2. **Otherwise, `Content-Type: application/json`**: a **snapshot**. The body is
+   `{ data, version?, device? }`, structured state handed back inline on read. `device` is stored
+   as sent; without it the snapshot has none, and the server does not fill it in.
+3. **Otherwise**: a **file** named `file`.
+
+`createFile()` always sends the filename and `createSnapshot()` never does, so a client built on
+`@s3nd/protocol` lands on the right side without thinking about it.
 
 ```json title="201"
 { "code": "K7QP2M4X", "kind": "snapshot", "createdAt": "…", "expiresAt": "…", "size": 412 }
@@ -105,33 +160,60 @@ or dashes, `O` where they meant `0` — resolves to the same transfer. See
 
 ### `GET /:code/raw`
 
-The bytes, with the stored `Content-Type` and a `Content-Disposition` carrying the filename. With
-`raw: 'redirect'` the handler answers `302` with a presigned URL instead, so the payload never
-transits your server twice.
+The bytes of a file, with the stored `Content-Type` and a `Content-Disposition` carrying the
+filename. With `raw: 'redirect'` the handler answers `302` with a presigned URL instead, so the
+payload never transits your server twice.
+
+`/raw` serves files only: on a snapshot code it answers `NOT_FOUND`. A snapshot's state comes from
+`GET /:code`.
+
+Files only. A snapshot has no raw form, so its code answers `404 NOT_FOUND` with the same body as
+an unknown or expired code: `/raw` says nothing about what a code holds. A snapshot's state comes
+from `GET /:code`.
 
 ### `DELETE /:code`
 
 Burns a code, and answers `204`. Deleting one that is already gone is not an error — a client that
 burns a code after a successful restore should not have to care whether it won that race.
 
+Every `201` carries a `deleteToken`, stored by the server only as a hash. A server with
+`protectDelete` answers `401` to a `DELETE` that does not carry it, in `x-s3nd-delete-token` or as
+`authorization: Bearer`. A server with `burnAfterRead` deletes a transfer itself once it has been
+handed over.
+
+### Presigned uploads: `POST /` with `upload: "presign"`, then `POST /:code/complete`
+
+A server with `upload: 'presign'` or `'both'` also takes a file without its bytes. The client
+posts `{ "upload": "presign", "filename", "size", "contentType" }` as JSON and gets back
+`{ code, uploadUrl, method: "PUT", headers, expiresAt }`. It sends the bytes to `uploadUrl`, then
+calls `POST /:code/complete`. The server checks the stored object and answers the usual `201`.
+Until then the code reads as `NOT_FOUND`.
+
+A server in `proxy` mode, the default, answers the presign request with `400 INVALID_REQUEST`, and
+so does one that predates it, so a client can try and fall back. The full flow, with what each side
+MUST check, is in
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md).
+
 ## Errors
 
-Every non-2xx answer carries the same body:
+Every non-2xx answer carries the same body, unexpected failures included:
 
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Unknown or expired code." } }
 ```
 
-| `code`              | HTTP  | What happened                                        |
-| ------------------- | ----- | ---------------------------------------------------- |
-| `INVALID_REQUEST`   | `400` | Malformed body, or a method the route does not serve |
-| `INVALID_SYNC_CODE` | `400` | What was typed cannot be a code in this alphabet     |
-| `UNAUTHORIZED`      | `401` | `authorize` refused                                  |
-| `NOT_FOUND`         | `404` | No such code — or it expired                         |
-| `CODE_TAKEN`        | `409` | No free code found; vanishingly unlikely at 40 bits  |
-| `SNAPSHOT_TOO_NEW`  | `409` | Written by a newer schema than this deployment reads |
-| `TOO_LARGE`         | `413` | Over the configured `maxSize`                        |
-| `INTERNAL`          | `500` | Anything else                                        |
+| `code`                 | HTTP  | What happened                                                        |
+| ---------------------- | ----- | -------------------------------------------------------------------- |
+| `INVALID_REQUEST`      | `400` | Malformed body, or a method the route does not serve                 |
+| `INVALID_SYNC_CODE`    | `400` | What was typed cannot be a code in this alphabet                     |
+| `UNSUPPORTED_PROTOCOL` | `400` | The request announced a newer protocol version                       |
+| `UNAUTHORIZED`         | `401` | `authorize` refused                                                  |
+| `NOT_FOUND`            | `404` | No such code — or it expired                                         |
+| `CODE_TAKEN`           | `409` | No free code found; vanishingly unlikely at 40 bits                  |
+| `SNAPSHOT_TOO_NEW`     | `409` | Written by a newer schema than this deployment reads                 |
+| `TOO_LARGE`            | `413` | Over the configured `maxSize`, refused before the whole body is read |
+| `RATE_LIMITED`         | `429` | `rateLimit` refused; `retry-after` says when to try again            |
+| `INTERNAL`             | `500` | Anything else                                                        |
 
 `NOT_FOUND` deliberately covers expiry as well as absence. Distinguishing them would let someone
 probe which codes have been used.
@@ -150,6 +232,46 @@ try {
   }
 }
 ```
+
+## Checking a server
+
+Every rule of `PROTOCOL.md` comes with a check: `@s3nd/protocol/conformance` runs them against any
+server, whatever it is written in, through `fetch` and nothing else. It returns a report, one
+`{ name, status, detail }` per check with `status` `pass`, `fail` or `skip`, rather than throwing,
+so it needs no test framework:
+
+```ts
+import { runConformance } from '@s3nd/protocol/conformance'
+
+const report = await runConformance({
+  baseUrl: 'https://drop.example.com/api/transfers',
+  headers: { authorization: `Bearer ${token}` },
+  // What the server is configured with. Each one turns a skipped check into a real one.
+  server: { expiresIn: 3600, maxSize: 50 * 1024 * 1024, cors: { origin: 'https://app.example.com' } },
+})
+
+const failed = report.filter((result) => result.status === 'fail')
+```
+
+It covers creating, reading, `/raw` and deleting a snapshot and a file, a `.json` file staying a
+file, unknown, badly encoded and confusable codes, the error body and the status of every error
+code, the version header, and, when the server offers them, presigned uploads and delete tokens.
+Optional features are detected where the protocol makes them visible (a `deleteToken` in the
+`201`, a presign request answered `201` or `400`); the rest is what you tell it in `server`:
+
+| `server` option | What it unlocks                                                                        |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `alphabet`      | The code normalization rules for a custom alphabet (Crockford base32 by default)       |
+| `expiresIn`     | `expiresAt` checked against it; at most `expiryWait` (15 s) and the suite waits it out |
+| `maxSize`       | One byte over it must be `TOO_LARGE`                                                   |
+| `cors.origin`   | The preflight and the CORS headers on errors                                           |
+| `upload`        | Checked against the detected mode, `proxy`, `presign` or `both`                        |
+| `protectDelete` | Checked against whether `DELETE` turns out to need the delete token                    |
+| `rateLimit`     | `requests + 1` reads of one code must end in `RATE_LIMITED`. Runs last                 |
+
+The run creates real transfers and burns each one, so point it at storage it may write to.
+`@s3nd/core` runs it against `createTransferHandler()` in its own CI, in memory and on MinIO.
+`s3nd doctor --remote <url> --conformance` prints the same report.
 
 ## Expiry is enforced on read, not by deletion
 

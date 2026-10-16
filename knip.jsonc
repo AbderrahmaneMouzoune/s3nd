@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // The four packages are the API contract; the apps, examples and the drop
+  // template consume it and are checked by their own builds.
+  "ignoreWorkspaces": ["apps/*", "examples/*", "templates/*"],
+  // A page loaded by .github/launch/index.html and rendered by hand, not code
+  // anything imports.
+  "ignore": [".github/launch/**"],
+  // A type or helper exported only so a test or a sibling declaration can name
+  // it is not dead.
+  "ignoreExportsUsedInFile": true,
+}

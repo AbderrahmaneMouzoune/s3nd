@@ -45,7 +45,10 @@ lives in the same repository.
 npm install @s3nd/core
 ```
 
-Node 20 or later, which is what AWS SDK v3 requires. `@aws-sdk/client-s3` and
+Node 20 or later, which is what AWS SDK v3 requires. The package imports no `node:*` module, and
+CI also runs the transfer handler on Bun and Deno; Cloudflare Workers should work with
+`nodejs_compat` and explicit `credentials`. The Vercel Edge runtime is not supported: keep routes
+that import `@s3nd/core` on `runtime = 'nodejs'`. `@aws-sdk/client-s3` and
 `@aws-sdk/s3-request-presigner` come along as dependencies, so there is nothing else to install
 and no peer dependency to satisfy.
 
@@ -72,10 +75,14 @@ That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` 
 - throws `SNAPSHOT_TOO_NEW` when the snapshot's `version` is above the `maxVersion` this build
   understands, instead of feeding an old app data it will misread;
 - gives you back `createdAt`, `device` and `etag`, which is what you need to show the user _what_
-  they are about to restore.
+  they are about to restore;
+- validates `data` when you pass `parse` (a Zod schema's `parse`, or any function that throws on
+  what it refuses), whose return type becomes the type of `data`; a refusal is `INVALID_SNAPSHOT`.
+  Without it, `getSnapshot<T>()` is an unchecked assertion.
 
 Compression is on by default and is not a detail: an IndexedDB dump is repetitive JSON, so gzip
-routinely cuts it by 5 to 10×. That is headroom against the request limit of whatever runs your API.
+routinely cuts it by 5 to 10× in the bucket. `maxSize` measures those stored, gzipped bytes; the
+request that carries a snapshot to your API is plain JSON, and your platform limits it before s3nd runs.
 
 ## The routes, without writing them
 
@@ -104,8 +111,31 @@ createTransferHandler({
 })
 ```
 
-The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
-nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
+Short codes need `rateLimit: (request, { route, code }) => boolean | Response`, asked about every
+request once its code is read and before it is looked up (`false` answers `429 RATE_LIMITED`).
+`protectDelete: true` makes `DELETE` require the `deleteToken` every `201` carries, stored only as
+its SHA-256, and `burnAfterRead: true` deletes a transfer once it has been handed over.
+
+Past your runtime's request limit, `upload: 'presign'` (or `'both'`) has the client send a file
+straight to the bucket through a signed URL, then checks it on `POST /:code/complete`. It needs a
+CORS rule on the bucket for browsers, and a lifecycle rule on `pending/` for uploads nobody
+completes. `store.presignUpload(key, { contentLength })` is the building block, if you write your
+own routes.
+
+Every failure answers JSON. One the protocol has no name for (a throwing `authorize`, a failed S3
+call) answers `INTERNAL` with a generic message, so nothing about your bucket leaks; pass
+`onError: (error, request) => …` to log the real error.
+
+When the app calls the routes from another origin, pass
+`cors: { origin: ['https://app.example.com'], credentials?, maxAge? }` (or a predicate, or `'*'`)
+and export `OPTIONS` too: the handler answers the preflight before `authorize`, and puts the CORS
+headers on every response, errors included.
+
+On a self-hosted server, with no platform request limit in front of it, also pass
+`maxRequestSize` (in bytes): a bigger request answers `TOO_LARGE` without being read into memory.
+
+The browser half is a separate package, `@s3nd/protocol`, which has no runtime dependencies; no
+path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:
 
 ```ts
@@ -141,8 +171,8 @@ until a bill arrives. `put`, `get` and `rm` move files between machines with a c
 ## Sync codes
 
 `store.codes` pairs code generation with the normalization that reads codes back, so the two can
-never disagree about the alphabet. Codes are generated with
-[nanoid](https://github.com/ai/nanoid).
+never disagree about the alphabet. Codes are drawn from `crypto.getRandomValues`, with no bias
+toward any character.
 
 The default is eight characters of
 [Crockford base32](https://www.crockford.com/base32.html): no `I`, `L`, `O` or `U`, so a code
@@ -187,8 +217,27 @@ import { normalizeSyncCode } from '@s3nd/protocol'
 doing the work. If the data is sensitive, encrypt it in the browser before it ever reaches your
 server: `putSnapshot()` stores whatever you hand it, ciphertext included.
 
-Burning a code after a successful restore is a good habit, and there is no separate call for it:
-`store.delete(code)` is the whole of it.
+Burning a code after a successful restore is a good habit: `store.deleteSnapshot(code)` is the
+whole of it. To check a code without downloading the snapshot, `store.hasSnapshot(code)` answers
+from a `HeadObject` and treats an expired snapshot as gone.
+
+`expiresIn` is enforced on read; the object itself stays until a lifecycle rule removes it, and
+lifecycle rules count in days. Scope one to the snapshot prefix:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-transfer-snapshots",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "snapshots/" },
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}
+```
+
+On R2: `npx wrangler r2 bucket lifecycle add my-bucket expire-transfer-snapshots snapshots/ --expire-days 1`.
 
 ## Two devices, one snapshot
 
@@ -213,6 +262,11 @@ try {
 `ifAbsent: true` is the other half: write only if nothing is stored yet, which is how you claim a
 freshly generated code without a chance of trampling one already in use.
 
+Both rest on the backend supporting conditional writes on `PutObject`: S3 since August 2024 and R2
+do, MinIO and Ceph depend on the build. A backend that refuses the header throws
+`CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores it overwrites silently, so check yours once
+([conditional writes](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/providers.mdx#conditional-writes)).
+
 ## The file API underneath
 
 Snapshots are built on a small set of file primitives, and they stay available for everything that
@@ -222,12 +276,22 @@ is not a snapshot, such as an attachment, an exported PDF or an avatar:
 await store.upload(file) // → { key, path, url?, size?, etag?, contentType }
 await store.put(id, file) // one file per identifier: create or replace
 await store.get(id) // → the file back, or null
+await store.head(id) // → size, type, ETag, metadata, without the body; or null
+await store.exists(id) // → boolean
 await store.getUrl(id) // → public or presigned URL
+await store.copy(from, to) // → server-side, no bytes through your runtime
+await store.move(from, to) // → copy, then delete the source
 await store.delete(id) // → void
+
+for await (const object of store.list({ prefix: 'snapshots' })) {
+  // paginated ListObjectsV2, one page at a time
+}
 ```
 
-Keys round-trip: what `upload()` returns is what you hand back to `get()`, `getUrl()` and
-`delete()`. The configured `prefix` is an internal namespace.
+Keys round-trip: what `upload()` and `list()` return is what you hand back to `get()`, `getUrl()`
+and `delete()`. The configured `prefix` is an internal namespace, and every method takes a
+per-call `prefix` that overrides it. `list()` needs `s3:ListBucket` on the bucket, which nothing
+else does.
 
 Anything the package does not wrap is one command away through `store.client`, which is the plain
 `S3Client`.
@@ -239,15 +303,22 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | Code                                                            | When                                                                                                    |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `INVALID_CONFIG`                                                | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`.                        |
-| `INVALID_SYNC_CODE`                                             | The code is empty, or holds characters outside the alphabet.                                            |
 | `INVALID_SNAPSHOT`                                              | Data JSON cannot represent, a stored object that is not a snapshot, or an envelope from a newer format. |
 | `SNAPSHOT_TOO_NEW`                                              | The snapshot's schema version is above the `maxVersion` given.                                          |
 | `PRECONDITION_FAILED`                                           | An `ifMatch` or `ifAbsent` write lost the race.                                                         |
+| `CONDITIONAL_WRITE_UNSUPPORTED`                                 | The backend refused the conditional header an `ifMatch` or `ifAbsent` write sends.                      |
 | `INVALID_KEY`                                                   | Empty key, leading or trailing `/`, `..` segment, backslash, over 1024 bytes.                           |
 | `INVALID_BODY`                                                  | Unsupported upload body type.                                                                           |
-| `MISSING_CONTENT_LENGTH`                                        | A stream uploaded without `contentLength`.                                                              |
-| `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`.                                                                    |
+| `MISSING_CONTENT_LENGTH`                                        | No longer raised: a stream without `contentLength` goes through multipart.                              |
+| `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`, known upfront or counted while streaming.                          |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
+| `LIST_FAILED` / `COPY_FAILED`                                   | S3 rejected a `list()` or `copy()`, or its arguments were invalid.                                      |
+
+A typed code that cannot exist is the one exception: `store.codes.normalize()` throws a
+`TransferError` with `INVALID_SYNC_CODE`, the protocol's own answer, which the handler sends as is.
+`TransferError` and `isTransferError` are re-exported here, so a server imports from one package.
+Both `isS3ndError` and `isTransferError` check a `Symbol.for('s3nd.error')` brand rather than
+`instanceof`, so they hold when an application ends up with two copies of a package.
 
 Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
 raised before anything reaches the network.
@@ -261,7 +332,14 @@ magnitude of headroom, and `maxSize` lets you refuse an oversized snapshot befor
 request.
 
 Above that, split the snapshot per object store, or presign an upload so the browser talks to S3
-directly. Both get first-class support in v0.2, along with multipart.
+directly.
+
+Between your server and S3 there is no ceiling: above `multipartThreshold` (16 MiB), and for any
+stream whose length you do not pass, `upload()` uses a multipart upload in `partSize` pieces
+(8 MiB), so a stream of any size goes through without being buffered whole. `maxSize` is counted
+while streaming, and a failed or aborted upload sends `AbortMultipartUpload`. Add an
+`AbortIncompleteMultipartUpload` lifecycle rule for the uploads a crashed process leaves behind.
+Multipart does not raise your runtime's request limit, though.
 
 ## Configuration
 
@@ -272,14 +350,25 @@ createBucket({
   credentials: { accessKeyId: '…', secretAccessKey: '…' }, // omit for the AWS provider chain
   endpoint: 'https://…', // S3-compatible storage, or S3ND_ENDPOINT / S3_ENDPOINT
   prefix: 'snapshots', // internal namespace, applied on the way in and out
-  maxSize: 5 * 1024 * 1024, // reject bigger writes before any network call
+  maxSize: 5 * 1024 * 1024, // reject bigger writes, counted while streaming
+  multipartThreshold: 16 * 1024 * 1024, // above this, a multipart upload
+  partSize: 8 * 1024 * 1024, // size of each part, 5 MiB at least
 })
 ```
 
-With an `endpoint` set, `region` defaults to `"auto"` and path-style addressing is enabled, which is what
-R2, MinIO and Scaleway expect. Every option except `client` falls back to an environment variable,
+With an `endpoint` set, `region` defaults to `"auto"`, path-style addressing is enabled, and the
+AWS SDK's default checksums are only sent when an operation requires them, which is what R2, MinIO
+and Scaleway expect. Every option except `client` falls back to an environment variable,
 so `createBucket()` with no arguments works once `S3_BUCKET` and the usual `AWS_*` variables are
 set.
+
+## Upgrading, and security
+
+Coming from 0.x? The [migration guide](https://doc.s3nd.sh/docs/migration) lists every change that
+can break an application on the way to 1.0, with the code before and after. The
+[threat model](https://doc.s3nd.sh/docs/security) says what a code protects, what the bucket
+operator sees and what expiry guarantees; vulnerabilities go through the
+[security policy](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/.github/SECURITY.md).
 
 ## License
 

@@ -14,10 +14,30 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["S3ND_TEST_*"]
+    },
     "type-check": {
       "dependsOn": ["^build"]
     },
+    "api": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "api:update": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "lint": {},
+    "lint:package": {
+      "dependsOn": ["build"]
+    },
     "lint:fix": {
       "cache": false
     }
