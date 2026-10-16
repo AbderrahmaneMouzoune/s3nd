@@ -46,6 +46,11 @@ when another device may write the same key — see [two devices](/docs/two-devic
 Throws `INVALID_SNAPSHOT` when the data is not JSON-serializable, and `PRECONDITION_FAILED` when
 an `ifMatch` or `ifAbsent` write loses the race.
 
+`ifMatch` and `ifAbsent` need a backend that supports conditional writes: S3 since August 2024 and
+R2 do, MinIO and Ceph depend on the build. One that refuses them throws
+`CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores them overwrites without a word. See
+[conditional writes](/docs/providers#conditional-writes).
+
 ---
 
 ## `getSnapshot(key, options?)`
@@ -184,6 +189,9 @@ Node `Readable` or web `ReadableStream`.
 | `ifMatch`            | `string`                 | — write only if the stored ETag still matches                                     |
 | `ifAbsent`           | `boolean`                | — write only if nothing is stored yet                                             |
 | `signal`             | `AbortSignal`            | —                                                                                 |
+
+`ifMatch` and `ifAbsent` depend on the backend supporting conditional writes; see
+[conditional writes](/docs/providers#conditional-writes).
 
 Returns:
 

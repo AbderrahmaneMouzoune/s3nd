@@ -37,6 +37,39 @@ const store = createBucket({
 })
 ```
 
+## Conditional writes
+
+`ifAbsent` and `ifMatch` are a single header each on `PutObject`: `If-None-Match: *` and
+`If-Match: <etag>`. They are what claims a sync code only if nobody else did, and what stops a
+second device from silently overwriting a snapshot. They only work if the backend implements
+them:
+
+| Backend       | `ifAbsent` / `ifMatch`                                                              |
+| ------------- | ----------------------------------------------------------------------------------- |
+| AWS S3        | Yes, since August 2024                                                              |
+| Cloudflare R2 | Yes                                                                                 |
+| MinIO         | Depends on the build. The 2026-02 build CI runs against honours both                |
+| Ceph RGW      | Depends on the release: check yours before relying on it                            |
+| Others        | Check. Scaleway and Wasabi document S3 compatibility, not this header in particular |
+
+A backend without them does one of two things:
+
+- **It refuses the header**, with a `501` or a `400`. s3nd reports that as
+  `CONDITIONAL_WRITE_UNSUPPORTED`, with a message naming the limitation, rather than a bare
+  `UPLOAD_FAILED`. The remedy is a backend that supports conditional writes, not a retry.
+- **It ignores the header** and writes anyway. Nothing fails: `ifAbsent` returns a normal result
+  over a key that already existed, and two devices racing on one code can overwrite each other.
+  This cannot be detected after the fact without reading the object back, which s3nd does not do
+  by default because it would double the cost of every write.
+
+So on a self-hosted or less common backend, check it once: write the same key twice with
+`ifAbsent: true`, and expect the second write to throw `PRECONDITION_FAILED`.
+
+```ts
+await store.put('probe', 'one', { ifAbsent: true })
+await store.put('probe', 'two', { ifAbsent: true }) // must throw PRECONDITION_FAILED
+```
+
 ## Cloudflare R2
 
 ```ts
