@@ -1,6 +1,6 @@
 {
   "packages/protocol": "0.1.1",
-  "packages/s3nd": "0.1.1",
+  "packages/s3nd": "0.1.2",
   "packages/react": "0.1.1",
-  "packages/cli": "0.2.0"
+  "packages/cli": "0.2.1"
 }
