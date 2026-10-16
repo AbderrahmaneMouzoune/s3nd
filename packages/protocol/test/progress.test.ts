@@ -145,3 +145,49 @@ describe('progress', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
+
+describe('streams', () => {
+  it('hands back the bytes as a stream, with their size', async () => {
+    const client = createTransferClient({
+      baseUrl: BASE,
+      fetch: async () =>
+        new Response(new Blob([new Uint8Array(5)]).stream(), {
+          headers: { 'content-length': '5', 'content-type': 'application/pdf' },
+        }),
+    })
+
+    const stream = await client.readStream('K7QP2M4X')
+
+    expect(stream).toMatchObject({ size: 5, contentType: 'application/pdf' })
+    expect((await new Response(stream!.body).arrayBuffer()).byteLength).toBe(5)
+  })
+
+  it('reads an unknown code as null', async () => {
+    const client = createTransferClient({
+      baseUrl: BASE,
+      fetch: async () => Response.json({ error: { code: 'NOT_FOUND', message: 'gone' } }, { status: 404 }),
+    })
+
+    expect(await client.readStream('K7QP2M4X')).toBeNull()
+  })
+
+  it('sends a stream body with its length when it is known', async () => {
+    const seen: { length: string | null; bytes: number }[] = []
+    const client = createTransferClient({
+      baseUrl: BASE,
+      fetch: async (input, init) => {
+        const request = new Request(input as string, init as RequestInit)
+        seen.push({ length: request.headers.get('content-length'), bytes: (await request.arrayBuffer()).byteLength })
+        return Response.json({ code: 'K7QP2M4X', kind: 'file', createdAt: 'x' }, { status: 201 })
+      },
+    })
+
+    await client.createFile({ body: new Blob([new Uint8Array(9)]).stream(), size: 9, filename: 'a' })
+    await client.createFile({ body: new Blob([new Uint8Array(4)]).stream(), filename: 'b' })
+
+    expect(seen).toEqual([
+      { length: '9', bytes: 9 },
+      { length: null, bytes: 4 },
+    ])
+  })
+})

@@ -77,6 +77,15 @@ export interface CreateFileInput {
   signal?: AbortSignal
 }
 
+/** The bytes behind a code, as they arrive. */
+export interface TransferStream {
+  /** Read it once, to the end or until cancelled. */
+  body: ReadableStream<Uint8Array>
+  /** From `Content-Length`, when the server sent one. */
+  size?: number
+  contentType?: string
+}
+
 export interface ReadBytesOptions {
   signal?: AbortSignal
   /** Called as the bytes come in, against the response's `Content-Length`. */
@@ -92,6 +101,11 @@ export interface TransferClient {
   read(code: string, options?: { signal?: AbortSignal }): Promise<TransferMetadata | null>
   /** The bytes behind a code, or `null` when it is unknown or expired. */
   readBytes(code: string, options?: ReadBytesOptions): Promise<Uint8Array | null>
+  /**
+   * The bytes behind a code as a stream, or `null` when it is unknown or
+   * expired: for a file too large to hold in memory.
+   */
+  readStream(code: string, options?: { signal?: AbortSignal }): Promise<TransferStream | null>
   /** Burns a code. Deleting one that is already gone is not an error. */
   remove(code: string, options?: { signal?: AbortSignal }): Promise<void>
 }
@@ -442,6 +456,24 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
         return options.onProgress
           ? readCounted(response, options.onProgress)
           : new Uint8Array(await response.arrayBuffer())
+      })
+    },
+
+    readStream(code, options = {}) {
+      // The timeout covers the request, up to the response headers: the body
+      // is the caller's to read, at whatever pace a large file takes.
+      return withTimeout(options.signal, async (signal) => {
+        const response = await sendAllowingMissing(`/${encodeURIComponent(code)}/raw`, { method: 'GET', signal })
+
+        if (!response) return null
+
+        const length = response.headers.get('content-length')
+
+        return {
+          body: response.body ?? new Blob([]).stream(),
+          size: length != null && /^\d+$/.test(length) ? Number(length) : undefined,
+          contentType: response.headers.get('content-type') ?? undefined,
+        }
       })
     },
 

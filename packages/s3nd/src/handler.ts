@@ -352,6 +352,28 @@ async function readBody(request: Request, limit: number | undefined): Promise<Ui
   return bytes
 }
 
+/**
+ * Passes a request body through, and errors it with `FILE_TOO_LARGE` the
+ * moment it carries more than `limit` bytes, so a streamed upload stops there
+ * and the multipart upload behind it is aborted.
+ */
+function bounded(body: ReadableStream<Uint8Array>, limit: number): ReadableStream<Uint8Array> {
+  let size = 0
+
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        size += chunk.byteLength
+        if (size > limit) {
+          controller.error(new S3ndError('FILE_TOO_LARGE', `Request body exceeds the limit of ${limit} bytes.`))
+          return
+        }
+        controller.enqueue(chunk)
+      },
+    }),
+  )
+}
+
 function discard(body: unknown): void {
   const stream = body as { destroy?: () => void; cancel?: () => void }
   stream?.destroy?.()
@@ -494,6 +516,27 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     }
   }
 
+  /**
+   * A code nothing is stored under, live or pending. For a write that cannot
+   * be retried under another code, a streamed body or a presigned upload,
+   * where `claimCode()`'s retry-on-conflict would have nothing left to send.
+   */
+  async function freeCode(): Promise<string | undefined> {
+    for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
+      const candidate = bucket.codes.create()
+      const taken = await s3(
+        'GET_FAILED',
+        `Failed to check code ${candidate}`,
+        async () =>
+          (await headObject(bucket, pathOf(bucket, candidate))) ??
+          (await headObject(bucket, pathOf(bucket, pendingKey(candidate)))),
+      )
+      if (!taken) return candidate
+    }
+
+    return undefined
+  }
+
   async function presign(body: PresignUploadBody): Promise<Response> {
     if (uploadMode === 'proxy') {
       return fail('INVALID_REQUEST', 'This server does not offer presigned uploads. Send the bytes in POST / instead.')
@@ -524,19 +567,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       )
     }
 
-    let code: string | undefined
-    for (let attempt = 0; attempt < CODE_ATTEMPTS && code === undefined; attempt += 1) {
-      const candidate = bucket.codes.create()
-      const taken = await s3(
-        'GET_FAILED',
-        `Failed to check code ${candidate}`,
-        async () =>
-          (await headObject(bucket, pathOf(bucket, candidate))) ??
-          (await headObject(bucket, pathOf(bucket, pendingKey(candidate)))),
-      )
-      if (!taken) code = candidate
-    }
-
+    const code = await freeCode()
     if (code === undefined) {
       return fail('CODE_TAKEN', `Could not find a free code in ${CODE_ATTEMPTS} attempts.`)
     }
@@ -630,18 +661,34 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     }
 
     const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
-    const bytes = await readBody(request, fileLimit)
-    if (bytes === null) return tooLarge(fileLimit!)
+    const length = request.headers.get('content-length')
+    const declared = length != null && /^\d+$/.test(length) ? Number(length) : undefined
 
-    if (bytes.byteLength === 0) {
+    if (!request.body || declared === 0) {
       return fail('INVALID_REQUEST', 'Request body is empty.')
+    }
+
+    // An announced length over the limit is refused before a byte is read;
+    // a body without one, or whose length lies, is cut off at the limit.
+    if (fileLimit != null && declared != null && declared > fileLimit) {
+      await request.body.cancel().catch(() => undefined)
+      return tooLarge(fileLimit)
     }
 
     const createdAt = new Date()
     const expiresAt = expiresIn != null ? new Date(createdAt.getTime() + expiresIn * 1000) : undefined
 
-    const created = await claimCode(async (code) => {
-      const result = await bucket.put(code, bytes, {
+    // The body is streamed into the bucket rather than read into memory: a
+    // large one goes through a multipart upload. A stream can be sent only
+    // once, so the code is checked free first instead of retried on conflict.
+    const code = await freeCode()
+    if (code === undefined) {
+      return fail('CODE_TAKEN', `Could not find a free code in ${CODE_ATTEMPTS} attempts.`)
+    }
+
+    {
+      const result = await bucket.put(code, fileLimit != null ? bounded(request.body, fileLimit) : request.body, {
+        contentLength: declared,
         filename,
         // A generic octet-stream means the client did not know; let upload()
         // infer from the filename rather than freezing in the placeholder.
@@ -654,16 +701,21 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         ifAbsent: true,
       })
 
-      return {
+      if (result.size === 0) {
+        await bucket.delete(code)
+        return fail('INVALID_REQUEST', 'Request body is empty.')
+      }
+
+      const created: CreatedTransfer = {
         code,
-        kind: 'file' as const,
+        kind: 'file',
         createdAt: createdAt.toISOString(),
         expiresAt: expiresAt?.toISOString(),
         size: result.size,
       }
-    })
 
-    return Response.json(created, { status: 201 })
+      return Response.json(created, { status: 201 })
+    }
   }
 
   async function read(code: string): Promise<Response> {

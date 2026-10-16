@@ -875,4 +875,49 @@ describe('createTransferHandler — request size', () => {
       )
     }
   })
+
+  it('streams a large file into a multipart upload, never reading it whole', async () => {
+    const memory = createMemoryClient()
+    const bucket = createBucket({ bucket: 'transfers', client: memory.client, multipartThreshold: 1024 * 1024 })
+    const handler = createTransferHandler({ bucket })
+    const body = countedStream(12, 1024 * 1024)
+
+    const response = await handler(streamed(body.stream))
+    const created = await response.json()
+    const names = memory.send.mock.calls.map(
+      ([command]) => (command as { constructor: { name: string } }).constructor.name,
+    )
+
+    expect(response.status).toBe(201)
+    expect(created.size).toBe(12 * 1024 * 1024)
+    expect(names.filter((name) => name === 'UploadPartCommand')).toHaveLength(2)
+    expect(memory.objects.get(created.code)!.body.byteLength).toBe(12 * 1024 * 1024)
+  })
+
+  it('aborts the multipart upload of a body cut off at the limit', async () => {
+    const memory = createMemoryClient()
+    const bucket = createBucket({ bucket: 'transfers', client: memory.client, multipartThreshold: 1024 * 1024 })
+    const handler = createTransferHandler({ bucket, maxRequestSize: 9 * 1024 * 1024 })
+    const body = countedStream(100, 1024 * 1024)
+
+    const response = await handler(streamed(body.stream))
+    const names = memory.send.mock.calls.map(
+      ([command]) => (command as { constructor: { name: string } }).constructor.name,
+    )
+
+    expect(response.status).toBe(413)
+    expect(body.pulled()).toBeLessThan(20)
+    expect(names).toContain('AbortMultipartUploadCommand')
+    expect(memory.uploads.size).toBe(0)
+    expect([...memory.objects.keys()]).toEqual([])
+  })
+
+  it('takes an empty streamed body for what it is, and stores nothing', async () => {
+    const { memory, handler } = setup()
+
+    const response = await handler(streamed(countedStream(0, 1).stream))
+
+    expect(response.status).toBe(400)
+    expect(memory.objects.size).toBe(0)
+  })
 })

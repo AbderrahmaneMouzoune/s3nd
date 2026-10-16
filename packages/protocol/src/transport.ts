@@ -60,12 +60,19 @@ export async function transmit(doFetch: typeof globalThis.fetch, outgoing: Outgo
   const { onProgress } = outgoing
 
   if (!onProgress) {
+    const stream = isStream(outgoing.body)
+
     return doFetch(outgoing.url, {
       method: outgoing.method,
-      headers: outgoing.headers,
+      // A stream carries no length of its own; a presigned PUT needs it, and a
+      // server can refuse an oversized body before reading it.
+      headers:
+        stream && outgoing.size != null
+          ? { ...outgoing.headers, 'content-length': String(outgoing.size) }
+          : outgoing.headers,
       body: outgoing.body as BodyInit,
       signal: outgoing.signal,
-      ...(isStream(outgoing.body) ? { duplex: 'half' } : {}),
+      ...(stream ? { duplex: 'half' } : {}),
     } as RequestInit)
   }
 

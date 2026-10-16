@@ -67,6 +67,11 @@ function memoryClient() {
         }
       }
 
+      if (name === 'HeadObjectCommand') {
+        if (!stored) throw Object.assign(new Error('missing'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+        return { ContentLength: stored.body.byteLength, Metadata: stored.metadata ?? {} }
+      }
+
       if (name === 'DeleteObjectCommand') {
         objects.delete(input.Key)
         return {}

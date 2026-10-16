@@ -152,6 +152,30 @@ function tooLarge(size: number, maxSize: number): S3ndError {
   )
 }
 
+/** Reads a whole (small) stream, stopping as soon as it passes `maxSize`. */
+async function collect(
+  body: AsyncIterable<unknown> | ReadableStream,
+  maxSize: number | undefined,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  let length = 0
+
+  for await (const chunk of chunksOf(body)) {
+    length += chunk.byteLength
+    if (maxSize != null && length > maxSize) throw new SizeExceeded(maxSize)
+    chunks.push(chunk)
+  }
+
+  const bytes = new Uint8Array(length)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return bytes
+}
+
 async function* prepend<T>(head: T, rest: AsyncIterable<T>): AsyncGenerator<T> {
   yield head
   yield* rest
@@ -331,7 +355,12 @@ export class Bucket {
       let stored: { etag?: string; size?: number }
 
       if (declaredSize != null && declaredSize <= this.config.multipartThreshold) {
-        stored = await putObject(normalized.body, declaredSize)
+        // A stream this small is read into memory first. The SDK's Node
+        // handler only pipes a Node `Readable` and would mangle a web
+        // stream, and counting the bytes is what holds maxSize to them.
+        const payload =
+          normalized.body instanceof Uint8Array ? normalized.body : await collect(normalized.body, maxSize)
+        stored = await putObject(payload, payload.byteLength)
       } else if (normalized.body instanceof Uint8Array) {
         stored = await multipart(slicesOf(normalized.body, this.config.partSize))
       } else {

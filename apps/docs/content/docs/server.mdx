@@ -184,6 +184,10 @@ A `Content-Length` above it answers `TOO_LARGE` (413) without reading anything. 
 `Content-Length`, or one that understates it, is read with a counter and cut off as soon as it
 passes the limit. A snapshot's JSON is bounded before it is parsed.
 
+A file is never held whole: its body is streamed into the bucket as it arrives, through a
+multipart upload above the bucket's `multipartThreshold`, so the handler's memory stays at a few
+parts whatever the size. A body cut off at the limit aborts that upload, and nothing is stored.
+
 Left unset, files default to the bucket's `maxSize` when it has one, and snapshots to no limit, so
 an existing deployment behaves as before. The bucket's `maxSize` still applies on top: it measures
 what is stored, after gzip for a snapshot. For downloads, `raw: 'redirect'` keeps the bytes off
