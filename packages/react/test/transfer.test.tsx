@@ -27,6 +27,7 @@ function fakeClient(overrides: Partial<TransferClient> = {}): TransferClient {
     createFile: vi.fn(async () => created('ABCD1234', 'file')),
     read: vi.fn(async () => metadata()),
     readBytes: vi.fn(async () => new Uint8Array([1, 2, 3])),
+    readStream: vi.fn(async () => ({ body: new Blob([new Uint8Array([1, 2, 3])]).stream(), size: 3 })),
     remove: vi.fn(async () => {}),
     ...overrides,
   }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, unlinkSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { basename, dirname, resolve as resolvePath } from 'node:path'
+import { dirname, resolve as resolvePath } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { parseArgs } from 'node:util'
 
 import { createBucket, createTransferHandler, isS3ndError, type Bucket } from '@s3nd/core'
@@ -10,11 +11,12 @@ import { createTransferClient, isTransferError, type TransferClient } from '@s3n
 import { didYouMean, findProjectConfig, machineConfigPath, resolveConfiguration, type Configuration } from './config.js'
 import { runChecks, type Check } from './doctor.js'
 import { CliError, isCliError } from './errors.js'
-import { createStyle, formatBytes, formatDuration, tildify, type Style } from './format.js'
+import { createProgress, createStyle, formatBytes, formatDuration, tildify, type Style } from './format.js'
 import { assertProvider, PROVIDERS, writeStarter, type Provider } from './init.js'
 import { Cancelled, createPrompter } from './prompt.js'
 import { safeFilename, writeReceived } from './receive.js'
 import { askSetup, PROVIDER_CHOICES, render, writeSetup, type Target } from './setup.js'
+import { openSource } from './transfer.js'
 
 declare const __VERSION__: string
 
@@ -320,42 +322,35 @@ function buildClient(configuration: Configuration): TransferClient {
   })
 }
 
-async function readSource(flags: Flags, file: string): Promise<{ bytes: Uint8Array; filename: string }> {
-  if (file === '-') {
-    const chunks: Buffer[] = []
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
-
-    const bytes = Buffer.concat(chunks)
-
-    if (bytes.byteLength === 0) {
-      throw new CliError(
-        'Nothing arrived on stdin.',
-        'Pipe something in: `tar cz ./project | s3nd put - --name project.tar.gz`.',
-      )
-    }
-
-    return { bytes, filename: flags.name ?? 'stdin' }
-  }
-
-  const path = resolvePath(file)
-
-  try {
-    return { bytes: await readFile(path), filename: flags.name ?? basename(path) }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new CliError(`No such file: ${file}`, 'Pass "-" to read the transfer from stdin instead.')
-    }
-
-    throw error
-  }
+/** A progress line on stderr, for a person at a terminal and never under `--json`. */
+function progressFor(flags: Flags) {
+  return createProgress(process.stderr, Boolean(process.stderr.isTTY) && !flags.json)
 }
 
-async function commandPut(client: TransferClient, flags: Flags, file: string): Promise<void> {
-  const { bytes, filename } = await readSource(flags, file)
-  const created = await client.createFile({ body: bytes, filename })
+async function commandPut(client: TransferClient, flags: Flags, file: string, remote: boolean): Promise<void> {
+  // Streamed, never read whole. Stdin goes straight into a multipart upload
+  // locally; against a server it is spooled to disk first, since a presigned
+  // upload needs its size upfront.
+  const source = await openSource(file === '-' ? file : resolvePath(file), { name: flags.name, spool: remote })
+  const progress = progressFor(flags)
+
+  let created
+  try {
+    created = await client.createFile({
+      body: source.body,
+      size: source.size,
+      filename: source.filename,
+      onProgress: (state) => progress.update(state),
+    })
+  } finally {
+    progress.finish()
+    await source.cleanup()
+  }
+
+  const { filename } = source
 
   emit(flags.json, created, () => {
-    const parts = [filename, formatBytes(created.size ?? bytes.byteLength)]
+    const parts = [filename, formatBytes(created.size ?? source.size)]
 
     if (created.expiresAt) {
       const seconds = Math.round((new Date(created.expiresAt).getTime() - Date.now()) / 1000)
@@ -392,21 +387,29 @@ async function commandGet(client: TransferClient, flags: Flags, code: string): P
     return
   }
 
-  const bytes = await client.readBytes(code)
-  if (!bytes) throw unknownCode(code)
+  const stream = await client.readStream(code)
+  if (!stream) throw unknownCode(code)
 
   if (flags.output === '-') {
-    process.stdout.write(bytes)
+    await pipeline(Readable.fromWeb(stream.body as never), process.stdout)
     return
   }
 
   // The stored filename is the sender's to choose, so it only ever names a file
   // in this directory; -o and --name are this machine's own choice.
   const destination = resolvePath(flags.output ?? flags.name ?? safeFilename(metadata.filename, code))
-  await writeReceived(destination, bytes, flags.force)
+  const total = stream.size ?? metadata.size
+  const progress = progressFor(flags)
+
+  let written
+  try {
+    written = await writeReceived(destination, stream.body, flags.force, (loaded) => progress.update({ loaded, total }))
+  } finally {
+    progress.finish()
+  }
 
   emit(flags.json, { ...metadata, writtenTo: destination }, () =>
-    note(styleErr.dim(`Wrote ${tildify(destination)} · ${formatBytes(bytes.byteLength)}`)),
+    note(styleErr.dim(`Wrote ${tildify(destination)} · ${formatBytes(written)}`)),
   )
 }
 
@@ -857,7 +860,7 @@ async function main(argv: string[]): Promise<void> {
 
   switch (command) {
     case 'put':
-      return commandPut(client, flags, argument)
+      return commandPut(client, flags, argument, Boolean(configuration.settings.remote))
     case 'get':
       return commandGet(client, flags, argument)
     case 'rm':

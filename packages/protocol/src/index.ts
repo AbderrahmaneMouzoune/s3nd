@@ -35,5 +35,6 @@ export type {
   ReadBytesOptions,
   TransferClient,
   TransferClientConfig,
+  TransferStream,
 } from './client.js'
 export type { SyncCodeOptions, SyncCodes } from './types-codes.js'

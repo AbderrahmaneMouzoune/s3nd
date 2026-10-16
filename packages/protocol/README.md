@@ -56,7 +56,9 @@ await transfers.createFile({
 `upload` is `'proxy'` (the default: the bytes go in `POST /`), `'presign'` (the server signs a URL,
 the bytes go to the bucket) or `'auto'` (presign when the server offers it). In a browser,
 `onProgress` sends through `XMLHttpRequest`, the only API that reports upload progress.
-`readBytes(code, { onProgress })` counts a download the same way.
+`readBytes(code, { onProgress })` counts a download the same way. For a file too large to hold,
+`readStream(code)` hands back `{ body, size, contentType }` with `body` a `ReadableStream`, and
+`createFile()` takes a stream as `body`, with its `size` when you know it.
 
 `fetch` and nothing else, so it runs in a browser, a worker, React Native, Deno or Node without a
 polyfill. Pass your own `fetch` to add retries, or to point it somewhere else in tests.

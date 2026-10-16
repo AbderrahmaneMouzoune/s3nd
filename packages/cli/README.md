@@ -171,6 +171,24 @@ leading dot — so a transfer can only ever land where you are. `get` never repl
 already there: pass `--force` to replace it, or `-o` to write somewhere else. A code holding a
 snapshot rather than a file prints its JSON instead.
 
+Both directions stream: `put` reads the file as it sends it, and `get` writes the bytes as they
+arrive, so a 2 GB file needs no 2 GB of memory. At a terminal, a progress line on stderr shows the
+bytes, the percentage and the throughput; it stays off under `--json` and when stderr is not a
+terminal, so a pipeline or a CI log does not fill with it.
+
+```sh
+$ s3nd put ./holiday.mov
+████████████░░░░░░░░░░░░  50% · 367 MB / 734 MB · 11 MB/s
+```
+
+`get` never leaves a half-written file behind: the bytes go to a temporary file beside the
+destination, which takes its name only once the transfer is complete. An interrupted `get` leaves
+the destination as it was.
+
+Locally, `put -` streams stdin straight into a multipart upload, whatever its size. Against a
+server it spools stdin to a temporary file first, to learn its size, so the file can go straight
+to the bucket when the server offers presigned uploads.
+
 ## The configuration file
 
 `s3nd.config.json`, `.s3ndrc.json` or `.s3ndrc`, looked for from the working directory upwards,
