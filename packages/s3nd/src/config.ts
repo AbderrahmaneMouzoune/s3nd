@@ -5,9 +5,17 @@ import { normalizePrefix } from './key.js'
 import { DEFAULT_MULTIPART_THRESHOLD, DEFAULT_PART_SIZE, MIN_PART_SIZE } from './multipart.js'
 import type { BucketConfig, ResolvedConfig } from './types.js'
 
+/**
+ * `process.env` where there is one. Deno and Bun provide it; a worker without
+ * `nodejs_compat` or an edge function may not, and then configuration has to
+ * be passed explicitly.
+ */
 function env(...names: string[]): string | undefined {
+  const variables = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+  if (!variables) return undefined
+
   for (const name of names) {
-    const value = process.env[name]
+    const value = variables[name]
     if (value != null && value.length > 0) return value
   }
 

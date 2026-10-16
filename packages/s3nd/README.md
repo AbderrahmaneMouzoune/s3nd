@@ -45,7 +45,10 @@ lives in the same repository.
 npm install @s3nd/core
 ```
 
-Node 20 or later, which is what AWS SDK v3 requires. `@aws-sdk/client-s3` and
+Node 20 or later, which is what AWS SDK v3 requires. The package imports no `node:*` module, and
+CI also runs the transfer handler on Bun and Deno; Cloudflare Workers should work with
+`nodejs_compat` and explicit `credentials`. The Vercel Edge runtime is not supported: keep routes
+that import `@s3nd/core` on `runtime = 'nodejs'`. `@aws-sdk/client-s3` and
 `@aws-sdk/s3-request-presigner` come along as dependencies, so there is nothing else to install
 and no peer dependency to satisfy.
 

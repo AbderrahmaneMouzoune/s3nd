@@ -59,7 +59,7 @@ export async function normalizeBody(input: UploadBody, contentLength?: number): 
   }
 
   if (typeof input === 'string') {
-    const body = Buffer.from(input, 'utf8')
+    const body = new TextEncoder().encode(input)
     return { body, contentLength: body.byteLength, contentType: 'text/plain; charset=utf-8' }
   }
 
