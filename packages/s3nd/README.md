@@ -114,6 +114,9 @@ When the app calls the routes from another origin, pass
 and export `OPTIONS` too: the handler answers the preflight before `authorize`, and puts the CORS
 headers on every response, errors included.
 
+On a self-hosted server, with no platform request limit in front of it, also pass
+`maxRequestSize` (in bytes): a bigger request answers `TOO_LARGE` without being read into memory.
+
 The browser half is a separate package, `@s3nd/protocol`, which has no runtime dependencies; no
 path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:

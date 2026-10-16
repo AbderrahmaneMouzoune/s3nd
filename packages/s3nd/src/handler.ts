@@ -91,6 +91,17 @@ export interface TransferHandlerConfig {
    * routes.
    */
   cors?: TransferHandlerCors
+  /**
+   * Largest request body accepted, in bytes, for snapshots and files alike. A
+   * bigger body answers `TOO_LARGE` without being read past the limit, which is
+   * what keeps a self-hosted server's memory bounded: set it there.
+   *
+   * Defaults to the bucket's `maxSize` for files when that is set, and to no
+   * limit otherwise, since a platform like Vercel or Lambda already enforces
+   * its own. It measures the incoming body, so the raw JSON of a snapshot,
+   * where the bucket's `maxSize` measures the gzipped bytes stored.
+   */
+  maxRequestSize?: number
 }
 
 export interface TransferHandler {
@@ -240,6 +251,48 @@ function toWebStream(body: unknown): ReadableStream {
   return Readable.toWeb(body as Readable) as ReadableStream
 }
 
+/**
+ * The request body, read no further than `limit` bytes: `null` when it is
+ * larger. `content-length` settles it up front when it is honest; the counter
+ * catches a body that has none, or lies.
+ */
+async function readBody(request: Request, limit: number | undefined): Promise<Uint8Array | null> {
+  if (limit === undefined) return new Uint8Array(await request.arrayBuffer())
+
+  const declared = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > limit) {
+    await request.body?.cancel().catch(() => undefined)
+    return null
+  }
+
+  if (!request.body) return new Uint8Array()
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    chunks.push(value)
+  }
+
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return bytes
+}
+
 function discard(body: unknown): void {
   const stream = body as { destroy?: () => void; cancel?: () => void }
   stream?.destroy?.()
@@ -267,6 +320,19 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       'INVALID_CONFIG',
       "`cors.origin: '*'` cannot be combined with `credentials: true`: browsers refuse it. List the origins instead.",
     )
+  }
+
+  if (config.maxRequestSize != null && !(Number.isFinite(config.maxRequestSize) && config.maxRequestSize > 0)) {
+    throw new S3ndError('INVALID_CONFIG', '`maxRequestSize` must be a positive number of bytes.')
+  }
+
+  // `config` is private to Bucket so that it stays out of the public API; the
+  // handler is the one caller in the package that needs its maxSize.
+  const fileLimit = config.maxRequestSize ?? bucket['config']?.maxSize
+  const snapshotLimit = config.maxRequestSize
+
+  function tooLarge(limit: number): Response {
+    return fail('TOO_LARGE', `Request body exceeds the limit of ${limit} bytes.`)
   }
 
   /** Everything after the mount point: `[]`, `[code]` or `[code, 'raw']`. */
@@ -311,10 +377,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   }
 
   async function createSnapshot(request: Request): Promise<Response> {
+    // Bounded before parsing: the raw JSON is what costs memory here.
+    const raw = await readBody(request, snapshotLimit)
+    if (raw === null) return tooLarge(snapshotLimit!)
+
     let body: CreateSnapshotBody
 
     try {
-      body = (await request.json()) as CreateSnapshotBody
+      body = JSON.parse(new TextDecoder().decode(raw)) as CreateSnapshotBody
     } catch {
       return fail('INVALID_REQUEST', 'Request body is not valid JSON.')
     }
@@ -327,7 +397,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       const result = await bucket.putSnapshot(code, body.data, {
         app: config.app,
         version: body.version,
-        device: body.device ?? request.headers.get('user-agent') ?? undefined,
+        // Only what the client chose to say. The User-Agent is not a device
+        // name, and storing it would hand it to anyone who knows the code.
+        device: body.device,
         expiresIn,
         ifAbsent: true,
       })
@@ -346,7 +418,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
   async function createFile(request: Request): Promise<Response> {
     const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
-    const bytes = new Uint8Array(await request.arrayBuffer())
+    const bytes = await readBody(request, fileLimit)
+    if (bytes === null) return tooLarge(fileLimit!)
 
     if (bytes.byteLength === 0) {
       return fail('INVALID_REQUEST', 'Request body is empty.')

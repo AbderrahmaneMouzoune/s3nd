@@ -45,15 +45,16 @@ export const { GET, POST, DELETE } = createTransferHandler({
 The catch-all segment matters: the handler serves `/`, `/:code` and `/:code/raw`, so the route file
 has to receive all three.
 
-| Option       | What to set it to                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------- |
-| `bucket`     | A `Bucket`. Give it a `prefix` — transfers should not share a namespace with anything else. |
-| `app`        | Your app's name. It is recorded in every snapshot, so a bucket says what wrote it.          |
-| `maxVersion` | The newest schema this deployment understands. Older builds then refuse newer snapshots.    |
-| `expiresIn`  | Seconds. An hour is right for a device handover; `null` never expires.                      |
-| `authorize`  | See below. Without it every route is public.                                                |
-| `raw`        | `'stream'` pipes bytes through your server; `'redirect'` answers 302 with a presigned URL.  |
-| `onError`    | A logger for the failures that answer `INTERNAL`. See below.                                |
+| Option           | What to set it to                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| `bucket`         | A `Bucket`. Give it a `prefix` — transfers should not share a namespace with anything else. |
+| `app`            | Your app's name. It is recorded in every snapshot, so a bucket says what wrote it.          |
+| `maxVersion`     | The newest schema this deployment understands. Older builds then refuse newer snapshots.    |
+| `expiresIn`      | Seconds. An hour is right for a device handover; `null` never expires.                      |
+| `authorize`      | See below. Without it every route is public.                                                |
+| `raw`            | `'stream'` pipes bytes through your server; `'redirect'` answers 302 with a presigned URL.  |
+| `onError`        | A logger for the failures that answer `INTERNAL`. See below.                                |
+| `maxRequestSize` | Bytes of request body accepted. Set it on a self-hosted server. See below.                  |
 
 ## When something breaks
 
@@ -162,14 +163,27 @@ deployment goes wrong. [`s3nd doctor`](/docs/cli) checks for it.
 
 ## Request limits
 
-The payload goes through your runtime, so its request limit is your snapshot limit: 4.5 MB on
-Vercel serverless functions, 6 MB on synchronous Lambda. Set `maxSize` below whichever applies and
-an oversized snapshot fails as a clean `TOO_LARGE` before any byte reaches S3, instead of a
-truncated request halfway through.
+The payload goes through your runtime, so its request limit is your transfer limit: 4.5 MB on
+Vercel serverless functions, 6 MB on synchronous Lambda. A snapshot travels as plain JSON and is
+only gzipped on its way to S3, so that limit applies to the uncompressed JSON.
 
-Snapshots are gzipped, and an IndexedDB dump compresses 5–10×, so the real ceiling is higher than
-it looks. For files, `raw: 'redirect'` keeps the download off your server entirely — the handler
-answers 302 with a presigned URL. See [limits](/docs/limits).
+**On a self-hosted server, set `maxRequestSize`.** Node, Bun or Deno behind your own proxy has no
+platform limit in front of it, and without one a client can make the handler hold an arbitrarily
+large body in memory. `maxRequestSize` bounds the incoming body, in bytes, for snapshots and files
+alike:
+
+```ts
+createTransferHandler({ bucket, maxRequestSize: 10 * 1024 * 1024 })
+```
+
+A `Content-Length` above it answers `TOO_LARGE` (413) without reading anything. A body with no
+`Content-Length`, or one that understates it, is read with a counter and cut off as soon as it
+passes the limit. A snapshot's JSON is bounded before it is parsed.
+
+Left unset, files default to the bucket's `maxSize` when it has one, and snapshots to no limit, so
+an existing deployment behaves as before. The bucket's `maxSize` still applies on top: it measures
+what is stored, after gzip for a snapshot. For downloads, `raw: 'redirect'` keeps the bytes off
+your server entirely. See [limits](/docs/limits).
 
 ## When the app is on another origin
 
