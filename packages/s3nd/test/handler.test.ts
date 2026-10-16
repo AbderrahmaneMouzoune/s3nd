@@ -243,6 +243,36 @@ describe('createTransferHandler — lifecycle', () => {
   })
 })
 
+describe('createTransferHandler — raw', () => {
+  it('answers a snapshot code on /raw exactly as an unknown one', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: { secret: true } }))).json()
+    const raw = await handler(new Request(`${BASE}/${code}/raw`))
+    const unknown = await handler(new Request(`${BASE}/K7QP2M4X/raw`))
+
+    expect(raw.status).toBe(404)
+    expect(await raw.json()).toEqual(await unknown.json())
+  })
+
+  it('releases the body of the snapshot it refuses', async () => {
+    const { memory, handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: 1 }))).json()
+    const original = memory.send.getMockImplementation()!
+    let body: { destroy: () => void } | undefined
+    memory.send.mockImplementationOnce(async (command: any) => {
+      const response: any = await original(command)
+      body = response.Body
+      vi.spyOn(response.Body, 'destroy')
+      return response
+    })
+
+    await handler(new Request(`${BASE}/${code}/raw`))
+    expect(body?.destroy).toHaveBeenCalled()
+  })
+})
+
 describe('createTransferHandler — expiry', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
@@ -255,6 +285,15 @@ describe('createTransferHandler — expiry', () => {
 
     vi.setSystemTime(Date.now() + 61_000)
     expect((await handler(new Request(`${BASE}/${code}`))).status).toBe(404)
+  })
+
+  it('does not hand over an expired snapshot through /raw either', async () => {
+    const { handler } = setup({ expiresIn: 60 })
+
+    const { code } = await (await handler(postSnapshot({ data: 1 }))).json()
+
+    vi.setSystemTime(Date.now() + 61_000)
+    expect((await handler(new Request(`${BASE}/${code}/raw`))).status).toBe(404)
   })
 
   it('stops handing over an expired file, metadata and bytes alike', async () => {

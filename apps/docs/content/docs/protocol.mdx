@@ -115,6 +115,10 @@ The bytes, with the stored `Content-Type` and a `Content-Disposition` carrying t
 `raw: 'redirect'` the handler answers `302` with a presigned URL instead, so the payload never
 transits your server twice.
 
+Files only. A snapshot has no raw form, so its code answers `404 NOT_FOUND` with the same body as
+an unknown or expired code: `/raw` says nothing about what a code holds. A snapshot's state comes
+from `GET /:code`.
+
 ### `DELETE /:code`
 
 Burns a code, and answers `204`. Deleting one that is already gone is not an error — a client that
