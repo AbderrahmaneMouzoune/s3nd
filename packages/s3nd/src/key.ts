@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto'
-
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 
 /** S3 hard limit: an object key is at most 1024 bytes of UTF-8. */
 const MAX_KEY_BYTES = 1024
@@ -41,7 +39,7 @@ export function assertValidKey(key: unknown): asserts key is string {
     throw new S3ndError('INVALID_KEY', 'Object key must not contain control characters.')
   }
 
-  if (Buffer.byteLength(key, 'utf8') > MAX_KEY_BYTES) {
+  if (new TextEncoder().encode(key).byteLength > MAX_KEY_BYTES) {
     throw new S3ndError('INVALID_KEY', `Object key must be at most ${MAX_KEY_BYTES} bytes.`)
   }
 }
@@ -76,7 +74,9 @@ export function sanitizeFilename(filename: string): string {
 
 /** Collision-free key: a UUID, plus the original filename when we know it. */
 export function generateKey(filename?: string): string {
-  const id = randomUUID()
+  // The Web Crypto global, rather than `node:crypto`: Node 20, Bun, Deno and
+  // workers all have it.
+  const id = globalThis.crypto.randomUUID()
   return filename ? `${id}-${sanitizeFilename(filename)}` : id
 }
 

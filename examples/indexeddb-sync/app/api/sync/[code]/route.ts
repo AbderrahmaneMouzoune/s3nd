@@ -1,4 +1,4 @@
-import { isS3ndError } from '@s3nd/core'
+import { isS3ndError, isTransferError } from '@s3nd/core'
 
 import { store, SCHEMA_VERSION } from '@/lib/store'
 
@@ -11,7 +11,7 @@ function parse(code: string): { code: string } | { response: Response } {
   try {
     return { code: store().codes.normalize(code) }
   } catch (error) {
-    if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') {
+    if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') {
       return { response: Response.json({ error: 'That does not look like a code' }, { status: 400 }) }
     }
 

@@ -1,9 +1,9 @@
 ---
 title: 'Errors'
-description: 'Every failure is a S3ndError with a stable code.'
+description: 'Every failure is a S3ndError or a TransferError with a stable code.'
 ---
 
-Everything s3nd throws is a `S3ndError` carrying a `code` you can branch on, and the
+Everything `@s3nd/core` throws is a `S3ndError` carrying a `code` you can branch on, and the
 underlying error in `cause`:
 
 ```ts
@@ -22,26 +22,61 @@ try {
 
 ## Codes
 
-| Code                     | When                                                                                                                       |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `INVALID_CONFIG`         | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`.                                           |
-| `INVALID_SYNC_CODE`      | The code is empty, or holds characters outside the alphabet.                                                               |
-| `INVALID_SNAPSHOT`       | Data JSON cannot represent, a stored object that is not a snapshot, an unreadable one, or an envelope from a newer format. |
-| `SNAPSHOT_TOO_NEW`       | The snapshot's schema version is above the `maxVersion` you passed.                                                        |
-| `PRECONDITION_FAILED`    | An `ifMatch` or `ifAbsent` write lost the race.                                                                            |
-| `INVALID_KEY`            | Empty key, leading or trailing `/`, `..` segment, backslash, control character, over 1024 bytes.                           |
-| `INVALID_BODY`           | The upload body is not a supported type.                                                                                   |
-| `MISSING_CONTENT_LENGTH` | A stream was uploaded without `contentLength`.                                                                             |
-| `FILE_TOO_LARGE`         | The body is above the configured `maxSize`.                                                                                |
-| `UPLOAD_FAILED`          | `PutObject` was rejected. Original error in `cause`.                                                                       |
-| `GET_FAILED`             | `GetObject` failed for a reason other than a missing key, or answered without a body.                                      |
-| `DELETE_FAILED`          | `DeleteObject`/`DeleteObjects` was rejected, or S3 reported per-key errors.                                                |
-| `URL_FAILED`             | Invalid `expiresIn`, signing failure, or a public URL requested with no `publicUrl` configured.                            |
+| Code                            | When                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `INVALID_CONFIG`                | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`, a `syncCode` shape that cannot work.      |
+| `INVALID_SNAPSHOT`              | Data JSON cannot represent, a stored object that is not a snapshot, an unreadable one, or an envelope from a newer format. |
+| `SNAPSHOT_TOO_NEW`              | The snapshot's schema version is above the `maxVersion` you passed.                                                        |
+| `PRECONDITION_FAILED`           | An `ifMatch` or `ifAbsent` write lost the race.                                                                            |
+| `CONDITIONAL_WRITE_UNSUPPORTED` | The backend refused the `If-None-Match` / `If-Match` header an `ifAbsent` or `ifMatch` write sends (a `501` or a `400`).   |
+| `INVALID_KEY`                   | Empty key, leading or trailing `/`, `..` segment, backslash, control character, over 1024 bytes.                           |
+| `INVALID_BODY`                  | The upload body is not a supported type.                                                                                   |
+| `MISSING_CONTENT_LENGTH`        | No longer raised: a stream without `contentLength` goes through a multipart upload. Kept so existing checks compile.       |
+| `FILE_TOO_LARGE`                | The body is above the configured `maxSize`, known upfront or counted while streaming.                                      |
+| `UPLOAD_FAILED`                 | `PutObject` was rejected. Original error in `cause`.                                                                       |
+| `GET_FAILED`                    | `GetObject` or `HeadObject` failed for a reason other than a missing key, or answered without a body.                      |
+| `DELETE_FAILED`                 | `DeleteObject`/`DeleteObjects` was rejected, or S3 reported per-key errors.                                                |
+| `LIST_FAILED`                   | `ListObjectsV2` was rejected (often a missing `s3:ListBucket`), or `limit` is not a positive integer.                      |
+| `COPY_FAILED`                   | `CopyObject` was rejected, or the source and destination are the same object.                                              |
+| `URL_FAILED`                    | Invalid `expiresIn`, signing failure, or a public URL requested with no `publicUrl` configured.                            |
+
+## `TransferError`: the protocol saying no
+
+The other error class is `TransferError`, owned by `@s3nd/protocol` and re-exported by `@s3nd/core`
+so a server imports from one package. It carries a protocol code, the ones listed in
+[the protocol](/docs/protocol#errors). A client throws it when a server answers with an error, and
+`store.codes.normalize()` throws it with `INVALID_SYNC_CODE` for a typed code that cannot exist:
+the same answer the server would give.
+
+```ts
+import { isTransferError } from '@s3nd/core'
+
+try {
+  return await store.getSnapshot(store.codes.normalize(typed))
+} catch (error) {
+  if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') {
+    return Response.json({ error: 'That does not look like a code' }, { status: 400 })
+  }
+
+  throw error
+}
+```
+
+The sync code helpers in `@s3nd/protocol` (`createSyncCodes()` and friends) throw a plain
+`TypeError` for an alphabet or a length they cannot use. That is a programming error, not an
+answer; `createBucket()` turns it into `INVALID_CONFIG`.
+
+## The guards work across copies
+
+`isS3ndError()`, `isTransferError()` and the CLI's errors are recognised by a brand set with
+`Symbol.for('s3nd.error')`, not by `instanceof`. An application that loads a package twice, once
+through `require` and once through `import`, has two copies of each class, and `instanceof` answers
+`false` across them. The guards still answer `true`, so prefer them to `instanceof`.
 
 ## Failures that never reach the network
 
-`INVALID_CONFIG`, `INVALID_SYNC_CODE`, `INVALID_KEY`, `INVALID_BODY`, `MISSING_CONTENT_LENGTH`,
-`FILE_TOO_LARGE`, and an `INVALID_SNAPSHOT` caused by unserializable data are all raised before a
+`INVALID_CONFIG`, `INVALID_SYNC_CODE`, `INVALID_KEY`, `INVALID_BODY`, `FILE_TOO_LARGE` for a body
+of known size, and an `INVALID_SNAPSHOT` caused by unserializable data are all raised before a
 single byte leaves your server. A user pasting nonsense into the code field, or a 200 MB database
 posted to an endpoint capped at 4 MB, costs you a comparison rather than a request.
 
@@ -74,25 +109,26 @@ to stop and tell the user to update the app; importing anyway silently drops the
 does not know about.
 
 **`INVALID_SYNC_CODE`** — the typed code cannot exist. Better feedback than a lookup that finds
-nothing, and it costs no request.
+nothing, and it costs no request. It is a `TransferError`, not a `S3ndError`.
 
 ## Mapping to HTTP
 
 ```ts
-import { isS3ndError } from '@s3nd/core'
+import { isS3ndError, isTransferError } from '@s3nd/core'
+import { TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
 
 const STATUS: Record<string, number> = {
   FILE_TOO_LARGE: 413,
   INVALID_BODY: 400,
   INVALID_KEY: 400,
   INVALID_SNAPSHOT: 400,
-  INVALID_SYNC_CODE: 400,
   MISSING_CONTENT_LENGTH: 411,
   PRECONDITION_FAILED: 409,
   SNAPSHOT_TOO_NEW: 409,
 }
 
 export function statusFor(error: unknown): number {
+  if (isTransferError(error)) return TRANSFER_ERROR_STATUS[error.code]
   return (isS3ndError(error) && STATUS[error.code]) || 500
 }
 ```

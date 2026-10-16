@@ -37,39 +37,62 @@ export function useAsyncTask<T>() {
     }
   }, [])
 
-  const run = useCallback(async (task: (signal: AbortSignal) => Promise<T>): Promise<T | null> => {
-    inFlight.current?.abort()
+  const execute = useCallback(
+    async <R>(
+      task: (signal: AbortSignal) => Promise<R>,
+      publish: ((result: R | null) => void) | null,
+    ): Promise<R | null> => {
+      inFlight.current?.abort()
 
-    const controller = new AbortController()
-    inFlight.current = controller
-    const id = (latest.current += 1)
+      const controller = new AbortController()
+      inFlight.current = controller
+      const id = (latest.current += 1)
 
-    const current = () => mounted.current && id === latest.current
+      const current = () => mounted.current && id === latest.current
 
-    setStatus('pending')
-    setError(null)
+      setStatus('pending')
+      setError(null)
 
-    try {
-      const result = await task(controller.signal)
+      try {
+        const result = await task(controller.signal)
 
-      if (current()) {
-        setData(result)
-        setStatus('success')
+        if (current()) {
+          publish?.(result)
+          setStatus('success')
+        }
+
+        return result
+      } catch (caught) {
+        // An abort means someone else took over, or we unmounted. Neither is a
+        // failure the interface should show.
+        if (isAbort(caught) || !current()) return null
+
+        publish?.(null)
+        setError(caught instanceof Error ? caught : new Error(String(caught)))
+        setStatus('error')
+
+        return null
       }
+    },
+    [],
+  )
 
-      return result
-    } catch (caught) {
-      // An abort means someone else took over, or we unmounted. Neither is a
-      // failure the interface should show.
-      if (isAbort(caught) || !current()) return null
+  const run = useCallback(
+    (task: (signal: AbortSignal) => Promise<T>): Promise<T | null> => execute(task, setData),
+    [execute],
+  )
 
-      setData(null)
-      setError(caught instanceof Error ? caught : new Error(String(caught)))
-      setStatus('error')
-
-      return null
-    }
-  }, [])
+  /**
+   * `run` for a side action: it shares the status, the error and the abort
+   * rules, so the hook keeps describing whatever is happening now, but leaves
+   * `data` alone. `publish` gets the result (or `null` on failure) only while
+   * the run is still the current one, like `data` would.
+   */
+  const runAside = useCallback(
+    <R>(task: (signal: AbortSignal) => Promise<R>, publish?: (result: R | null) => void): Promise<R | null> =>
+      execute(task, publish ?? null),
+    [execute],
+  )
 
   const reset = useCallback(() => {
     inFlight.current?.abort()
@@ -80,5 +103,5 @@ export function useAsyncTask<T>() {
     setError(null)
   }, [])
 
-  return { data, status, error, run, reset }
+  return { data, status, error, run, runAside, reset }
 }

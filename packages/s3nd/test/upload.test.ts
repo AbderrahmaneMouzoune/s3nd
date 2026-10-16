@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 import { clearBucketEnv, createStubClient } from './helpers.js'
 
 beforeEach(clearBucketEnv)
@@ -164,18 +164,32 @@ describe('upload', () => {
     const stream = Readable.from([Buffer.from('abc')])
     await bucket.upload(stream, { key: 'a.bin', contentLength: 3 })
 
-    expect(calls[0]!.command.input.Body).toBe(stream)
+    // Read into bytes first: the SDK's Node handler cannot send a web stream.
+    expect(Buffer.from(calls[0]!.command.input.Body).toString()).toBe('abc')
     expect(calls[0]!.command.input.ContentLength).toBe(3)
   })
 
-  it('refuses a stream of unknown length', async () => {
-    const { client, send } = createStubClient()
+  it('turns a web stream into bytes the SDK can send', async () => {
+    const { client, calls } = createStubClient()
     const bucket = createBucket({ bucket: 'assets', client })
 
-    await expect(bucket.upload(Readable.from([Buffer.from('abc')]), { key: 'a.bin' })).rejects.toMatchObject({
-      code: 'MISSING_CONTENT_LENGTH',
-    })
-    expect(send).not.toHaveBeenCalled()
+    await bucket.upload(new Blob(['web']).stream(), { key: 'a.bin', contentLength: 3 })
+
+    expect(calls[0]!.command.input.Body).toBeInstanceOf(Uint8Array)
+    expect(Buffer.from(calls[0]!.command.input.Body).toString()).toBe('web')
+  })
+
+  it('sends a short stream of unknown length in one PutObject', async () => {
+    const { client, calls } = createStubClient()
+    const bucket = createBucket({ bucket: 'assets', client })
+
+    const result = await bucket.upload(Readable.from([Buffer.from('ab'), Buffer.from('c')]), { key: 'a.bin' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.command.constructor.name).toBe('PutObjectCommand')
+    expect(Buffer.from(calls[0]!.command.input.Body).toString()).toBe('abc')
+    expect(calls[0]!.command.input.ContentLength).toBe(3)
+    expect(result.size).toBe(3)
   })
 
   it('forwards an abort signal', async () => {

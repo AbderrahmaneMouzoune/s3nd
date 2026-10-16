@@ -174,7 +174,7 @@ s3nd put ./contract.pdf
 This is the shape CI wants — secrets from the runner's store, no file to check in:
 
 ```yaml title=".github/workflows/nightly.yml"
-- run: tar cz ./data | npx @s3nd/cli put - --name backup.tar.gz --expires-in never
+- run: npx @s3nd/cli put ./data --name backup.tar.gz --expires-in never
   env:
     S3ND_BUCKET: transfers
     S3ND_PREFIX: backups

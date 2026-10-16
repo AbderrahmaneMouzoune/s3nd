@@ -37,6 +37,10 @@ export const { GET, POST, DELETE } = createTransferHandler({
 })
 ```
 
+The route runs on the Node runtime, Bun or Deno. On Next.js that is the default; do not opt the
+route into `export const runtime = 'edge'`, which is not supported. See
+[runtimes](/docs/installation#runtimes) for the full list, and for Cloudflare Workers.
+
 <Callout>
   `basePath` defaults to `/api/transfers`. Mount the routes anywhere else and pass the same path, or `GET /:code` reads
   a code off the wrong segment.
@@ -45,14 +49,36 @@ export const { GET, POST, DELETE } = createTransferHandler({
 The catch-all segment matters: the handler serves `/`, `/:code` and `/:code/raw`, so the route file
 has to receive all three.
 
-| Option       | What to set it to                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------- |
-| `bucket`     | A `Bucket`. Give it a `prefix` — transfers should not share a namespace with anything else. |
-| `app`        | Your app's name. It is recorded in every snapshot, so a bucket says what wrote it.          |
-| `maxVersion` | The newest schema this deployment understands. Older builds then refuse newer snapshots.    |
-| `expiresIn`  | Seconds. An hour is right for a device handover; `null` never expires.                      |
-| `authorize`  | See below. Without it every route is public.                                                |
-| `raw`        | `'stream'` pipes bytes through your server; `'redirect'` answers 302 with a presigned URL.  |
+| Option           | What to set it to                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| `bucket`         | A `Bucket`. Give it a `prefix` — transfers should not share a namespace with anything else. |
+| `app`            | Your app's name. It is recorded in every snapshot, so a bucket says what wrote it.          |
+| `maxVersion`     | The newest schema this deployment understands. Older builds then refuse newer snapshots.    |
+| `expiresIn`      | Seconds. An hour is right for a device handover; `null` never expires.                      |
+| `authorize`      | See below. Without it every route is public.                                                |
+| `raw`            | `'stream'` pipes bytes through your server; `'redirect'` answers 302 with a presigned URL.  |
+| `onError`        | A logger for the failures that answer `INTERNAL`. See below.                                |
+| `maxRequestSize` | Bytes of request body accepted. Set it on a self-hosted server. See below.                  |
+
+## When something breaks
+
+Every failure answers JSON, `{ error: { code, message } }`, including the ones nobody planned
+for: an `authorize` that throws, an S3 call that fails, a network error. Those answer `INTERNAL`
+(500) with the message `Internal error.` and nothing more, because the raw message can name your
+bucket or carry SDK internals. A path that is not validly percent-encoded, `/api/transfers/%E0`,
+answers `INVALID_SYNC_CODE` (400) like any other code that cannot exist.
+
+`onError` is where the real error goes, with the request that caused it:
+
+```ts
+createTransferHandler({
+  bucket,
+  onError: (error, request) => console.error(`s3nd: ${request.method} ${request.url}`, error),
+})
+```
+
+It is only called for the failures that answer `INTERNAL`, not for an unknown code or a refused
+request, and an error thrown inside it is ignored: logging cannot cost the client its answer.
 
 ## Credentials
 
@@ -120,10 +146,67 @@ authorize: async (request) => {
 Two things the check does not do, and should:
 
 - **It does not scope a code to a user.** Anyone signed in who guesses a code reads what it holds.
-  At 40 bits and an hour of life, guessing is not the attack to worry about — but do rate-limit
-  `GET /:code` at the edge, because a code is the only secret protecting a snapshot.
+  At 40 bits and an hour of life, guessing is not the attack to worry about; with a shorter code it
+  is, which is what `rateLimit` below is for.
 - **It does not limit how much one account stores.** `maxSize` caps a single transfer, not the
   number of them. Count them per user if the route is public to your users.
+
+## Guessing codes and burning transfers
+
+**`rateLimit`** is asked about every request once its code has been read, before anything is
+looked up, so a refused guess learns nothing about the code it guessed. It gets the request and
+`{ route, code }`: `route` is `'create'`, `'read'`, `'raw'`, `'delete'` or `'complete'`, and `code`
+is the normalised code (absent on `create`). Return `false` for a `429 RATE_LIMITED`, or a
+`Response` to answer with your own, `retry-after` included: the client hands it back as
+`error.retryAfter`.
+
+```ts
+// In memory: one process, one window. Enough for a single self-hosted server.
+const hits = new Map<string, { count: number; resetAt: number }>()
+
+createTransferHandler({
+  bucket,
+  rateLimit: (request, { route }) => {
+    if (route === 'create') return true
+    const key = request.headers.get('x-forwarded-for') ?? 'anonymous'
+    const now = Date.now()
+    const entry = hits.get(key)
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + 60_000 })
+      return true
+    }
+    entry.count += 1
+    return entry.count <= 30
+  },
+})
+```
+
+On a serverless platform each instance has its own memory, so the counter belongs in shared
+storage: `@upstash/ratelimit` on Redis, or a Cloudflare KV or Durable Object, all fit in the hook
+since it may be async. How much a code needs it depends on its length; see
+[how guessable is it](/docs/sync-codes#how-guessable-is-it).
+
+**`protectDelete: true`** stops a third party who saw a code go by from destroying the transfer
+before its recipient reads it. Every transfer is created with a delete token, returned once as
+`deleteToken` in the `201` and stored only as its SHA-256. With `protectDelete`, `DELETE /:code`
+answers `401` unless it carries that token, in `x-s3nd-delete-token` or as
+`authorization: Bearer`. A code already gone still answers `204`.
+
+```ts
+const transfer = await transfers.createSnapshot({ data: state })
+// …once the other device has restored it:
+await transfers.remove(transfer.code, { deleteToken: transfer.deleteToken })
+```
+
+The token stays with whoever created the transfer: the sender burns it, or hands it on to the
+recipient along with the code. A transfer stored before the server issued tokens cannot be burned
+with `protectDelete` on, and is left to expire.
+
+**`burnAfterRead: true`** deletes a transfer once it has been handed over: a snapshot after its
+first `GET /:code`, a file once `GET /:code/raw` has sent it in full (reading its metadata does not
+count, and a download cut short leaves it for another try). Two reads racing can both succeed: it
+is a cleanup, not a lock. It cannot be combined with `raw: 'redirect'`, where the bytes come from
+the bucket after the handler has answered.
 
 ## One prefix per purpose
 
@@ -141,48 +224,130 @@ deployment goes wrong. [`s3nd doctor`](/docs/cli) checks for it.
 
 ## Request limits
 
-The payload goes through your runtime, so its request limit is your snapshot limit: 4.5 MB on
-Vercel serverless functions, 6 MB on synchronous Lambda. Set `maxSize` below whichever applies and
-an oversized snapshot fails as a clean `TOO_LARGE` before any byte reaches S3, instead of a
-truncated request halfway through.
+The payload goes through your runtime, so its request limit is your transfer limit: 4.5 MB on
+Vercel serverless functions, 6 MB on synchronous Lambda. A snapshot travels as plain JSON and is
+only gzipped on its way to S3, so that limit applies to the uncompressed JSON.
 
-Snapshots are gzipped, and an IndexedDB dump compresses 5–10×, so the real ceiling is higher than
-it looks. For files, `raw: 'redirect'` keeps the download off your server entirely — the handler
-answers 302 with a presigned URL. See [limits](/docs/limits).
+**On a self-hosted server, set `maxRequestSize`.** Node, Bun or Deno behind your own proxy has no
+platform limit in front of it, and without one a client can make the handler hold an arbitrarily
+large body in memory. `maxRequestSize` bounds the incoming body, in bytes, for snapshots and files
+alike:
+
+```ts
+createTransferHandler({ bucket, maxRequestSize: 10 * 1024 * 1024 })
+```
+
+A `Content-Length` above it answers `TOO_LARGE` (413) without reading anything. A body with no
+`Content-Length`, or one that understates it, is read with a counter and cut off as soon as it
+passes the limit. A snapshot's JSON is bounded before it is parsed.
+
+A file is never held whole: its body is streamed into the bucket as it arrives, through a
+multipart upload above the bucket's `multipartThreshold`, so the handler's memory stays at a few
+parts whatever the size. A body cut off at the limit aborts that upload, and nothing is stored.
+
+Left unset, files default to the bucket's `maxSize` when it has one, and snapshots to no limit, so
+an existing deployment behaves as before. The bucket's `maxSize` still applies on top: it measures
+what is stored, after gzip for a snapshot. For downloads, `raw: 'redirect'` keeps the bytes off
+your server entirely. See [limits](/docs/limits).
+
+## Files past the request limit
+
+With `upload: 'presign'`, a file never goes through your server. The client asks for a signed
+URL, sends the bytes straight to the bucket, then asks the server to check them and make the code
+live. Your runtime's request limit stops applying to files; snapshots keep going through the
+route, as before.
+
+```ts title="app/api/transfers/[[...route]]/route.ts"
+export const { GET, POST, DELETE } = createTransferHandler({
+  bucket,
+  upload: 'both', // 'proxy' (the default), 'presign', or 'both'
+  presignExpiresIn: 900, // how long the upload URL is accepted, in seconds
+})
+```
+
+```ts
+const transfers = createTransferClient({ baseUrl: '/api/transfers', upload: 'auto' })
+
+await transfers.createFile({ body: file, filename: file.name, onProgress: ({ loaded, total }) => {} })
+```
+
+The signature covers the exact size and content type the client announced, so the bucket refuses
+anything else, and `maxSize` is checked before a URL is signed. On completion the server checks
+the stored size again. `'auto'` on the client tries a presigned upload and falls back to the route
+when the server does not offer one. The flow is specified in
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md).
+
+Two things on the bucket make it work:
+
+**A CORS rule**, because the browser now talks to the bucket. It needs `PUT` from your app's
+origin, with the `content-type` header. [`s3nd doctor`](/docs/cli) checks for one.
+
+```json title="Bucket CORS"
+[
+  {
+    "AllowedOrigins": ["https://app.example.com"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+**A lifecycle rule on `pending/`**, inside your prefix. An upload that is never completed stays
+there, never handed over, until a rule removes it. A rule on the whole prefix (`transfers/`)
+already covers it.
+
+```jsonc
+{
+  "Rules": [
+    {
+      "ID": "abort-unfinished-presigned-uploads",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "transfers/pending/" },
+      "Expiration": { "Days": 1 },
+    },
+  ],
+}
+```
+
+A single presigned `PUT` is capped at 5 GiB by S3.
 
 ## When the app is on another origin
 
 Same-origin — the app and the route in one Next.js deployment — needs no CORS at all, which is the
-configuration to prefer. If the app is served from somewhere else, the preflight is yours to
-answer: the handler speaks the protocol and nothing more.
+configuration to prefer. If the app is served from somewhere else (another domain, an extension, a
+PWA hosted elsewhere), pass `cors`:
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
-const handler = createTransferHandler({ bucket, app: 'notes' })
-
-const CORS = {
-  'access-control-allow-origin': 'https://notes.example.com',
-  'access-control-allow-headers': 'content-type, authorization, x-s3nd-filename',
-  'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
-}
-
-async function withCors(request: Request): Promise<Response> {
-  const response = await handler(request)
-  const headers = new Headers(response.headers)
-
-  for (const [name, value] of Object.entries(CORS)) headers.set(name, value)
-
-  return new Response(response.body, { status: response.status, headers })
-}
-
-export const GET = withCors
-export const POST = withCors
-export const DELETE = withCors
-export const OPTIONS = () => new Response(null, { status: 204, headers: CORS })
+export const { GET, POST, DELETE, OPTIONS } = createTransferHandler({
+  bucket,
+  app: 'notes',
+  cors: {
+    origin: ['https://notes.example.com'], // or (origin) => boolean, or '*'
+    credentials: false,
+    maxAge: 600,
+  },
+})
 ```
 
-Note `x-s3nd-filename` in the allowed headers: it is how `createFile` carries the original
-filename, and a preflight that omits it fails on file uploads only — the confusing kind of bug,
-where snapshots work and files do not.
+|               |                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| `origin`      | The page origins allowed: a list of exact origins, a predicate, or `'*'` for any                   |
+| `credentials` | Lets the browser send cookies along. Cannot be combined with `'*'`: `createTransferHandler` throws |
+| `maxAge`      | Seconds a browser may cache the preflight answer                                                   |
+
+With it, the handler answers the `OPTIONS` preflight with `204`, before `authorize` runs (a
+preflight carries no credentials), and allows `content-type`, `authorization`, `s3nd-protocol` and
+`x-s3nd-filename`. Every other response carries the CORS headers too, errors included, so the page
+can read a `401` or a `TOO_LARGE` instead of seeing an opaque network failure. `s3nd-protocol` and
+`content-disposition` are exposed to the page.
+
+An origin that is not allowed gets no CORS headers at all, and the browser withholds the response.
+A predicate that throws refuses the origin. Without `cors`, nothing is added and `OPTIONS` answers
+`INVALID_REQUEST`, as before.
+
+Remember to export `OPTIONS` from the route: a Next route handler only answers the methods it
+exports.
 
 ## Proving it works
 

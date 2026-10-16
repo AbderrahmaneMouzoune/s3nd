@@ -12,11 +12,29 @@
  * contract and its client safe to bundle for a browser.
  */
 
-/** Bumped only when the routes or payloads below change shape. */
+/**
+ * Bumped only when the routes or payloads below change shape. Additions that
+ * an older peer can ignore (a new optional field, a new error code) do not
+ * bump it. `PROTOCOL.md` next to this package is the normative text.
+ */
 export const PROTOCOL_VERSION = 1
+
+/**
+ * Carries `PROTOCOL_VERSION` both ways: a client sends it on every request, a
+ * server sets it on every response, errors included. A server refuses a
+ * request announcing a version it does not speak, and accepts one without the
+ * header, which is how a 0.x client talks.
+ */
+export const PROTOCOL_HEADER = 's3nd-protocol'
 
 /** Header a raw upload uses to carry the original filename. */
 export const FILENAME_HEADER = 'x-s3nd-filename'
+
+/**
+ * Header a `DELETE` carries a delete token in. `authorization: Bearer` works
+ * too, but that one may already carry the server's own credentials.
+ */
+export const DELETE_TOKEN_HEADER = 'x-s3nd-delete-token'
 
 /**
  * What sits behind a code.
@@ -43,7 +61,17 @@ export type TransferErrorCode =
   | 'CODE_TAKEN'
   | 'SNAPSHOT_TOO_NEW'
   | 'TOO_LARGE'
+  | 'RATE_LIMITED'
+  | 'UNSUPPORTED_PROTOCOL'
   | 'INTERNAL'
+
+/**
+ * What a `TransferError` can carry: a code a server answered with, or
+ * `TIMEOUT`, which only `createTransferClient()` raises when a request takes
+ * longer than its `timeout`. A server never sends `TIMEOUT`, so it has no HTTP
+ * status and is not a `TransferErrorCode`.
+ */
+export type TransferClientErrorCode = TransferErrorCode | 'TIMEOUT'
 
 /** The body of every non-2xx response. */
 export interface TransferErrorBody {
@@ -62,6 +90,12 @@ export interface CreatedTransfer {
   expiresAt?: string
   /** Stored size in bytes, after compression for snapshots. */
   size?: number
+  /**
+   * Proof of the right to burn this code, when the server issues one: pass it
+   * to `remove(code, { deleteToken })`. Handed out once, here, and stored by
+   * the server only as a hash, so keep it if you may need it.
+   */
+  deleteToken?: string
 }
 
 /** 200 body of `GET /:code`. */
@@ -93,6 +127,41 @@ export interface CreateSnapshotBody {
   device?: string
 }
 
+/**
+ * How a server accepts files. `proxy` takes the bytes in `POST /`; `presign`
+ * hands out a URL for the client to send them straight to the bucket; `both`
+ * does either. Snapshots always go through `POST /`. See `PROTOCOL.md`.
+ */
+export type UploadMode = 'proxy' | 'presign' | 'both'
+
+/** Body of `POST /` asking for a presigned upload (`Content-Type: application/json`). */
+export interface PresignUploadBody {
+  upload: 'presign'
+  filename: string
+  /** The exact byte size that will be sent. The bucket refuses any other. */
+  size: number
+  contentType?: string
+}
+
+/** 201 body of `POST /` for a presigned upload. */
+export interface PresignedUpload {
+  /** The transfer's code. Until `POST /:code/complete` it reads as `NOT_FOUND`. */
+  code: string
+  /** Where to send the bytes. */
+  uploadUrl: string
+  method: 'PUT'
+  /** Headers to send with the bytes, exactly. `Content-Length` comes on top. */
+  headers: Record<string, string>
+  /** When `uploadUrl` stops being accepted — not the transfer's own expiry. */
+  expiresAt: string
+}
+
+/** How far a transfer has got. `total` is absent when the size is unknown. */
+export interface TransferProgress {
+  loaded: number
+  total?: number
+}
+
 /** The HTTP status each error code answers with. */
 export const TRANSFER_ERROR_STATUS: Record<TransferErrorCode, number> = {
   INVALID_REQUEST: 400,
@@ -102,5 +171,7 @@ export const TRANSFER_ERROR_STATUS: Record<TransferErrorCode, number> = {
   CODE_TAKEN: 409,
   SNAPSHOT_TOO_NEW: 409,
   TOO_LARGE: 413,
+  RATE_LIMITED: 429,
+  UNSUPPORTED_PROTOCOL: 400,
   INTERNAL: 500,
 }

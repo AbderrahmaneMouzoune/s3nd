@@ -17,7 +17,9 @@ createBucket({
   forcePathStyle: true, // defaults to true when `endpoint` is set
   publicUrl: 'https://cdn…', // public bucket or CDN — or S3ND_PUBLIC_URL / S3_PUBLIC_URL
   prefix: 'snapshots', // internal namespace, applied on the way in and out
-  maxSize: 5 * 1024 * 1024, // reject bigger writes before any network call
+  maxSize: 5 * 1024 * 1024, // reject bigger writes, counted while streaming
+  multipartThreshold: 16 * 1024 * 1024, // above this, a multipart upload
+  partSize: 8 * 1024 * 1024, // size of each multipart part, 5 MiB at least
   syncCode: { length: 8 }, // shape of the codes store.codes makes and reads
   client: myS3Client, // bring your own S3Client
 })
@@ -25,18 +27,20 @@ createBucket({
 
 ## Options
 
-| Option           | Environment fallback                              | Notes                                                                                                                      |
-| ---------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `bucket`         | `S3ND_BUCKET`, `S3_BUCKET`                        | The only required option.                                                                                                  |
-| `region`         | `S3ND_REGION`, `AWS_REGION`, `AWS_DEFAULT_REGION` | Defaults to `"auto"` when an `endpoint` is set.                                                                            |
-| `credentials`    | —                                                 | Omit for the AWS default provider chain.                                                                                   |
-| `endpoint`       | `S3ND_ENDPOINT`, `S3_ENDPOINT`                    | For R2, MinIO, Scaleway, Wasabi…                                                                                           |
-| `forcePathStyle` | —                                                 | Defaults to `true` with a custom `endpoint`, `false` otherwise.                                                            |
-| `publicUrl`      | `S3ND_PUBLIC_URL`, `S3_PUBLIC_URL`                | Must be an absolute URL. Trailing slash optional.                                                                          |
-| `prefix`         | —                                                 | Applied by every method.                                                                                                   |
-| `maxSize`        | —                                                 | In bytes. Enforced before any network call.                                                                                |
-| `syncCode`       | —                                                 | `{ length, alphabet }`. Defaults to eight Crockford base32 characters — see [Configuring codes](/docs/code-configuration). |
-| `client`         | —                                                 | An `S3Client` you built yourself.                                                                                          |
+| Option               | Environment fallback                              | Notes                                                                                                                                        |
+| -------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bucket`             | `S3ND_BUCKET`, `S3_BUCKET`                        | The only required option.                                                                                                                    |
+| `region`             | `S3ND_REGION`, `AWS_REGION`, `AWS_DEFAULT_REGION` | Defaults to `"auto"` when an `endpoint` is set.                                                                                              |
+| `credentials`        | —                                                 | Omit for the AWS default provider chain.                                                                                                     |
+| `endpoint`           | `S3ND_ENDPOINT`, `S3_ENDPOINT`                    | For R2, MinIO, Scaleway, Wasabi…                                                                                                             |
+| `forcePathStyle`     | —                                                 | Defaults to `true` with a custom `endpoint`, `false` otherwise.                                                                              |
+| `publicUrl`          | `S3ND_PUBLIC_URL`, `S3_PUBLIC_URL`                | Must be an absolute URL. Trailing slash optional.                                                                                            |
+| `prefix`             | —                                                 | Applied by every method.                                                                                                                     |
+| `maxSize`            | —                                                 | In bytes of what is stored, so after gzip for a snapshot. Checked before any network call when the size is known, while streaming otherwise. |
+| `multipartThreshold` | —                                                 | In bytes, default 16 MiB. Larger bodies, and streams of unknown length, go through a multipart upload.                                       |
+| `partSize`           | —                                                 | In bytes, default 8 MiB, at least 5 MiB. Up to four parts are in flight at once.                                                             |
+| `syncCode`           | —                                                 | `{ length, alphabet }`. Defaults to eight Crockford base32 characters — see [Configuring codes](/docs/code-configuration).                   |
+| `client`             | —                                                 | An `S3Client` you built yourself.                                                                                                            |
 
 ## The prefix is a namespace, not part of the key
 
@@ -52,7 +56,7 @@ result.key // "K7QP2M4X" — the code the user carries
 result.path // "snapshots/K7QP2M4X" — the real object key, for the AWS console
 
 await store.getSnapshot('K7QP2M4X') // reads snapshots/K7QP2M4X
-await store.delete('K7QP2M4X') // deletes snapshots/K7QP2M4X
+await store.deleteSnapshot('K7QP2M4X') // deletes snapshots/K7QP2M4X
 ```
 
 Every method takes a per-call `prefix` that overrides the bucket-level one, which is how you keep
@@ -89,7 +93,10 @@ than no URL at all.
 ## Size caps
 
 `maxSize` is checked against the body size before anything is sent, so an oversized upload costs
-you nothing:
+you nothing. It measures the bytes written to S3: for `putSnapshot()` that is the gzipped envelope
+(unless you pass `compress: false`), not the JSON you handed it. `SnapshotResult.size` reports the
+same number, so you can measure a real dump against it. A stream of unknown length is counted as
+it goes instead, and its multipart upload is aborted the moment it passes the limit:
 
 ```ts
 const store = createBucket({ bucket: 'my-bucket', maxSize: 4 * 1024 * 1024 })
@@ -97,8 +104,10 @@ const store = createBucket({ bucket: 'my-bucket', maxSize: 4 * 1024 * 1024 })
 await store.upload(tooBig) // throws S3ndError { code: 'FILE_TOO_LARGE' }
 ```
 
-Set it below your runtime's own request limit and you get a clean 413 instead of a truncated
-request. See [How big can a snapshot be](/docs/limits).
+`maxSize` guards what lands in the bucket, not the request that carried it there. Your platform's
+request limit applies earlier, to the incoming body, before any s3nd code runs; to bound that body
+yourself, set the handler's `maxRequestSize` (see [the server](/docs/server)). See
+[How big can a snapshot be](/docs/limits).
 
 ## Bringing your own client
 
