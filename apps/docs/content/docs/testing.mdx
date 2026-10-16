@@ -157,4 +157,15 @@ expect(url.searchParams.get('X-Amz-Signature')).toBeTruthy()
 An in-memory double cannot catch what only the real protocol does: checksum headers, path-style
 addressing, and whether your provider actually honours `If-Match` on `PutObject` — support for
 that arrived late, and not every S3-compatible service has it. Run MinIO and point an example at
-it; see [S3-compatible providers](/docs/providers) for the container command.
+it; see [S3-compatible providers](/docs/providers) for how to start one.
+
+s3nd does this itself. `packages/s3nd/test/integration` is a separate Vitest project that runs
+against a real server, and a CI job runs it against MinIO on every pull request. `bun run test`
+never touches it, so the default suite stays offline and needs no credentials. To run it locally:
+
+```sh
+S3ND_TEST_ENDPOINT=http://127.0.0.1:9000 bun run test:integration   # in packages/s3nd
+```
+
+`S3ND_TEST_ACCESS_KEY` and `S3ND_TEST_SECRET_KEY` default to `minioadmin`. Each run creates its
+own bucket, so it can be pointed at a shared server without stepping on anything.

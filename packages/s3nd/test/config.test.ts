@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resolveConfig } from '../src/config.js'
+import { createS3Client, resolveConfig } from '../src/config.js'
 import type { S3ndError } from '@s3nd/protocol'
 import { clearBucketEnv } from './helpers.js'
 
@@ -64,5 +64,31 @@ describe('resolveConfig', () => {
 
   it('rejects a non-positive maxSize', () => {
     expect(() => resolveConfig({ bucket: 'b', maxSize: 0 })).toThrowError(/positive number of bytes/)
+  })
+})
+
+describe('createS3Client', () => {
+  const credentials = { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' }
+
+  it('sends checksums only when required on a custom endpoint', async () => {
+    const client = createS3Client(resolveConfig({ bucket: 'b', endpoint: 'https://r2.example.com', credentials }))
+
+    expect(await client.config.requestChecksumCalculation()).toBe('WHEN_REQUIRED')
+    expect(await client.config.responseChecksumValidation()).toBe('WHEN_REQUIRED')
+    client.destroy()
+  })
+
+  it('keeps the SDK defaults on AWS itself', async () => {
+    const client = createS3Client(resolveConfig({ bucket: 'b', region: 'eu-west-3', credentials }))
+
+    expect(await client.config.requestChecksumCalculation()).toBe('WHEN_SUPPORTED')
+    expect(await client.config.responseChecksumValidation()).toBe('WHEN_SUPPORTED')
+    client.destroy()
+  })
+
+  it('leaves a client you built yourself alone', () => {
+    const own = { send: vi.fn(), destroy: vi.fn() } as never
+
+    expect(createS3Client(resolveConfig({ bucket: 'b', endpoint: 'https://r2.example.com', client: own }))).toBe(own)
   })
 })
