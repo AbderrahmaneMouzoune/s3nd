@@ -131,6 +131,20 @@ export function createMemoryClient() {
       }
     }
 
+    if (name === 'HeadObjectCommand') {
+      if (!stored) {
+        throw Object.assign(new Error('Not Found'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+      }
+
+      return {
+        ContentType: stored.contentType,
+        ContentLength: stored.body.byteLength,
+        LastModified: stored.lastModified,
+        Metadata: stored.metadata ?? {},
+        ETag: `"${stored.etag}"`,
+      }
+    }
+
     if (name === 'DeleteObjectCommand') {
       objects.delete(input.Key)
       return {}
