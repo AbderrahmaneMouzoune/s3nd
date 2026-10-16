@@ -41,7 +41,15 @@ export interface BucketConfig {
   publicUrl?: string
   /** Prefix prepended to every key, e.g. `"uploads"` or `"tenant-42/avatars"`. */
   prefix?: string
-  /** Rejects uploads above this size, in bytes, before any network call. */
+  /**
+   * Rejects uploads above this size, in bytes, before any network call.
+   *
+   * Measured on the bytes written to S3: for `putSnapshot()` that is the
+   * gzipped envelope (unless `compress: false`), not the JSON passed in. It
+   * guards the bucket, not the request: a platform's request limit applies
+   * earlier, to the incoming body, before any s3nd code runs. To bound that
+   * body, use the handler's `maxRequestSize`.
+   */
   maxSize?: number
   /**
    * Shape of the codes `store.codes` produces and accepts. Defaults to eight

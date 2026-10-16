@@ -75,7 +75,8 @@ That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` 
   they are about to restore.
 
 Compression is on by default and is not a detail: an IndexedDB dump is repetitive JSON, so gzip
-routinely cuts it by 5 to 10×. That is headroom against the request limit of whatever runs your API.
+routinely cuts it by 5 to 10× in the bucket. `maxSize` measures those stored, gzipped bytes; the
+request that carries a snapshot to your API is plain JSON, and your platform limits it before s3nd runs.
 
 ## The routes, without writing them
 
