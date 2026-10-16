@@ -32,7 +32,7 @@ export interface SendTransfer {
  * ```tsx
  * const { send, transfer, isPending } = useSendTransfer()
  *
- * <button onClick={() => send(await exportDatabase(), { version: 3 })} disabled={isPending}>
+ * <button onClick={async () => send(await exportDatabase(), { version: 3 })} disabled={isPending}>
  *   Move to another device
  * </button>
  * {transfer && <Code value={transfer.code} />}
