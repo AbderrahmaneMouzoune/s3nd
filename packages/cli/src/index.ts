@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, unlinkSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve as resolvePath } from 'node:path'
 import { parseArgs } from 'node:util'
 
@@ -13,6 +13,7 @@ import { CliError, isCliError } from './errors.js'
 import { createStyle, formatBytes, formatDuration, tildify, type Style } from './format.js'
 import { assertProvider, PROVIDERS, writeStarter, type Provider } from './init.js'
 import { Cancelled, createPrompter } from './prompt.js'
+import { safeFilename, writeReceived } from './receive.js'
 import { askSetup, PROVIDER_CHOICES, render, writeSetup, type Target } from './setup.js'
 
 declare const __VERSION__: string
@@ -106,10 +107,11 @@ The code goes to stdout and everything else to stderr: CODE=$(s3nd put ./f).
   --json              The whole transfer, as JSON`,
   get: `s3nd get <code> — fetch what a code points at
 
-Writes the file under its stored name in this directory. Codes ignore case
-and dashes: k7qp-2m4x is K7QP2M4X.
+Writes the file under its stored name in this directory, and never over a
+file that is already there. Codes ignore case and dashes: k7qp-2m4x is K7QP2M4X.
 
   -o, --output <path>   Write here instead. "-" is stdout
+  --force               Replace an existing file
   --json                The transfer, as JSON, after writing it`,
   rm: `s3nd rm <code> — burn a code
 
@@ -377,7 +379,7 @@ async function commandGet(client: TransferClient, flags: Flags, code: string): P
 
     if (flags.output && flags.output !== '-') {
       const destination = resolvePath(flags.output)
-      await writeFile(destination, json)
+      await writeReceived(destination, json, flags.force)
 
       emit(flags.json, { ...metadata, writtenTo: destination }, () => note(styleErr.dim(`Wrote ${destination}`)))
       return
@@ -395,8 +397,10 @@ async function commandGet(client: TransferClient, flags: Flags, code: string): P
     return
   }
 
-  const destination = resolvePath(flags.output ?? flags.name ?? metadata.filename ?? code)
-  await writeFile(destination, bytes)
+  // The stored filename is the sender's to choose, so it only ever names a file
+  // in this directory; -o and --name are this machine's own choice.
+  const destination = resolvePath(flags.output ?? flags.name ?? safeFilename(metadata.filename, code))
+  await writeReceived(destination, bytes, flags.force)
 
   emit(flags.json, { ...metadata, writtenTo: destination }, () =>
     note(styleErr.dim(`Wrote ${tildify(destination)} · ${formatBytes(bytes.byteLength)}`)),
