@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createBucket } from '@s3nd/core'
 import type { S3Client } from '@aws-sdk/client-s3'
 
-import { runChecks, type Check } from '../src/doctor.js'
+import { conformanceChecks, runChecks, toChecks, type Check } from '../src/doctor.js'
 
 /**
  * A stand-in shaped to exactly what `doctor` exercises: the three object verbs,
@@ -282,5 +282,32 @@ describe('runChecks', () => {
     expect(missing.fix).toContain('presign')
     expect(getOnly.status).toBe('warn')
     expect(allowed.status).toBe('ok')
+  })
+})
+
+describe('doctor --conformance', () => {
+  it('turns the report into checks, a skipped rule not failing doctor', () => {
+    const checks = toChecks([
+      { name: 'Server', status: 'pass', detail: 'files: proxy' },
+      { name: 'Expiry', status: 'fail', detail: 'GET /:code once expired: expected 404' },
+      { name: 'Cross-origin requests', status: 'skip', detail: 'pass `server.cors.origin`' },
+    ])
+
+    expect(checks).toEqual([
+      { name: 'Conformance: Server', status: 'ok', detail: 'files: proxy' },
+      { name: 'Conformance: Expiry', status: 'fail', detail: 'GET /:code once expired: expected 404' },
+      { name: 'Conformance: Cross-origin requests', status: 'skip', detail: 'pass `server.cors.origin`' },
+    ])
+  })
+
+  it('reports a server that does not answer as a failed check, not a crash', async () => {
+    const fetch = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+
+    const checks = await conformanceChecks({ baseUrl: 'http://drop.test/api/transfers', fetch })
+
+    expect(checks[0]).toMatchObject({ name: 'Conformance: Server', status: 'fail' })
+    expect(checks.slice(1).every((check) => check.status === 'skip')).toBe(true)
   })
 })

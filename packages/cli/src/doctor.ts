@@ -2,8 +2,10 @@ import { GetBucketCorsCommand, GetBucketLifecycleConfigurationCommand, HeadBucke
 import { randomUUID } from 'node:crypto'
 
 import type { Bucket } from '@s3nd/core'
+import { runConformance, type ConformanceOptions, type ConformanceResult } from '@s3nd/protocol/conformance'
 
-export type CheckStatus = 'ok' | 'warn' | 'fail'
+/** `skip`: a conformance check that does not apply to this server. */
+export type CheckStatus = 'ok' | 'warn' | 'fail' | 'skip'
 
 export interface Check {
   name: string
@@ -252,4 +254,23 @@ async function resolveEndpoint(value: unknown): Promise<string | undefined> {
   const url = value as { hostname?: string; protocol?: string; port?: number | string }
   const port = url?.port ? `:${url.port}` : ''
   return url?.hostname ? `endpoint ${url.protocol ?? 'https:'}//${url.hostname}${port}` : undefined
+}
+
+const CONFORMANCE_STATUS: Record<ConformanceResult['status'], CheckStatus> = { pass: 'ok', fail: 'fail', skip: 'skip' }
+
+/** The conformance report, as doctor checks: a failed rule fails `doctor`, a skipped one does not. */
+export function toChecks(report: ConformanceResult[]): Check[] {
+  return report.map((result) => ({
+    name: `Conformance: ${result.name}`,
+    status: CONFORMANCE_STATUS[result.status],
+    detail: result.detail,
+  }))
+}
+
+/**
+ * `doctor --remote … --conformance`: every rule of PROTOCOL.md, against the
+ * server itself. It writes real transfers and burns each one.
+ */
+export async function conformanceChecks(options: ConformanceOptions): Promise<Check[]> {
+  return toChecks(await runConformance(options))
 }

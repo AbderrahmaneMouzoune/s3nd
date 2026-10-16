@@ -9,7 +9,7 @@ import { createBucket, createTransferHandler, isS3ndError, type Bucket } from '@
 import { createTransferClient, isTransferError, type TransferClient } from '@s3nd/protocol'
 
 import { didYouMean, findProjectConfig, machineConfigPath, resolveConfiguration, type Configuration } from './config.js'
-import { runChecks, type Check } from './doctor.js'
+import { conformanceChecks, runChecks, type Check } from './doctor.js'
 import { CliError, isCliError } from './errors.js'
 import { createProgress, createStyle, formatBytes, formatDuration, tildify, type Style } from './format.js'
 import { assertProvider, PROVIDERS, writeStarter, type Provider } from './init.js'
@@ -55,6 +55,7 @@ Options
       --token <token>    Bearer token sent with --remote
       --name <filename>  Filename to store the transfer under
   -z, --compress         put: gzip a file before it goes (a directory always is)
+      --conformance      doctor with --remote: check the server against the protocol
   -o, --output <path>    Where get writes. "-" is stdout
       --json             Machine-readable output
   -y, --yes              Never ask: take flags and defaults, fail on what is missing
@@ -77,6 +78,7 @@ Examples
   s3nd put ./project
   pg_dump notes | s3nd put - -z --name notes.sql.gz
   s3nd --remote https://drop.example.com/api/transfers put ./report.pdf
+  s3nd --remote https://drop.example.com/api/transfers doctor --conformance
 `
 
 const SETUP_FLAGS = `Answers can be given as flags, and those questions are skipped:
@@ -127,7 +129,9 @@ The transfer is deleted; the code stops working everywhere.`,
 Writes, reads and deletes a probe object, and checks a lifecycle rule
 cleans up expired transfers. Exits non-zero when a check fails.
 
-  --json   The checks, as JSON`,
+  --conformance   With --remote: hold the server to every rule of the s3nd
+                  protocol (PROTOCOL.md). Creates and burns test transfers
+  --json          The checks, as JSON`,
   config: `s3nd config — print the resolved configuration
 
 Every value, and where it came from: a flag, a variable, which file.
@@ -148,6 +152,7 @@ const options = {
   token: { type: 'string' },
   name: { type: 'string' },
   compress: { type: 'boolean', short: 'z', default: false },
+  conformance: { type: 'boolean', default: false },
   output: { type: 'string', short: 'o' },
   provider: { type: 'string' },
   force: { type: 'boolean', default: false },
@@ -170,6 +175,7 @@ type Flags = {
   token?: string
   name?: string
   compress: boolean
+  conformance: boolean
   output?: string
   provider?: string
   force: boolean
@@ -444,6 +450,7 @@ const SYMBOL: Record<Check['status'], (style: Style) => string> = {
   ok: (style) => style.green('✓'),
   warn: (style) => style.yellow('!'),
   fail: (style) => style.red('✗'),
+  skip: (style) => style.dim('·'),
 }
 
 async function checksFor(configuration: Configuration): Promise<Check[]> {
@@ -464,7 +471,26 @@ async function commandDoctor(flags: Flags): Promise<void> {
   // Setup ends by running these very checks; twice in a row is noise.
   if (ranSetup) return
 
+  if (flags.conformance && !configuration.settings.remote) {
+    throw new CliError(
+      '--conformance checks a s3nd server, and this setup talks to S3 directly.',
+      'Point it at one: s3nd doctor --remote https://drop.example.com/api/transfers --conformance',
+    )
+  }
+
   const checks = await checksFor(configuration)
+  // Only once the round trip worked: against a server that did not answer,
+  // a dozen more failures would bury the one that matters.
+  if (flags.conformance && checks.every((check) => check.status !== 'fail')) {
+    const { remote, token } = configuration.settings
+    checks.push(
+      ...(await conformanceChecks({
+        baseUrl: remote!,
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      })),
+    )
+  }
+
   const failed = checks.filter((check) => check.status === 'fail')
 
   emit(flags.json, { config: configuration.file ?? null, checks, ok: failed.length === 0 }, () => {

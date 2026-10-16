@@ -36,10 +36,21 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./conformance": {
+      "import": {
+        "types": "./dist/conformance/index.d.ts",
+        "default": "./dist/conformance/index.js"
+      },
+      "require": {
+        "types": "./dist/conformance/index.d.cts",
+        "default": "./dist/conformance/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
+    "conformance",
     "README.md",
     "PROTOCOL.md",
     "CHANGELOG.md",
@@ -62,8 +73,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:package": "publint --strict && attw --pack .",
-    "api": "api-extractor run",
-    "api:update": "api-extractor run --local"
+    "api": "api-extractor run && api-extractor run --config api-extractor.conformance.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.conformance.json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -1,6 +1,8 @@
-import type { S3Client } from '@aws-sdk/client-s3'
+import { S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 import { vi } from 'vitest'
+
+import { createBucket } from '../src/bucket.js'
 
 export interface StubCall {
   command: { constructor: { name: string }; input: Record<string, any> }
@@ -351,4 +353,64 @@ export function createMemoryClient(options: MemoryClientOptions = {}) {
       lifecycle = rules
     },
   }
+}
+
+/** Where `memoryBucket()` signs its URLs; a fake `fetch` sends those to `bucketPut()`. */
+export const MEMORY_ENDPOINT = 'http://s3.test'
+
+/**
+ * A real `S3Client`, so presigning signs real URLs, whose `send` is the
+ * in-memory S3's. `getSignedUrl` never calls `send`.
+ */
+export function memoryBucket(options: { maxSize?: number; prefix?: string } = {}) {
+  const memory = createMemoryClient()
+  const client = new S3Client({
+    region: 'eu-west-3',
+    endpoint: MEMORY_ENDPOINT,
+    forcePathStyle: true,
+    credentials: { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' },
+  })
+  Object.assign(client, { send: memory.send })
+
+  return { memory, bucket: createBucket({ bucket: 'transfers', client, ...options }) }
+}
+
+/**
+ * Stands in for the bucket's HTTP side: honours what a presigned URL signs
+ * (the length and type) and stores the bytes where the URL points.
+ */
+export async function bucketPut(memory: ReturnType<typeof createMemoryClient>, request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const signed = (url.searchParams.get('X-Amz-SignedHeaders') ?? '').split(';')
+  const key = decodeURIComponent(url.pathname.replace(/^\/transfers\//, ''))
+  const body = new Uint8Array(await request.arrayBuffer())
+
+  if (!url.searchParams.has('X-Amz-Signature') || request.method !== 'PUT') {
+    return new Response('AccessDenied', { status: 403 })
+  }
+
+  if (signed.includes('content-length') && request.headers.get('content-length') !== null) {
+    if (Number(request.headers.get('content-length')) !== body.byteLength) {
+      return new Response('BadDigest', { status: 400 })
+    }
+  }
+
+  if ([...url.searchParams.keys()].some((name) => /checksum/i.test(name))) {
+    return new Response('BadDigest: a checksum was signed into the URL', { status: 400 })
+  }
+
+  const metadata: Record<string, string> = {}
+  for (const [name, value] of url.searchParams) {
+    if (name.startsWith('x-amz-meta-')) metadata[name.slice('x-amz-meta-'.length)] = value
+  }
+
+  memory.objects.set(key, {
+    body,
+    contentType: request.headers.get('content-type') ?? undefined,
+    metadata,
+    etag: `put-${body.byteLength}`,
+    lastModified: new Date(),
+  })
+
+  return new Response(null, { status: 200 })
 }

@@ -107,6 +107,46 @@ is the readable tour of it.
 Every request carries `s3nd-protocol: 1` (`PROTOCOL_HEADER`), and a server answers a newer version
 with `UNSUPPORTED_PROTOCOL` instead of misreading it.
 
+## Checking a server
+
+Every rule of `PROTOCOL.md` comes with a check: `@s3nd/protocol/conformance` runs them against any
+server, whatever it is written in, through `fetch` and nothing else. It returns a report, one
+`{ name, status, detail }` per check with `status` `pass`, `fail` or `skip`, rather than throwing,
+so it needs no test framework:
+
+```ts
+import { runConformance } from '@s3nd/protocol/conformance'
+
+const report = await runConformance({
+  baseUrl: 'https://drop.example.com/api/transfers',
+  headers: { authorization: `Bearer ${token}` },
+  // What the server is configured with. Each one turns a skipped check into a real one.
+  server: { expiresIn: 3600, maxSize: 50 * 1024 * 1024, cors: { origin: 'https://app.example.com' } },
+})
+
+const failed = report.filter((result) => result.status === 'fail')
+```
+
+It covers creating, reading, `/raw` and deleting a snapshot and a file, a `.json` file staying a
+file, unknown, badly encoded and confusable codes, the error body and the status of every error
+code, the version header, and, when the server offers them, presigned uploads and delete tokens.
+Optional features are detected where the protocol makes them visible (a `deleteToken` in the
+`201`, a presign request answered `201` or `400`); the rest is what you tell it in `server`:
+
+| `server` option | What it unlocks                                                                        |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `alphabet`      | The code normalization rules for a custom alphabet (Crockford base32 by default)       |
+| `expiresIn`     | `expiresAt` checked against it; at most `expiryWait` (15 s) and the suite waits it out |
+| `maxSize`       | One byte over it must be `TOO_LARGE`                                                   |
+| `cors.origin`   | The preflight and the CORS headers on errors                                           |
+| `upload`        | Checked against the detected mode, `proxy`, `presign` or `both`                        |
+| `protectDelete` | Checked against whether `DELETE` turns out to need the delete token                    |
+| `rateLimit`     | `requests + 1` reads of one code must end in `RATE_LIMITED`. Runs last                 |
+
+The run creates real transfers and burns each one, so point it at storage it may write to.
+`@s3nd/core` runs it against `createTransferHandler()` in its own CI, in memory and on MinIO.
+`s3nd doctor --remote <url> --conformance` prints the same report.
+
 ## Sync codes
 
 A sync code belongs here rather than in `@s3nd/core` because it _is_ part of the contract: its
