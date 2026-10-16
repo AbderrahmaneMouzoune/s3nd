@@ -104,6 +104,10 @@ createTransferHandler({
 })
 ```
 
+Every failure answers JSON. One the protocol has no name for (a throwing `authorize`, a failed S3
+call) answers `INTERNAL` with a generic message, so nothing about your bucket leaks; pass
+`onError: (error, request) => …` to log the real error.
+
 The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
 nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:

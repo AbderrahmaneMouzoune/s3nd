@@ -314,3 +314,79 @@ describe('createTransferHandler — code collisions', () => {
     expect(metadata.data).toBe('first')
   })
 })
+
+describe('createTransferHandler — unexpected errors', () => {
+  it('answers INVALID_SYNC_CODE for a badly encoded path', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/%E0`))
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe('INVALID_SYNC_CODE')
+  })
+
+  it('answers INTERNAL as JSON when authorize throws, and hands the error to onError', async () => {
+    const seen: unknown[] = []
+    const boom = new Error('session store at db.internal:5432 is down')
+    const { handler } = setup({
+      authorize: () => {
+        throw boom
+      },
+      onError: (error) => seen.push(error),
+    })
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.status).toBe(500)
+
+    const { error } = await response.json()
+    expect(error).toEqual({ code: 'INTERNAL', message: 'Internal error.' })
+    expect(seen).toEqual([boom])
+  })
+
+  it('does not echo the message of an error the storage client throws', async () => {
+    const { memory, handler } = setup()
+    memory.send.mockRejectedValueOnce(new Error('connect ECONNREFUSED my-secret-bucket.s3.amazonaws.com'))
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(500)
+
+    const body = await response.text()
+    expect(JSON.parse(body).error.code).toBe('INTERNAL')
+    expect(body).not.toContain('my-secret-bucket')
+  })
+
+  it('passes the request to onError', async () => {
+    const onError = vi.fn()
+    const { memory, handler } = setup({ onError })
+    memory.send.mockRejectedValueOnce(new TypeError('fetch failed'))
+
+    const request = new Request(`${BASE}/K7QP2M4X`)
+    await handler(request)
+
+    // Bucket wraps the SDK failure; the original stays on `cause`.
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'GET_FAILED' }), request)
+    expect(onError.mock.calls[0]?.[0].cause).toBeInstanceOf(TypeError)
+  })
+
+  it('still answers when onError itself throws', async () => {
+    const { memory, handler } = setup({
+      onError: () => {
+        throw new Error('logger down')
+      },
+    })
+    memory.send.mockRejectedValueOnce(new Error('boom'))
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(500)
+    expect((await response.json()).error.code).toBe('INTERNAL')
+  })
+
+  it('does not call onError for the errors the protocol already names', async () => {
+    const onError = vi.fn()
+    const { handler } = setup({ onError })
+
+    await handler(new Request(`${BASE}/not-a-code!`))
+    await handler(new Request(`${BASE}/K7QP2M4X`))
+
+    expect(onError).not.toHaveBeenCalled()
+  })
+})
