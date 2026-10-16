@@ -368,6 +368,11 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (rawCode === undefined) {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
 
+      // A filename means a file, whatever its type: a `.json` picked from a
+      // file input is sent as `application/json`, and is still a file. Only a
+      // nameless JSON body is a snapshot.
+      if (request.headers.has(FILENAME_HEADER)) return createFile(request)
+
       return (request.headers.get('content-type') ?? '').includes('application/json')
         ? createSnapshot(request)
         : createFile(request)
