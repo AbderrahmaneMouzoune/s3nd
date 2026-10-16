@@ -11,6 +11,8 @@ const KIND_METADATA_KEY = 's3nd-kind'
 const EXPIRES_METADATA_KEY = 's3nd-expires-at'
 const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
+/** A redirect is followed at once; its signed URL need not outlive that. */
+const MAX_REDIRECT_EXPIRES_IN = 300
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
 const CODE_ATTEMPTS = 5
 
@@ -297,7 +299,19 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
   async function readRaw(code: string): Promise<Response> {
     if (rawMode === 'redirect') {
-      const url = await bucket.getUrl(code, { download: true })
+      // Signing reads nothing, so check what stream mode would have checked
+      // first: that the object is there, is a file, and has not expired.
+      const head = await bucket.head(code)
+      if (!head || head.metadata[KIND_METADATA_KEY] !== 'file') return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const expiresAt = head.metadata[EXPIRES_METADATA_KEY]
+      const remaining = expiresAt ? Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000) : Infinity
+      if (!(remaining >= 1)) return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const url = await bucket.getUrl(code, {
+        download: true,
+        expiresIn: Math.min(remaining, MAX_REDIRECT_EXPIRES_IN),
+      })
       return Response.redirect(url, 302)
     }
 
