@@ -134,10 +134,14 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
  * most common way a s3nd bucket goes wrong.
  */
 async function checkLifecycle(bucket: Bucket, prefix?: string): Promise<Check> {
-  const scope = prefix ? `the "${prefix}" prefix` : 'the bucket'
+  // Keys are written as `<prefix>/<code>`, so that is what a rule's prefix is
+  // matched against, whether the user typed `transfers`, `transfers/` or `/transfers`.
+  const trimmed = prefix?.replace(/^\/+|\/+$/g, '') || undefined
+  const keyPrefix = trimmed ? `${trimmed}/` : ''
+  const scope = trimmed ? `the "${trimmed}" prefix` : 'the bucket'
   const suggestion =
     'Add an S3 lifecycle rule that expires objects under ' +
-    (prefix ? `"${prefix}/"` : 'this bucket') +
+    (trimmed ? `"${keyPrefix}"` : 'this bucket') +
     ' after a day or two. Without it, expired transfers stay stored and billed.'
 
   try {
@@ -149,17 +153,25 @@ async function checkLifecycle(bucket: Bucket, prefix?: string): Promise<Check> {
       return { name: 'Expiry cleanup', status: 'warn', detail: 'no enabled expiration rule', fix: suggestion }
     }
 
-    const covering = rules.filter((rule) => {
-      const rulePrefix = rule.Filter?.Prefix ?? rule.Prefix ?? ''
-      return prefix ? prefix.startsWith(rulePrefix) || rulePrefix === '' : rulePrefix === ''
+    const matching = rules.filter((rule) => {
+      // The console and Terraform write `Filter.And` as soon as a tag or a size
+      // bound joins the prefix; the top-level `Prefix` is the legacy form.
+      const rulePrefix = rule.Filter?.Prefix ?? rule.Filter?.And?.Prefix ?? rule.Prefix ?? ''
+      return keyPrefix.startsWith(rulePrefix)
     })
 
+    // A tag filter only matches objects carrying that tag, and s3nd tags nothing.
+    const covering = matching.filter((rule) => rule.Filter?.Tag == null && (rule.Filter?.And?.Tags ?? []).length === 0)
+
     if (covering.length === 0) {
+      const tagged = matching.length > 0
       return {
         name: 'Expiry cleanup',
         status: 'warn',
-        detail: `${rules.length} expiration rule(s), none covering ${scope}`,
-        fix: suggestion,
+        detail: tagged
+          ? `${matching.length} expiration rule(s) match ${scope} but filter on tags, which s3nd never sets`
+          : `${rules.length} expiration rule(s), none covering ${scope}`,
+        fix: tagged ? `${suggestion} Leave tags out of its filter.` : suggestion,
       }
     }
 
