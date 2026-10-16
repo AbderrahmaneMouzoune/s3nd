@@ -56,6 +56,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "smoke": "node smoke/handler.mjs && bun smoke/handler.mjs",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",

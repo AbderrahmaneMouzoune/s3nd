@@ -333,7 +333,7 @@ export class Bucket {
       data,
     }
 
-    const result = await this.upload(encodeSnapshot(envelope, compress), {
+    const result = await this.upload(await encodeSnapshot(envelope, compress), {
       key,
       prefix: options.prefix,
       contentType: compress ? COMPRESSED_SNAPSHOT_CONTENT_TYPE : SNAPSHOT_CONTENT_TYPE,
@@ -364,7 +364,7 @@ export class Bucket {
     const file = await this.get(key, { prefix: options.prefix, signal: options.signal })
     if (!file) return null
 
-    const envelope = decodeSnapshot(await file.bytes())
+    const envelope = await decodeSnapshot(await file.bytes())
     const expiresAt = envelope.expiresAt ? new Date(envelope.expiresAt) : undefined
 
     if (expiresAt && expiresAt.getTime() <= Date.now()) {

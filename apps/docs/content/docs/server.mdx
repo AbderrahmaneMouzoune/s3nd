@@ -37,6 +37,10 @@ export const { GET, POST, DELETE } = createTransferHandler({
 })
 ```
 
+The route runs on the Node runtime, Bun or Deno. On Next.js that is the default; do not opt the
+route into `export const runtime = 'edge'`, which is not supported. See
+[runtimes](/docs/installation#runtimes) for the full list, and for Cloudflare Workers.
+
 <Callout>
   `basePath` defaults to `/api/transfers`. Mount the routes anywhere else and pass the same path, or `GET /:code` reads
   a code off the wrong segment.

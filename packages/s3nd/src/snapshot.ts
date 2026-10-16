@@ -1,5 +1,3 @@
-import { gunzipSync, gzipSync } from 'node:zlib'
-
 import { S3ndError } from '@s3nd/protocol'
 import type { SnapshotEnvelope } from './types.js'
 
@@ -17,8 +15,17 @@ const LEGACY_MARKER = 'bucketcode'
 
 const GZIP_MAGIC = [0x1f, 0x8b]
 
+/**
+ * Runs bytes through a web `CompressionStream` or `DecompressionStream`, which
+ * every runtime s3nd targets has, where `node:zlib` is Node's alone.
+ */
+async function transform(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  const output = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(stream)
+  return new Uint8Array(await new Response(output).arrayBuffer())
+}
+
 /** JSON, then gzip unless asked otherwise. A snapshot is mostly repetitive text. */
-export function encodeSnapshot(envelope: SnapshotEnvelope, compress: boolean): Uint8Array {
+export async function encodeSnapshot(envelope: SnapshotEnvelope, compress: boolean): Promise<Uint8Array> {
   let json: string
 
   try {
@@ -35,8 +42,8 @@ export function encodeSnapshot(envelope: SnapshotEnvelope, compress: boolean): U
     throw new S3ndError('INVALID_SNAPSHOT', 'Snapshot data is not JSON-serializable.')
   }
 
-  const bytes = Buffer.from(json, 'utf8')
-  return compress ? gzipSync(bytes) : bytes
+  const bytes = new TextEncoder().encode(json)
+  return compress ? transform(bytes, new CompressionStream('gzip')) : bytes
 }
 
 function isGzip(bytes: Uint8Array): boolean {
@@ -47,11 +54,12 @@ function isGzip(bytes: Uint8Array): boolean {
  * Reads a snapshot back. Compression is detected rather than assumed, so an
  * uncompressed snapshot — or one written by an older version — still loads.
  */
-export function decodeSnapshot(bytes: Uint8Array): SnapshotEnvelope {
+export async function decodeSnapshot(bytes: Uint8Array): Promise<SnapshotEnvelope> {
   let json: string
 
   try {
-    json = Buffer.from(isGzip(bytes) ? gunzipSync(bytes) : bytes).toString('utf8')
+    const plain = isGzip(bytes) ? await transform(bytes, new DecompressionStream('gzip')) : bytes
+    json = new TextDecoder().decode(plain)
   } catch (error) {
     throw new S3ndError('INVALID_SNAPSHOT', 'Stored snapshot is not readable: decompression failed.', {
       cause: error,

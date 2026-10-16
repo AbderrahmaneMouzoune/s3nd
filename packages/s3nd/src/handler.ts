@@ -1,5 +1,3 @@
-import { Readable } from 'node:stream'
-
 import type { Bucket } from './bucket.js'
 import { S3ndError, isS3ndError } from '@s3nd/protocol'
 import { FILENAME_HEADER, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
@@ -99,11 +97,29 @@ function decodeHeaderValue(value: string | null): string | undefined {
   }
 }
 
-/** The AWS SDK hands back a Node stream; `Response` wants a web one. */
+/**
+ * `Response` wants a web stream. Outside Node the SDK already hands one back;
+ * on Node it hands back a `Readable`, which its stream mixin can convert. The
+ * check happens at runtime so this module never imports `node:stream`.
+ */
 function toWebStream(body: unknown): ReadableStream {
   if (typeof (body as ReadableStream)?.getReader === 'function') return body as ReadableStream
 
-  return Readable.toWeb(body as Readable) as ReadableStream
+  const mixin = body as { transformToWebStream?: () => ReadableStream }
+  if (typeof mixin?.transformToWebStream === 'function') return mixin.transformToWebStream()
+
+  // Anything else async-iterable, a bare Node `Readable` included.
+  const iterator = (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]()
+  return new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await iterator.next()
+      if (done) controller.close()
+      else controller.enqueue(value)
+    },
+    async cancel() {
+      await iterator.return?.()
+    },
+  })
 }
 
 function discard(body: unknown): void {

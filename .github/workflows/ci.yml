@@ -115,3 +115,37 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - run: bunx turbo test
+
+  runtimes:
+    name: Handler on Bun and Deno
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - run: bun install --frozen-lockfile
+
+      # The smoke test imports the built bundle, which is what has to run
+      # outside Node, against an in-memory S3.
+      - run: bunx turbo build --filter=@s3nd/core
+
+      - name: Bun
+        working-directory: packages/s3nd
+        run: bun smoke/handler.mjs
+
+      - name: Deno
+        working-directory: packages/s3nd
+        run: deno run --allow-env --allow-read smoke/handler.mjs
