@@ -149,7 +149,8 @@ the receiving device is doing now. So `isPending` is true while a large file dow
 failed download or a failed burn lands in `error` instead of rejecting. `loadBytes` leaves
 `transfer` and `data` as `load` set them, so the interface can keep showing what it is fetching.
 `bytes` is cleared by the next `load` and by `reset`, since it belongs to the code it was fetched
-for.
+for. `burn(code, { deleteToken })` passes the token a server with `protectDelete`
+asks for; `useSendTransfer`'s `transfer.deleteToken` is where it comes from.
 
 ## The code input
 

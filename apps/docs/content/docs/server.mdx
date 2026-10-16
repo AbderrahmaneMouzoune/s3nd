@@ -146,10 +146,67 @@ authorize: async (request) => {
 Two things the check does not do, and should:
 
 - **It does not scope a code to a user.** Anyone signed in who guesses a code reads what it holds.
-  At 40 bits and an hour of life, guessing is not the attack to worry about — but do rate-limit
-  `GET /:code` at the edge, because a code is the only secret protecting a snapshot.
+  At 40 bits and an hour of life, guessing is not the attack to worry about; with a shorter code it
+  is, which is what `rateLimit` below is for.
 - **It does not limit how much one account stores.** `maxSize` caps a single transfer, not the
   number of them. Count them per user if the route is public to your users.
+
+## Guessing codes and burning transfers
+
+**`rateLimit`** is asked about every request once its code has been read, before anything is
+looked up, so a refused guess learns nothing about the code it guessed. It gets the request and
+`{ route, code }`: `route` is `'create'`, `'read'`, `'raw'`, `'delete'` or `'complete'`, and `code`
+is the normalised code (absent on `create`). Return `false` for a `429 RATE_LIMITED`, or a
+`Response` to answer with your own, `retry-after` included: the client hands it back as
+`error.retryAfter`.
+
+```ts
+// In memory: one process, one window. Enough for a single self-hosted server.
+const hits = new Map<string, { count: number; resetAt: number }>()
+
+createTransferHandler({
+  bucket,
+  rateLimit: (request, { route }) => {
+    if (route === 'create') return true
+    const key = request.headers.get('x-forwarded-for') ?? 'anonymous'
+    const now = Date.now()
+    const entry = hits.get(key)
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + 60_000 })
+      return true
+    }
+    entry.count += 1
+    return entry.count <= 30
+  },
+})
+```
+
+On a serverless platform each instance has its own memory, so the counter belongs in shared
+storage: `@upstash/ratelimit` on Redis, or a Cloudflare KV or Durable Object, all fit in the hook
+since it may be async. How much a code needs it depends on its length; see
+[how guessable is it](/docs/sync-codes#how-guessable-is-it).
+
+**`protectDelete: true`** stops a third party who saw a code go by from destroying the transfer
+before its recipient reads it. Every transfer is created with a delete token, returned once as
+`deleteToken` in the `201` and stored only as its SHA-256. With `protectDelete`, `DELETE /:code`
+answers `401` unless it carries that token, in `x-s3nd-delete-token` or as
+`authorization: Bearer`. A code already gone still answers `204`.
+
+```ts
+const transfer = await transfers.createSnapshot({ data: state })
+// …once the other device has restored it:
+await transfers.remove(transfer.code, { deleteToken: transfer.deleteToken })
+```
+
+The token stays with whoever created the transfer: the sender burns it, or hands it on to the
+recipient along with the code. A transfer stored before the server issued tokens cannot be burned
+with `protectDelete` on, and is left to expire.
+
+**`burnAfterRead: true`** deletes a transfer once it has been handed over: a snapshot after its
+first `GET /:code`, a file once `GET /:code/raw` has sent it in full (reading its metadata does not
+count, and a download cut short leaves it for another try). Two reads racing can both succeed: it
+is a cleanup, not a lock. It cannot be combined with `raw: 'redirect'`, where the bytes come from
+the bucket after the handler has answered.
 
 ## One prefix per purpose
 

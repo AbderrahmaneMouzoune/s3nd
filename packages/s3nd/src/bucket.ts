@@ -470,7 +470,10 @@ export class Bucket {
       prefix: options.prefix,
       contentType: compress ? COMPRESSED_SNAPSHOT_CONTENT_TYPE : SNAPSHOT_CONTENT_TYPE,
       cacheControl: 'private, no-store',
-      metadata: expiresAt ? { [EXPIRES_AT_METADATA_KEY]: expiresAt.toISOString() } : undefined,
+      metadata:
+        options.metadata || expiresAt
+          ? { ...options.metadata, ...(expiresAt ? { [EXPIRES_AT_METADATA_KEY]: expiresAt.toISOString() } : {}) }
+          : undefined,
       ifMatch: options.ifMatch,
       ifAbsent: options.ifAbsent,
       signal: options.signal,

@@ -109,6 +109,7 @@ describe('presigned uploads', () => {
       `POST ${BASE}/${created.code}/complete`,
     ])
     expect(created).toMatchObject({ kind: 'file', size: bytes.byteLength })
+    expect(created.deleteToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(memory.objects.has(`pending/${created.code}`)).toBe(false)
 
     expect(await client.readBytes(created.code)).toEqual(bytes)
@@ -163,7 +164,10 @@ describe('presigned uploads', () => {
     const again = await handler(new Request(`${BASE}/${created.code}/complete`, { method: 'POST' }))
 
     expect(again.status).toBe(201)
-    expect(await again.json()).toMatchObject({ code: created.code, kind: 'file', size: 3 })
+    const repeated = await again.json()
+    expect(repeated).toMatchObject({ code: created.code, kind: 'file', size: 3 })
+    // Handed out once, never again.
+    expect(repeated.deleteToken).toBeUndefined()
   })
 
   it('throws away an upload whose size differs from the announced one', async () => {

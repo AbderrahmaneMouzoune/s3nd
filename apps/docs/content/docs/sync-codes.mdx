@@ -100,6 +100,20 @@ window**:
 await store.putSnapshot(code, state, { expiresIn: 60 * 60, ifAbsent: true })
 ```
 
+How short a code can be depends on whether the routes are rate-limited (the handler's
+[`rateLimit`](/docs/server#guessing-codes-and-burning-transfers)) and on how long it lives. As a rule
+of thumb, for codes that live an hour:
+
+| Shape                     | Entropy | Without a rate limit                            | With a strict one (tens of tries per minute)            |
+| ------------------------- | ------- | ----------------------------------------------- | ------------------------------------------------------- |
+| 8 Crockford (the default) | 40 bits | Fine: out of reach even at 1,000 tries a second | Fine                                                    |
+| 6 Crockford               | 30 bits | Not enough: a fast attacker finds live codes    | Fine                                                    |
+| 6 digits                  | 20 bits | No                                              | Acceptable with `burnAfterRead` and a short `expiresIn` |
+| 4 digits                  | 13 bits | No                                              | Only for a code typed within minutes, burned after read |
+
+Below 30 bits, a rate limit is not optional, and `burnAfterRead` takes a code out of play the
+moment it has done its job.
+
 The numbers behind that trade-off are on [Configuring codes](/docs/code-configuration).
 
 ## A code is a bearer token

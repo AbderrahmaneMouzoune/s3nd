@@ -25,9 +25,10 @@ export interface ReceiveTransfer<T = unknown> {
   progress: number
   /**
    * Burns the code. Worth doing once a restore succeeded; expiry is the
-   * backstop. A failure lands in `error`, it does not reject.
+   * backstop. A failure lands in `error`, it does not reject. A server with
+   * `protectDelete` wants the `deleteToken` the transfer was created with.
    */
-  burn: (code: string) => Promise<void>
+  burn: (code: string, options?: { deleteToken?: string }) => Promise<void>
   transfer: TransferMetadata | null
   /** What the last `loadBytes` downloaded, until the next `load` or `reset`. */
   bytes: Uint8Array | null
@@ -110,8 +111,8 @@ export function useReceiveTransfer<T = unknown>(): ReceiveTransfer<T> {
   )
 
   const burn = useCallback(
-    async (code: string) => {
-      await runAside((signal) => client.remove(code, { signal }))
+    async (code: string, options: { deleteToken?: string } = {}) => {
+      await runAside((signal) => client.remove(code, { signal, deleteToken: options.deleteToken }))
     },
     [client, runAside],
   )

@@ -684,7 +684,7 @@ describe('createTransferHandler — cors', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe(APP)
     expect(response.headers.get('access-control-allow-methods')).toBe('GET, POST, DELETE')
     expect(response.headers.get('access-control-allow-headers')).toBe(
-      'content-type, authorization, s3nd-protocol, x-s3nd-filename',
+      'content-type, authorization, s3nd-protocol, x-s3nd-filename, x-s3nd-delete-token',
     )
     expect(response.headers.get('access-control-max-age')).toBe('600')
     expect(response.headers.get('vary')).toBe('origin')
@@ -717,7 +717,9 @@ describe('createTransferHandler — cors', () => {
     expect(response.status).toBe(201)
     expect(response.headers.get('access-control-allow-origin')).toBe(APP)
     expect(response.headers.get('access-control-allow-credentials')).toBe('true')
-    expect(response.headers.get('access-control-expose-headers')).toBe('s3nd-protocol, content-disposition')
+    expect(response.headers.get('access-control-expose-headers')).toBe(
+      's3nd-protocol, content-disposition, retry-after',
+    )
   })
 
   it('carries the CORS headers on an error, so the browser can read it', async () => {

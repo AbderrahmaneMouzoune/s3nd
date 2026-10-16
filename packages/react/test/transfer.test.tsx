@@ -333,7 +333,7 @@ describe('useReceiveTransfer', () => {
       await result.current.burn('K7QP2M4X')
     })
 
-    expect(client.remove).toHaveBeenCalledWith('K7QP2M4X', { signal: expect.any(AbortSignal) })
+    expect(client.remove).toHaveBeenCalledWith('K7QP2M4X', expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(result.current.status).toBe('success')
   })
 
@@ -481,5 +481,18 @@ describe('progress', () => {
       await pending
     })
     expect(result.current.progress).toBe(1)
+  })
+})
+
+describe('burn with a delete token', () => {
+  it('passes the token through to the client', async () => {
+    const client = fakeClient()
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.burn('K7QP2M4X', { deleteToken: 'tok' })
+    })
+
+    expect(client.remove).toHaveBeenCalledWith('K7QP2M4X', expect.objectContaining({ deleteToken: 'tok' }))
   })
 })

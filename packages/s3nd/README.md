@@ -111,6 +111,11 @@ createTransferHandler({
 })
 ```
 
+Short codes need `rateLimit: (request, { route, code }) => boolean | Response`, asked about every
+request once its code is read and before it is looked up (`false` answers `429 RATE_LIMITED`).
+`protectDelete: true` makes `DELETE` require the `deleteToken` every `201` carries, stored only as
+its SHA-256, and `burnAfterRead: true` deletes a transfer once it has been handed over.
+
 Past your runtime's request limit, `upload: 'presign'` (or `'both'`) has the client send a file
 straight to the bucket through a signed URL, then checks it on `POST /:code/complete`. It needs a
 CORS rule on the bucket for browsers, and a lifecycle rule on `pending/` for uploads nobody
