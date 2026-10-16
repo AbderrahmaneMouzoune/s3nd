@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
 ```ts
 // app/api/sync/[code]/route.ts
-import { isS3ndError } from '@s3nd/core'
+import { isTransferError } from '@s3nd/core'
 
 import { store, SCHEMA_VERSION } from '@/lib/store'
 
@@ -55,7 +55,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
   try {
     normalized = store.codes.normalize(code)
   } catch (error) {
-    if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') {
+    if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') {
       return Response.json({ error: 'That does not look like a code' }, { status: 400 })
     }
 
@@ -101,7 +101,7 @@ The transfer is over once the new device has the data. Nothing should still answ
 export async function DELETE(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
 
-  await store.delete(store.codes.normalize(code))
+  await store.deleteSnapshot(store.codes.normalize(code))
 
   return new Response(null, { status: 204 })
 }

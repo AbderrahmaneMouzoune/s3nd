@@ -112,12 +112,18 @@ Using /home/you/transfers/s3nd.config.json
 ! Expiry cleanup: no enabled expiration rule
   → Add an S3 lifecycle rule that expires objects under this bucket after a day or
     two. Without it, expired transfers stay stored and billed.
+✓ Browser uploads (CORS): a CORS rule allows PUT with content-type
 
 1 check(s) failed.
 ```
 
-That last check is the one that earns the command. `expiresIn` stops a transfer being _handed
+The CORS check only matters for presigned uploads from a browser, which need the bucket to accept a
+`PUT` from your app's origin.
+
+The expiry check is the one that earns the command. `expiresIn` stops a transfer being _handed
 over_; only a lifecycle rule deletes the object, and nothing surfaces the gap until a bill does.
+A rule counts when its prefix, plain or under `And`, covers the transfer prefix. A rule that also
+filters on tags does not: s3nd tags nothing, so it would never match a transfer.
 
 Pointed at a server, `doctor` checks the only thing that matters there, a real round trip:
 
@@ -143,9 +149,26 @@ The code goes to stdout and everything else to stderr, so it composes:
 CODE=$(s3nd put ./report.pdf)
 ```
 
-`put -` reads stdin, which is how a directory travels:
+A directory travels as it is: `put` archives and gzips it on the fly, as `<name>.tar.gz`, and the
+other machine unpacks it with plain `tar xzf`. Permissions are kept, and symbolic links are stored
+as links, never followed, so nothing outside the directory goes along. `--compress` (`-z`) gzips a
+single file the same way, as `<name>.gz`; without it a file goes as it is. `--name` always wins. With
+`--json`, `put` reports the stored `filename`, and `compressed: true` with the `originalSize` when it
+compressed.
 
 ```sh
+$ s3nd put ./project
+project.tar.gz · 12 MB (48 MB before compression) · expires in 1 hour
+K7QP2M4X
+
+$ s3nd put ./dump.sql -z
+dump.sql.gz · 3.1 MB (41 MB before compression) · expires in 1 hour
+```
+
+`put -` reads stdin instead, for anything a command produces:
+
+```sh
+pg_dump notes | s3nd put - -z --name notes.sql.gz --expires-in 7d
 tar cz ./project | s3nd put - --name project.tar.gz
 ```
 
@@ -164,6 +187,24 @@ the payload to stdout. The stored filename is reduced to a plain name first — 
 leading dot — so a transfer can only ever land where you are. `get` never replaces a file that is
 already there: pass `--force` to replace it, or `-o` to write somewhere else. A code holding a
 snapshot rather than a file prints its JSON instead.
+
+Both directions stream: `put` reads the file as it sends it, and `get` writes the bytes as they
+arrive, so a 2 GB file needs no 2 GB of memory. At a terminal, a progress line on stderr shows the
+bytes, the percentage and the throughput; it stays off under `--json` and when stderr is not a
+terminal, so a pipeline or a CI log does not fill with it.
+
+```sh
+$ s3nd put ./holiday.mov
+████████████░░░░░░░░░░░░  50% · 367 MB / 734 MB · 11 MB/s
+```
+
+`get` never leaves a half-written file behind: the bytes go to a temporary file beside the
+destination, which takes its name only once the transfer is complete. An interrupted `get` leaves
+the destination as it was.
+
+Locally, `put -` streams stdin straight into a multipart upload, whatever its size. Against a
+server it spools stdin to a temporary file first, to learn its size, so the file can go straight
+to the bucket when the server offers presigned uploads.
 
 ## The configuration file
 
@@ -232,6 +273,9 @@ instead of at S3:
 s3nd --remote https://drop.example.com/api/transfers put ./report.pdf
 ```
 
+When the server offers presigned uploads (`upload: 'presign'` or `'both'`), `put` sends the file
+straight to the bucket, past the server's request limit; otherwise it posts it to the server.
+
 This is not a second implementation. The CLI has exactly one, the protocol client, wired either to
 `fetch` or, without `--remote`, straight into the request handler in the same process. The two modes
 cannot drift apart, because there is only one of them.
@@ -241,23 +285,24 @@ rather than S3 credentials.
 
 ## Options
 
-| Option                 | What it does                                                |
-| ---------------------- | ----------------------------------------------------------- |
-| `-c, --config <path>`  | Configuration file to read                                  |
-| `-p, --profile <name>` | Profile to use inside it                                    |
-| `--env-file <path>`    | Read `KEY=value` pairs from this file first                 |
-| `--bucket <name>`      | Bucket name                                                 |
-| `--prefix <prefix>`    | Key prefix inside the bucket                                |
-| `--region <name>`      | Region                                                      |
-| `--endpoint <url>`     | S3-compatible endpoint                                      |
-| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`   |
-| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                |
-| `--token <token>`      | Bearer token sent with `--remote`                           |
-| `--name <filename>`    | Filename to store the transfer under                        |
-| `-o, --output <path>`  | Where `get` writes. `-` is stdout                           |
-| `--json`               | Machine-readable output, for scripts and for `doctor` in CI |
-| `--provider <name>`    | Which starter `init` writes                                 |
-| `--force`              | Let `init` and `get` overwrite an existing file             |
+| Option                 | What it does                                                   |
+| ---------------------- | -------------------------------------------------------------- |
+| `-c, --config <path>`  | Configuration file to read                                     |
+| `-p, --profile <name>` | Profile to use inside it                                       |
+| `--env-file <path>`    | Read `KEY=value` pairs from this file first                    |
+| `--bucket <name>`      | Bucket name                                                    |
+| `--prefix <prefix>`    | Key prefix inside the bucket                                   |
+| `--region <name>`      | Region                                                         |
+| `--endpoint <url>`     | S3-compatible endpoint                                         |
+| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`      |
+| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                   |
+| `--token <token>`      | Bearer token sent with `--remote`                              |
+| `--name <filename>`    | Filename to store the transfer under                           |
+| `-z, --compress`       | `put`: gzip a file or stdin on the way (a directory always is) |
+| `-o, --output <path>`  | Where `get` writes. `-` is stdout                              |
+| `--json`               | Machine-readable output, for scripts and for `doctor` in CI    |
+| `--provider <name>`    | Which starter `init` writes                                    |
+| `--force`              | Let `init` and `get` overwrite an existing file                |
 
 Configuration otherwise comes from the same environment variables as the library:
 `S3ND_BUCKET`, `S3ND_REGION`, `S3ND_ENDPOINT`, `S3ND_PREFIX`, `S3ND_PUBLIC_URL`,

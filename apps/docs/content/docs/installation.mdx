@@ -43,6 +43,23 @@ The package ships ESM and CommonJS builds with TypeScript declarations for both,
 `require` both work. It runs on your server only — there is no browser build, and no code path
 that would put credentials in front of a user.
 
+## Runtimes
+
+`@s3nd/core` imports no `node:*` module: ids come from the Web Crypto global, snapshots are gzipped
+with `CompressionStream`, and environment variables are read only where `process.env` exists. What
+still assumes Node is the AWS SDK's default credential chain, which reads `~/.aws` and the instance
+metadata service. Outside Node, pass `credentials` (and `bucket`, `region`) explicitly.
+
+| Runtime                                 | Status                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Node 20, 22, 24                         | Supported. The whole suite runs on each in CI.                                                  |
+| Bun                                     | Supported. CI runs the transfer handler on it.                                                  |
+| Deno 2                                  | Supported, through `npm:` specifiers or a `node_modules` folder. CI runs the handler on it.     |
+| Cloudflare Workers                      | Expected to work with the `nodejs_compat` flag and static `credentials`. Not covered by CI.     |
+| Vercel Edge, Next.js `runtime = 'edge'` | Not supported. Nothing has proven it works; set `export const runtime = 'nodejs'` on the route. |
+
+`@s3nd/react` and `@s3nd/protocol` hold no storage client and run anywhere `fetch` does.
+
 ## Credentials
 
 s3nd never asks for credentials it does not need. Pass them explicitly:
@@ -101,4 +118,12 @@ The minimum policy for a bucket used by s3nd:
 already hold. The URL it produces grants exactly the `s3:GetObject` your own credentials have.
 
 Snapshots need nothing beyond these three. `putSnapshot()` is a `PutObject`, `getSnapshot()` is a
-`GetObject`, and the conditional writes ride along as headers on the same call.
+`GetObject`, and the conditional writes ride along as headers on the same call. `head()`,
+`exists()` and `hasSnapshot()` are a `HeadObject`, which `s3:GetObject` covers; `copy()` needs
+`s3:GetObject` on the source and `s3:PutObject` on the destination.
+
+`list()` is the exception: it needs `s3:ListBucket`, granted on the bucket itself
+(`arn:aws:s3:::my-bucket`, no `/*`). Give it only to the credentials that actually enumerate, such
+as a cleanup job, not to a transfer server. On AWS, the same permission also decides what a read of
+a missing key returns: with it, S3 answers 404 and `get()`/`head()` return `null`; without it, S3
+answers 403, which surfaces as `GET_FAILED`.

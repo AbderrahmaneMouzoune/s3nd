@@ -3,8 +3,9 @@ title: 'How big can a snapshot be'
 description: 'A snapshot goes through your server, so your runtime sets the ceiling.'
 ---
 
-A snapshot travels from the browser to your API, and only then to S3. Your runtime's request limit
-is therefore the ceiling:
+A snapshot travels from the browser to your API as plain JSON, and is only gzipped there, on its
+way to S3. Your runtime's request limit therefore applies to the uncompressed JSON, and it is the
+ceiling:
 
 | Runtime                                                    | Max request body                  |
 | ---------------------------------------------------------- | --------------------------------- |
@@ -14,33 +15,49 @@ is therefore the ceiling:
 | Next.js Pages Router API routes (`bodyParser`)             | **1 MB** by default, configurable |
 | Long-running Node server (Express, Fastify, Docker…)       | whatever you configure            |
 
-That is the compressed size, and compression is doing a lot of work here.
+The platform enforces it before any s3nd code runs. A 4.5 MB limit is still something like tens of
+thousands of ordinary records; most local-first apps never come close.
 
 ## What gzip buys you
 
 An IndexedDB dump is the same keys repeated over every record, which is the best case for gzip.
-In practice a dump compresses 5–10×, so a 4.5 MB limit accommodates something like 20–45 MB of
-raw JSON — tens of thousands of ordinary records. Most local-first apps never come close.
+In practice a dump compresses 5–10×, which is what you pay S3 for and what `maxSize` measures.
 
 Measure yours rather than guessing:
 
 ```ts
 const result = await store.putSnapshot(code, state)
 
-console.log(result.size) // bytes actually stored
+console.log(result.size) // bytes actually stored, after gzip
 ```
 
 ## Failing early
 
-Set `maxSize` below your platform's limit. s3nd checks it before sending anything, so an
-oversized snapshot costs a comparison instead of a truncated request:
+Three limits, measured on two different things:
+
+| Limit                          | Measures                            | Who enforces it                |
+| ------------------------------ | ----------------------------------- | ------------------------------ |
+| Your platform's request limit  | the incoming body, raw JSON         | the platform, before s3nd runs |
+| The handler's `maxRequestSize` | the incoming body, raw JSON         | `createTransferHandler()`      |
+| `maxSize` on the bucket        | the bytes written to S3, after gzip | `upload()` and `putSnapshot()` |
+
+`maxSize` is measured **after gzip** for a snapshot (unless `compress: false`), on the same bytes
+`result.size` reports. It guards the bucket, not the request: calibrate it on what you are willing
+to store. Copying your platform's request limit into it does nothing, since a body that fits the
+request compresses to a fraction of it. s3nd checks it before sending anything, so an oversized
+snapshot costs a comparison instead of a write:
 
 ```ts
 const store = createBucket({
   bucket: process.env.S3_BUCKET,
-  maxSize: 4 * 1024 * 1024, // under Vercel's 4.5 MB
+  maxSize: 2 * 1024 * 1024, // 2 MB stored, gzipped
 })
 ```
+
+To bound the request itself, on a self-hosted server with no platform limit in front of it, set
+`maxRequestSize` on the handler. It is checked on `Content-Length` before anything is read, then on
+the bytes as they arrive, and on a snapshot's JSON before it is parsed. Unset, it defaults to the
+bucket's `maxSize` for files and to no limit for snapshots; see [the server](/docs/server).
 
 ```ts
 try {
@@ -70,10 +87,44 @@ await store.putSnapshot(`${code}/attachments`, attachments)
 defeats gzip. Store blobs as objects and reference them by key — see
 [attachments beside the data](/docs/use-cases/attachments).
 
-**Presign the upload.** For a genuinely large database, have the browser talk to S3 directly so
-the bytes never touch your runtime. That needs CORS on the bucket, which is the thing s3nd
-otherwise saves you from — worth it above a certain size, not before. Today you build it over
-`store.client`; v0.2 makes it first-class, along with multipart.
+**Presign the upload.** For a genuinely large file, have the browser talk to S3 directly so the
+bytes never touch your runtime: `upload: 'presign'` on the handler, `upload: 'auto'` on the
+client. That needs CORS on the bucket, which is the thing s3nd otherwise saves you from — worth it
+above a certain size, not before. See [files past the request limit](/docs/server#files-past-the-request-limit),
+or `store.presignUpload()` to build your own.
+
+## Multipart, and what it does not change
+
+Between your server and S3 there is no ceiling. Above `multipartThreshold` (16 MiB by default),
+and for any stream whose length you do not pass, `upload()` switches to a multipart upload: the
+body is cut in `partSize` pieces (8 MiB by default, 5 MiB at least), up to four of them in flight
+at once. A stream of any size goes through without being held in memory and without its length
+being known upfront:
+
+```ts
+const store = createBucket({
+  bucket: process.env.S3_BUCKET,
+  multipartThreshold: 16 * 1024 * 1024, // the default
+  partSize: 8 * 1024 * 1024, // the default; memory stays around four parts
+})
+
+await store.upload(fs.createReadStream('export.ndjson'), { key: 'exports/2026-10.ndjson' })
+```
+
+`maxSize` still holds. A body of known size is refused before anything is sent; a stream is
+counted as it goes, and the upload is aborted the moment it passes the limit. An `ifAbsent` or
+`ifMatch` write is checked when the multipart upload completes, which is when the object comes
+into existence. A failure or an aborted `signal` sends `AbortMultipartUpload`, so the parts
+already sent stop costing you.
+
+What multipart does **not** do is raise your runtime's request limit. A Vercel function still
+cannot receive more than 4.5 MB in one request, so a browser still cannot post a 20 MB snapshot
+to your API in one call. Multipart lets your server stream a large body _to S3_; for the
+browser-to-server leg, presign the upload as above.
+
+A process killed halfway through a multipart upload cannot abort it. Its parts stay in the bucket
+and are billed until an `AbortIncompleteMultipartUpload` lifecycle rule removes them, which is
+why the rules below carry one.
 
 ## Storage cost
 
@@ -89,9 +140,16 @@ only grows. Put a lifecycle rule on the prefix and stop thinking about it:
       "Filter": { "Prefix": "snapshots/" },
       "Expiration": { "Days": 1 },
     },
+    {
+      "ID": "abort-incomplete-multipart-uploads",
+      "Status": "Enabled",
+      "Filter": {},
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 },
+    },
   ],
 }
 ```
 
-Per-account backups want a different rule, or none — keep them under their own prefix so the two
+The second rule cleans up after a multipart upload that never finished, see below. Per-account
+backups want a different expiry rule, or none — keep them under their own prefix so the two
 policies do not collide.

@@ -13,16 +13,35 @@
  */
 export { createTransferClient } from './client.js'
 export { isTransferError, parseTransferErrorBody, TransferError } from './transfer-error.js'
-export { S3ndError, isS3ndError, type S3ndErrorCode } from './s3nd-error.js'
 export { createSyncCode, createSyncCodes, normalizeSyncCode, syncCodeAlphabets } from './sync-code.js'
-export { FILENAME_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from './types.js'
+export {
+  DELETE_TOKEN_HEADER,
+  FILENAME_HEADER,
+  PROTOCOL_HEADER,
+  PROTOCOL_VERSION,
+  TRANSFER_ERROR_STATUS,
+} from './types.js'
 export type {
   CreatedTransfer,
   CreateSnapshotBody,
+  PresignedUpload,
+  PresignUploadBody,
+  TransferClientErrorCode,
   TransferErrorBody,
   TransferErrorCode,
   TransferKind,
   TransferMetadata,
+  TransferProgress,
+  UploadMode,
 } from './types.js'
-export type { CreateFileInput, CreateSnapshotInput, TransferClient, TransferClientConfig } from './client.js'
+export type {
+  ClientUploadMode,
+  CreateFileInput,
+  CreateSnapshotInput,
+  ReadBytesOptions,
+  RemoveOptions,
+  TransferClient,
+  TransferClientConfig,
+  TransferStream,
+} from './client.js'
 export type { SyncCodeOptions, SyncCodes } from './types-codes.js'

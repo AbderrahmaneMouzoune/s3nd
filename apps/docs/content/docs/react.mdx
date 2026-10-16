@@ -8,7 +8,7 @@ npm install @s3nd/react
 ```
 
 `@s3nd/react` never sees a storage credential and never pulls a storage client. Its whole
-dependency tree is `@s3nd/protocol` and nanoid, with React as a peer — the AWS SDK stays on
+dependency tree is `@s3nd/protocol`, with React as a peer — the AWS SDK stays on
 your server, where `s3nd` runs.
 
 That is the reason it is a separate package. If the hooks lived in `s3nd`, installing them
@@ -72,6 +72,18 @@ const { sendFile } = useSendTransfer()
 <input type="file" onChange={(event) => event.target.files?.[0] && sendFile(event.target.files[0])} />
 ```
 
+`progress` goes from 0 to 1 as the bytes go out, for a progress bar. It stops just short of 1
+until the server has answered, so a finished bar means a usable code. A snapshot, posted in one
+request, jumps from 0 to 1. On the receiving side, `progress` follows `loadBytes`.
+
+```tsx
+const { sendFile, progress, isPending } = useSendTransfer()
+
+{
+  isPending && <progress value={progress} />
+}
+```
+
 <Callout>
   Failures land in `error` rather than rejecting — an event handler should not need a `try`/`catch` around every call.
   The call returns `null` when it failed, for callers that want to branch on it.
@@ -120,6 +132,26 @@ what `transfer.device` and `transfer.createdAt` are for.
 Burning the code after a successful restore is a good habit; expiry is the backstop if it never
 runs.
 
+### Files, and one status for the whole device
+
+A file transfer carries no state in `transfer.data`: its content is fetched with `loadBytes`, which
+stores it in `bytes`.
+
+```tsx
+const { load, loadBytes, transfer, bytes, isPending, error } = useReceiveTransfer()
+
+await load(code) // what it is: transfer.filename, transfer.size
+await loadBytes(code) // the file itself, in bytes
+```
+
+`load`, `loadBytes` and `burn` share one `status`, `isPending` and `error`: they describe whatever
+the receiving device is doing now. So `isPending` is true while a large file downloads, and a
+failed download or a failed burn lands in `error` instead of rejecting. `loadBytes` leaves
+`transfer` and `data` as `load` set them, so the interface can keep showing what it is fetching.
+`bytes` is cleared by the next `load` and by `reset`, since it belongs to the code it was fetched
+for. `burn(code, { deleteToken })` passes the token a server with `protectDelete`
+asks for; `useSendTransfer`'s `transfer.deleteToken` is where it comes from.
+
 ## The code input
 
 `useSyncCodeInput` does the repair in the browser, before any request: separators dropped, case
@@ -151,7 +183,8 @@ attacker.
 
 ## Concurrency
 
-Every call aborts the one before it, a late reply from a superseded call is dropped rather than
+Every call aborts the one before it, including across `load`, `loadBytes` and `burn` on the same
+receiving hook, a late reply from a superseded call is dropped rather than
 published, and nothing is written after unmount.
 
 The practical version: a user hammering the button does not end up looking at whichever request
@@ -159,11 +192,13 @@ happened to finish last.
 
 ## Reference
 
-| Hook                   | Returns                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `status`, `isPending`, `error`, `reset`                              |
-| `useReceiveTransfer()` | `load`, `loadBytes`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
-| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                            |
-| `useTransferClient()`  | The underlying client, for anything the hooks do not cover                                           |
+| Hook                   | Returns                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `progress`, `status`, `isPending`, `error`, `reset`                                       |
+| `useReceiveTransfer()` | `load`, `loadBytes`, `progress`, `burn`, `transfer`, `bytes`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
+| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                                                 |
+| `useTransferClient()`  | The underlying client, for anything the hooks do not cover                                                                |
 
 `status` is `'idle' | 'pending' | 'success' | 'error'`.
+
+React 18 and 19 are supported (`react: ">=18 <20"`), on Node 20 or later for server rendering.

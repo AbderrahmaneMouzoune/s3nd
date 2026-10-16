@@ -296,5 +296,5 @@ const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typedCode) // null when unknown or expired
 ```
 
-Its whole dependency tree is nanoid; no path from it reaches the AWS SDK, so it bundles for React
+It has no runtime dependencies; no path from it reaches the AWS SDK, so it bundles for React
 Native or a worker as is. Next: [The transfer protocol](/docs/protocol).

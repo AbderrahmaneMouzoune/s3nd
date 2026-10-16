@@ -47,6 +47,9 @@
     "LICENSE"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -58,13 +61,15 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "lint:package": "publint --strict && attw --pack ."
+    "lint:package": "publint --strict && attw --pack .",
+    "api": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@s3nd/protocol": "^0.1.1"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18 <20"
   },
   "devDependencies": {
     "@testing-library/react": "^16.1.0",
