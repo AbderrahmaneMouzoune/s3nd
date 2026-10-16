@@ -14,10 +14,17 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
     "type-check": {
       "dependsOn": ["^build"]
     },
     "lint": {},
+    "lint:package": {
+      "dependsOn": ["build"]
+    },
     "lint:fix": {
       "cache": false
     }
