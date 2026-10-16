@@ -161,8 +161,11 @@ $ s3nd rm K7QP2M4X
 Burned K7QP2M4X
 ```
 
-`get` writes to the stored filename unless you pass `-o`; `-o -` sends the payload to stdout. A code
-holding a snapshot rather than a file prints its JSON instead.
+`get` writes to the stored filename in the working directory unless you pass `-o`; `-o -` sends
+the payload to stdout. The stored filename is reduced to a plain name first — no directory, no
+leading dot — so a transfer can only ever land where you are. `get` never replaces a file that is
+already there: pass `--force` to replace it, or `-o` to write somewhere else. A code holding a
+snapshot rather than a file prints its JSON instead.
 
 ## The configuration file
 
@@ -256,7 +259,7 @@ rather than S3 credentials.
 | `-o, --output <path>`  | Where `get` writes. `-` is stdout                           |
 | `--json`               | Machine-readable output, for scripts and for `doctor` in CI |
 | `--provider <name>`    | Which starter `init` writes                                 |
-| `--force`              | Let `init` overwrite an existing file                       |
+| `--force`              | Let `init` and `get` overwrite an existing file             |
 
 Configuration otherwise comes from the same environment variables as the library:
 `S3ND_BUCKET`, `S3ND_REGION`, `S3ND_ENDPOINT`, `S3ND_PREFIX`, `S3ND_PUBLIC_URL`,

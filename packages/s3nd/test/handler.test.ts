@@ -140,6 +140,30 @@ describe('createTransferHandler — files', () => {
     expect(metadata.filename).toBe('rapport été.pdf')
   })
 
+  it.each([
+    ['../../../etc/evil', 'evil'],
+    ['..\\..\\Windows\\evil.dll', 'evil.dll'],
+    ['/home/user/.ssh/authorized_keys', 'authorized_keys'],
+    ['.bashrc', 'bashrc'],
+    ['report\u0000\n.pdf', 'report.pdf'],
+  ])('keeps only the base name of %j', async (sent, stored) => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postFile(bytes, sent))).json()
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+
+    expect(metadata.filename).toBe(stored)
+  })
+
+  it('falls back to a generic name when nothing of the filename survives', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postFile(bytes, '../..'))).json()
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+
+    expect(metadata.filename).toBe('file')
+  })
+
   it('rejects an empty body', async () => {
     const { handler } = setup()
 
@@ -215,6 +239,73 @@ describe('createTransferHandler — expiry', () => {
     vi.setSystemTime(Date.now() + 61_000)
     expect((await handler(new Request(`${BASE}/${code}`))).status).toBe(404)
     expect((await handler(new Request(`${BASE}/${code}/raw`))).status).toBe(404)
+  })
+})
+
+describe('createTransferHandler — raw redirect', () => {
+  const bytes = new TextEncoder().encode('%PDF-1.4 pretend')
+
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  /** Signing is the bucket's job and tested there; here only what is asked of it matters. */
+  function redirectSetup(config: Partial<Parameters<typeof createTransferHandler>[0]> = {}) {
+    const context = setup({ raw: 'redirect', ...config })
+    const getUrl = vi.spyOn(context.bucket, 'getUrl').mockResolvedValue('https://signed.test/object')
+
+    return { ...context, getUrl }
+  }
+
+  async function expectNotFound(response: Response): Promise<void> {
+    expect(response.status).toBe(404)
+    expect((await response.json()).error).toEqual({ code: 'NOT_FOUND', message: 'Unknown or expired code.' })
+  }
+
+  it('redirects to a signed URL for a live file, no longer-lived than five minutes', async () => {
+    const { handler, getUrl } = redirectSetup({ expiresIn: 3600 })
+
+    const { code } = await (await handler(postFile(bytes, 'report.pdf'))).json()
+    const response = await handler(new Request(`${BASE}/${code}/raw`))
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('https://signed.test/object')
+    expect(getUrl).toHaveBeenCalledWith(code, { download: true, expiresIn: 300 })
+  })
+
+  it('caps the signed URL at what is left of the transfer', async () => {
+    const { handler, getUrl } = redirectSetup({ expiresIn: 3600 })
+
+    const { code } = await (await handler(postFile(bytes, 'report.pdf'))).json()
+    vi.setSystemTime(Date.now() + 3_540_000)
+    await handler(new Request(`${BASE}/${code}/raw`))
+
+    expect(getUrl).toHaveBeenCalledWith(code, { download: true, expiresIn: 60 })
+  })
+
+  it('answers NOT_FOUND for an expired file without signing anything', async () => {
+    const { handler, getUrl } = redirectSetup({ expiresIn: 60 })
+
+    const { code } = await (await handler(postFile(bytes, 'report.pdf'))).json()
+    vi.setSystemTime(Date.now() + 61_000)
+
+    await expectNotFound(await handler(new Request(`${BASE}/${code}/raw`)))
+    expect(getUrl).not.toHaveBeenCalled()
+  })
+
+  it('answers NOT_FOUND for a snapshot, whose envelope is not a file', async () => {
+    const { handler, getUrl } = redirectSetup()
+
+    const { code } = await (await handler(postSnapshot({ data: { notes: ['one'] } }))).json()
+
+    await expectNotFound(await handler(new Request(`${BASE}/${code}/raw`)))
+    expect(getUrl).not.toHaveBeenCalled()
+  })
+
+  it('answers NOT_FOUND for an unknown code', async () => {
+    const { handler, getUrl } = redirectSetup()
+
+    await expectNotFound(await handler(new Request(`${BASE}/K7QP2M4X/raw`)))
+    expect(getUrl).not.toHaveBeenCalled()
   })
 })
 
