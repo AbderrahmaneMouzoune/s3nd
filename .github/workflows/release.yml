@@ -89,6 +89,11 @@ jobs:
       # here, from this checkout, and never restored from an earlier run.
       - run: bunx turbo build --filter='./packages/*'
 
+      # What CI checks on every pull request, once more on the exact build
+      # that is about to be published: a broken exports map or types that
+      # only resolve under one module system cannot be taken back from npm.
+      - run: bun run lint:packages
+
       # NPM_TOKEN has to be a granular access token with 2FA bypass enabled;
       # npm turns anything else down with a 403 on an account that has two
       # factor authentication. Or drop NODE_AUTH_TOKEN entirely, configure

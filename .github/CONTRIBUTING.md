@@ -23,6 +23,15 @@ conditional headers, so nothing needs credentials or a network. For an integrati
 the real protocol, point an example at a local MinIO container; the
 [README](../README.md#minio-on-your-machine-no-cloud-account) shows how to start one.
 
+Three more checks look at what npm would receive rather than at the workspace. CI runs them on
+every pull request, and the release runs the first one again before publishing:
+
+```sh
+bun run lint:packages   # publint, and attw on the types under node10, node16 and bundler
+bun run smoke-test      # npm pack the four packages, install them in an empty project, load them
+bun run test:coverage   # the suite with coverage, gated by a threshold on core and protocol
+```
+
 ## Where things live
 
 | Path                | What it is                                                                                                 |
