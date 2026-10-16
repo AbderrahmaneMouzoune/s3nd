@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // The conformance suite is its own entry, so the client never ships it.
+  entry: { index: 'src/index.ts', 'conformance/index': 'src/conformance/index.ts' },
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,

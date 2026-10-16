@@ -133,6 +133,23 @@ $ s3nd doctor --remote https://drop.example.com/api/transfers --token "$TOKEN"
 ✓ Create, read, delete: round-tripped code 8WTXQC8R
 ```
 
+Add `--conformance` to hold the server to every rule of the protocol, through the suite in
+[`@s3nd/protocol/conformance`](https://github.com/AbderrahmaneMouzoune/s3nd/tree/main/packages/protocol#checking-a-server).
+It runs once the round trip works, creates and burns its own test transfers, and fails `doctor`
+when a rule is broken; a check that does not apply to the server (presigned uploads on a server
+that offers none) is skipped, marked `·`:
+
+```sh
+$ s3nd doctor --remote https://drop.example.com/api/transfers --token "$TOKEN" --conformance
+✓ Server: https://drop.example.com/api/transfers answered
+✓ Create, read, delete: round-tripped code 8WTXQC8R
+✓ Conformance: Server: files: proxy, delete tokens issued
+✓ Conformance: Version header: sent on every answer; a request without it is version 1; …
+✓ Conformance: Snapshots: create, read, /raw refused, delete, delete again; `data: null` accepted
+…
+· Conformance: Presigned uploads: the server does not offer presigned uploads
+```
+
 It exits non-zero when a check fails, so it works as a deployment smoke test.
 
 ## `put`, `get`, `rm`
@@ -285,24 +302,25 @@ rather than S3 credentials.
 
 ## Options
 
-| Option                 | What it does                                                   |
-| ---------------------- | -------------------------------------------------------------- |
-| `-c, --config <path>`  | Configuration file to read                                     |
-| `-p, --profile <name>` | Profile to use inside it                                       |
-| `--env-file <path>`    | Read `KEY=value` pairs from this file first                    |
-| `--bucket <name>`      | Bucket name                                                    |
-| `--prefix <prefix>`    | Key prefix inside the bucket                                   |
-| `--region <name>`      | Region                                                         |
-| `--endpoint <url>`     | S3-compatible endpoint                                         |
-| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`      |
-| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                   |
-| `--token <token>`      | Bearer token sent with `--remote`                              |
-| `--name <filename>`    | Filename to store the transfer under                           |
-| `-z, --compress`       | `put`: gzip a file or stdin on the way (a directory always is) |
-| `-o, --output <path>`  | Where `get` writes. `-` is stdout                              |
-| `--json`               | Machine-readable output, for scripts and for `doctor` in CI    |
-| `--provider <name>`    | Which starter `init` writes                                    |
-| `--force`              | Let `init` and `get` overwrite an existing file                |
+| Option                 | What it does                                                    |
+| ---------------------- | --------------------------------------------------------------- |
+| `-c, --config <path>`  | Configuration file to read                                      |
+| `-p, --profile <name>` | Profile to use inside it                                        |
+| `--env-file <path>`    | Read `KEY=value` pairs from this file first                     |
+| `--bucket <name>`      | Bucket name                                                     |
+| `--prefix <prefix>`    | Key prefix inside the bucket                                    |
+| `--region <name>`      | Region                                                          |
+| `--endpoint <url>`     | S3-compatible endpoint                                          |
+| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`       |
+| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                    |
+| `--token <token>`      | Bearer token sent with `--remote`                               |
+| `--name <filename>`    | Filename to store the transfer under                            |
+| `-z, --compress`       | `put`: gzip a file or stdin on the way (a directory always is)  |
+| `--conformance`        | `doctor` with `--remote`: check the server against the protocol |
+| `-o, --output <path>`  | Where `get` writes. `-` is stdout                               |
+| `--json`               | Machine-readable output, for scripts and for `doctor` in CI     |
+| `--provider <name>`    | Which starter `init` writes                                     |
+| `--force`              | Let `init` and `get` overwrite an existing file                 |
 
 Configuration otherwise comes from the same environment variables as the library:
 `S3ND_BUCKET`, `S3ND_REGION`, `S3ND_ENDPOINT`, `S3ND_PREFIX`, `S3ND_PUBLIC_URL`,

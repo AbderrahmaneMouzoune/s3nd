@@ -4,7 +4,8 @@ This is the normative text of the protocol between a s3nd server and its clients
 types in [`src/types.ts`](./src/types.ts) describe the same payloads; where the two disagree, this
 document wins and the types are the bug. `createTransferHandler()` in `@s3nd/core` and
 `createTransferClient()` in this package are one server and one client. Anything that follows this
-document works with either of them.
+document works with either of them, and `runConformance()` from `@s3nd/protocol/conformance`
+checks a server against it.
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as described in
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).

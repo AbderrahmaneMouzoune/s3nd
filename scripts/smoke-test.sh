@@ -29,7 +29,7 @@ fail() {
   exit 1
 }
 
-for name in @s3nd/protocol @s3nd/core @s3nd/react; do
+for name in @s3nd/protocol @s3nd/protocol/conformance @s3nd/core @s3nd/react; do
   node --input-type=module -e "
     const m = await import('$name')
     if (Object.keys(m).length === 0) throw new Error('no exports')
