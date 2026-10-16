@@ -62,7 +62,17 @@ export function notFoundError(): Error {
  * A miniature S3: keeps objects in a Map and honours the conditional headers,
  * so a snapshot can genuinely round-trip without a network.
  */
-export function createMemoryClient() {
+export interface MemoryClientOptions {
+  /**
+   * How the backend treats `If-None-Match` / `If-Match` on `PutObject`:
+   * honour them like S3 and R2 (the default), refuse them with a status like
+   * some older builds (`{ refuse: 501 }`), or ignore them and overwrite.
+   */
+  conditionalWrites?: 'supported' | 'ignored' | { refuse: number; name?: string }
+}
+
+export function createMemoryClient(options: MemoryClientOptions = {}) {
+  const conditionalWrites = options.conditionalWrites ?? 'supported'
   const objects = new Map<
     string,
     {
@@ -96,7 +106,20 @@ export function createMemoryClient() {
     return Buffer.concat(chunks)
   }
 
+  /** What PutObject and CompleteMultipartUpload do with If-None-Match / If-Match. */
   function checkPreconditions(input: any, stored: { etag: string } | undefined): void {
+    const conditional = input.IfNoneMatch != null || input.IfMatch != null
+
+    if (conditional && typeof conditionalWrites === 'object') {
+      throw Object.assign(new Error('A header you provided implies functionality that is not implemented'), {
+        name: conditionalWrites.name ?? 'NotImplemented',
+        $metadata: { httpStatusCode: conditionalWrites.refuse },
+      })
+    }
+
+    // A backend that does not know the headers writes unconditionally.
+    if (conditionalWrites !== 'supported') return
+
     if (input.IfNoneMatch === '*' && stored) {
       throw precondition('At least one of the pre-conditions you specified did not hold')
     }

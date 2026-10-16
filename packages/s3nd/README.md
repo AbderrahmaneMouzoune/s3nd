@@ -254,6 +254,11 @@ try {
 `ifAbsent: true` is the other half: write only if nothing is stored yet, which is how you claim a
 freshly generated code without a chance of trampling one already in use.
 
+Both rest on the backend supporting conditional writes on `PutObject`: S3 since August 2024 and R2
+do, MinIO and Ceph depend on the build. A backend that refuses the header throws
+`CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores it overwrites silently, so check yours once
+([conditional writes](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/providers.mdx#conditional-writes)).
+
 ## The file API underneath
 
 Snapshots are built on a small set of file primitives, and they stay available for everything that
@@ -293,6 +298,7 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `INVALID_SNAPSHOT`                                              | Data JSON cannot represent, a stored object that is not a snapshot, or an envelope from a newer format. |
 | `SNAPSHOT_TOO_NEW`                                              | The snapshot's schema version is above the `maxVersion` given.                                          |
 | `PRECONDITION_FAILED`                                           | An `ifMatch` or `ifAbsent` write lost the race.                                                         |
+| `CONDITIONAL_WRITE_UNSUPPORTED`                                 | The backend refused the conditional header an `ifMatch` or `ifAbsent` write sends.                      |
 | `INVALID_KEY`                                                   | Empty key, leading or trailing `/`, `..` segment, backslash, over 1024 bytes.                           |
 | `INVALID_BODY`                                                  | Unsupported upload body type.                                                                           |
 | `MISSING_CONTENT_LENGTH`                                        | No longer raised: a stream without `contentLength` goes through multipart.                              |

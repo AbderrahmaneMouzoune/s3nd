@@ -22,22 +22,23 @@ try {
 
 ## Codes
 
-| Code                     | When                                                                                                                       |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `INVALID_CONFIG`         | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`, a `syncCode` shape that cannot work.      |
-| `INVALID_SNAPSHOT`       | Data JSON cannot represent, a stored object that is not a snapshot, an unreadable one, or an envelope from a newer format. |
-| `SNAPSHOT_TOO_NEW`       | The snapshot's schema version is above the `maxVersion` you passed.                                                        |
-| `PRECONDITION_FAILED`    | An `ifMatch` or `ifAbsent` write lost the race.                                                                            |
-| `INVALID_KEY`            | Empty key, leading or trailing `/`, `..` segment, backslash, control character, over 1024 bytes.                           |
-| `INVALID_BODY`           | The upload body is not a supported type.                                                                                   |
-| `MISSING_CONTENT_LENGTH` | No longer raised: a stream without `contentLength` goes through a multipart upload. Kept so existing checks compile.       |
-| `FILE_TOO_LARGE`         | The body is above the configured `maxSize`, known upfront or counted while streaming.                                      |
-| `UPLOAD_FAILED`          | `PutObject` was rejected. Original error in `cause`.                                                                       |
-| `GET_FAILED`             | `GetObject` or `HeadObject` failed for a reason other than a missing key, or answered without a body.                      |
-| `DELETE_FAILED`          | `DeleteObject`/`DeleteObjects` was rejected, or S3 reported per-key errors.                                                |
-| `LIST_FAILED`            | `ListObjectsV2` was rejected (often a missing `s3:ListBucket`), or `limit` is not a positive integer.                      |
-| `COPY_FAILED`            | `CopyObject` was rejected, or the source and destination are the same object.                                              |
-| `URL_FAILED`             | Invalid `expiresIn`, signing failure, or a public URL requested with no `publicUrl` configured.                            |
+| Code                            | When                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `INVALID_CONFIG`                | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`, a `syncCode` shape that cannot work.      |
+| `INVALID_SNAPSHOT`              | Data JSON cannot represent, a stored object that is not a snapshot, an unreadable one, or an envelope from a newer format. |
+| `SNAPSHOT_TOO_NEW`              | The snapshot's schema version is above the `maxVersion` you passed.                                                        |
+| `PRECONDITION_FAILED`           | An `ifMatch` or `ifAbsent` write lost the race.                                                                            |
+| `CONDITIONAL_WRITE_UNSUPPORTED` | The backend refused the `If-None-Match` / `If-Match` header an `ifAbsent` or `ifMatch` write sends (a `501` or a `400`).   |
+| `INVALID_KEY`                   | Empty key, leading or trailing `/`, `..` segment, backslash, control character, over 1024 bytes.                           |
+| `INVALID_BODY`                  | The upload body is not a supported type.                                                                                   |
+| `MISSING_CONTENT_LENGTH`        | No longer raised: a stream without `contentLength` goes through a multipart upload. Kept so existing checks compile.       |
+| `FILE_TOO_LARGE`                | The body is above the configured `maxSize`, known upfront or counted while streaming.                                      |
+| `UPLOAD_FAILED`                 | `PutObject` was rejected. Original error in `cause`.                                                                       |
+| `GET_FAILED`                    | `GetObject` or `HeadObject` failed for a reason other than a missing key, or answered without a body.                      |
+| `DELETE_FAILED`                 | `DeleteObject`/`DeleteObjects` was rejected, or S3 reported per-key errors.                                                |
+| `LIST_FAILED`                   | `ListObjectsV2` was rejected (often a missing `s3:ListBucket`), or `limit` is not a positive integer.                      |
+| `COPY_FAILED`                   | `CopyObject` was rejected, or the source and destination are the same object.                                              |
+| `URL_FAILED`                    | Invalid `expiresIn`, signing failure, or a public URL requested with no `publicUrl` configured.                            |
 
 ## `TransferError`: the protocol saying no
 

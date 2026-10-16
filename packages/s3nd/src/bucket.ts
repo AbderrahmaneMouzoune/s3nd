@@ -76,6 +76,38 @@ function describe(error: unknown): string {
 }
 
 /** S3 answers a failed IfMatch/IfNoneMatch with 412, or 409 under a race. */
+/**
+ * 400s that say something about the body or the request itself, whatever the
+ * conditional headers. Anything else a backend answers with 400 to a
+ * conditional write is taken as it refusing the header.
+ */
+const UNRELATED_BAD_REQUESTS = new Set([
+  'EntityTooLarge',
+  'EntityTooSmall',
+  'BadDigest',
+  'InvalidDigest',
+  'KeyTooLongError',
+  'MetadataTooLarge',
+  'RequestTimeout',
+  'IncompleteBody',
+])
+
+/**
+ * A backend that does not implement `If-None-Match` / `If-Match` on
+ * `PutObject` either ignores the header (nothing to catch, see providers.mdx)
+ * or refuses the request: 501, or a 400 about the header. Only meaningful for a
+ * write that sent one.
+ */
+function isConditionalWriteRefusal(error: unknown): boolean {
+  const candidate = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } }
+  const status = candidate?.$metadata?.httpStatusCode
+
+  if (status === 501) return true
+  if (status !== 400) return false
+
+  return !UNRELATED_BAD_REQUESTS.has(candidate?.name ?? '') && !UNRELATED_BAD_REQUESTS.has(candidate?.Code ?? '')
+}
+
 function isPreconditionFailure(error: unknown): boolean {
   const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } }
   const status = candidate?.$metadata?.httpStatusCode
@@ -348,6 +380,14 @@ export class Bucket {
           options.ifAbsent
             ? `"${path}" already exists in bucket "${this.bucket}".`
             : `"${path}" changed in bucket "${this.bucket}" since the ETag you passed as ifMatch. Read it again before writing.`,
+          { cause: error },
+        )
+      }
+
+      if ((options.ifMatch != null || options.ifAbsent) && isConditionalWriteRefusal(error)) {
+        throw new S3ndError(
+          'CONDITIONAL_WRITE_UNSUPPORTED',
+          `Bucket "${this.bucket}" refused a conditional write to "${path}" (${options.ifAbsent ? 'ifAbsent, If-None-Match: *' : 'ifMatch, If-Match'}): the backend does not seem to support conditional writes on PutObject, which ${options.ifAbsent ? 'ifAbsent' : 'ifMatch'} relies on. S3 supports them since August 2024 and R2 does; MinIO and Ceph RGW depend on the build. ${describe(error)}`,
           { cause: error },
         )
       }
