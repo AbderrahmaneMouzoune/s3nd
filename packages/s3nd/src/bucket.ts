@@ -492,8 +492,14 @@ export class Bucket {
    * Reads a snapshot back, or `null` when there is none — including one that
    * has passed its `expiresAt`, which is never handed over even if the object
    * is still sitting in the bucket.
+   *
+   * Pass `parse` to validate `data`: its return type becomes the type of
+   * `data`, and a `parse` that throws surfaces as `INVALID_SNAPSHOT`. Without
+   * it, `getSnapshot<T>()` is an unchecked assertion: `data` is whatever JSON
+   * is stored, typed as `T` because you said so. A snapshot crosses machines,
+   * app versions and, whenever a code leaks, someone else's hands.
    */
-  async getSnapshot<T = unknown>(key: string, options: GetSnapshotOptions = {}): Promise<Snapshot<T> | null> {
+  async getSnapshot<T = unknown>(key: string, options: GetSnapshotOptions<T> = {}): Promise<Snapshot<T> | null> {
     const file = await this.get(key, { prefix: options.prefix, signal: options.signal })
     if (!file) return null
 
@@ -511,11 +517,26 @@ export class Bucket {
       )
     }
 
+    let data: T
+    if (options.parse) {
+      try {
+        data = options.parse(envelope.data)
+      } catch (error) {
+        throw new S3ndError(
+          'INVALID_SNAPSHOT',
+          `Snapshot data under "${file.path}" was refused by \`parse\`: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        )
+      }
+    } else {
+      data = envelope.data as T
+    }
+
     return {
       bucket: file.bucket,
       key: file.key,
       path: file.path,
-      data: envelope.data as T,
+      data,
       app: envelope.app,
       version: envelope.version,
       device: envelope.device,

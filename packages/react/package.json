@@ -55,7 +55,9 @@
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "api": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@s3nd/protocol": "^0.1.1"

@@ -22,6 +22,14 @@
     "type-check": {
       "dependsOn": ["^build"]
     },
+    "api": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "api:update": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "lint": {},
     "lint:fix": {
       "cache": false
