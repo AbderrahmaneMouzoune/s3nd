@@ -118,6 +118,8 @@ Using /home/you/transfers/s3nd.config.json
 
 That last check is the one that earns the command. `expiresIn` stops a transfer being _handed
 over_; only a lifecycle rule deletes the object, and nothing surfaces the gap until a bill does.
+A rule counts when its prefix, plain or under `And`, covers the transfer prefix. A rule that also
+filters on tags does not: s3nd tags nothing, so it would never match a transfer.
 
 Pointed at a server, `doctor` checks the only thing that matters there, a real round trip:
 
