@@ -336,6 +336,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const file = await bucket.get(code)
     if (!file) return fail('NOT_FOUND', 'Unknown or expired code.')
 
+    // A snapshot's bytes are its gzipped envelope, and its expiry lives inside
+    // that envelope where this route cannot see it. It has no raw form: answer
+    // exactly as for an unknown code, so /raw says nothing about what a code holds.
+    if (file.metadata[KIND_METADATA_KEY] !== 'file') {
+      discard(file.body)
+      return fail('NOT_FOUND', 'Unknown or expired code.')
+    }
+
     const expiresAt = file.metadata[EXPIRES_METADATA_KEY]
     if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
       discard(file.body)
