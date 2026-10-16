@@ -80,6 +80,11 @@ jobs:
 
       - run: bun run build
 
+      # Reads the declarations the build just emitted, and fails when a
+      # package's public surface no longer matches its committed
+      # etc/*.api.md. Run `bun run api:update` and commit the diff.
+      - run: bun run api
+
   test:
     name: Test on Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
