@@ -19,7 +19,7 @@ function setup(handlerConfig: Partial<TransferHandlerConfig> = {}, clientMode: C
       const request = new Request(input as string, init as RequestInit)
       requests.push(`${request.method} ${request.url.split('?')[0]}`)
 
-      if (request.url.startsWith(ENDPOINT)) {
+      if (new URL(request.url).origin === ENDPOINT) {
         // The server's credentials must never travel to the bucket.
         expect(request.headers.get('authorization')).toBeNull()
         return bucketPut(memory, request)
@@ -222,7 +222,7 @@ describe('presigned uploads', () => {
       upload: 'presign',
       fetch: async (input, init) => {
         const request = new Request(input as string, init as RequestInit)
-        return request.url.startsWith(ENDPOINT) ? new Response('nope', { status: 403 }) : handler(request)
+        return new URL(request.url).origin === ENDPOINT ? new Response('nope', { status: 403 }) : handler(request)
       },
     })
 
