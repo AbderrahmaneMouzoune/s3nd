@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
@@ -69,6 +70,34 @@ describe('createTransferHandler — snapshots', () => {
     const response = await handler(new Request(`${BASE}/${typed}`))
     expect(response.status).toBe(200)
     expect((await response.json()).data).toBe(1)
+  })
+
+  it('records the device the client names', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: 1, device: 'Pixel 8' }))).json()
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).device).toBe('Pixel 8')
+  })
+
+  it('does not store the User-Agent when the client names no device', async () => {
+    const { memory, handler } = setup()
+    const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1'
+
+    const { code } = await (
+      await handler(
+        new Request(BASE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'user-agent': userAgent },
+          body: JSON.stringify({ data: 1 }),
+        }),
+      )
+    ).json()
+
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).device).toBeUndefined()
+    for (const stored of memory.objects.values()) {
+      const envelope = gunzipSync(stored.body).toString('utf8')
+      expect(envelope).not.toContain('iPhone')
+    }
   })
 
   it('refuses a snapshot written by a newer schema', async () => {
