@@ -140,6 +140,30 @@ describe('createTransferHandler — files', () => {
     expect(metadata.filename).toBe('rapport été.pdf')
   })
 
+  it.each([
+    ['../../../etc/evil', 'evil'],
+    ['..\\..\\Windows\\evil.dll', 'evil.dll'],
+    ['/home/user/.ssh/authorized_keys', 'authorized_keys'],
+    ['.bashrc', 'bashrc'],
+    ['report\u0000\n.pdf', 'report.pdf'],
+  ])('keeps only the base name of %j', async (sent, stored) => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postFile(bytes, sent))).json()
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+
+    expect(metadata.filename).toBe(stored)
+  })
+
+  it('falls back to a generic name when nothing of the filename survives', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postFile(bytes, '../..'))).json()
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+
+    expect(metadata.filename).toBe('file')
+  })
+
   it('rejects an empty body', async () => {
     const { handler } = setup()
 

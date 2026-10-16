@@ -99,6 +99,23 @@ function decodeHeaderValue(value: string | null): string | undefined {
   }
 }
 
+/**
+ * The sender names the file, and every client that reads it back may write it
+ * under that name — so it is a name and nothing more: no directory, from either
+ * kind of separator, no control characters, no leading dots.
+ */
+function safeFilename(received: string | undefined): string | undefined {
+  const name = received
+    ?.split(/[\\/]/)
+    .pop()!
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+
+  return name ? name : undefined
+}
+
 /** The AWS SDK hands back a Node stream; `Response` wants a web one. */
 function toWebStream(body: unknown): ReadableStream {
   if (typeof (body as ReadableStream)?.getReader === 'function') return body as ReadableStream
@@ -196,7 +213,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   }
 
   async function createFile(request: Request): Promise<Response> {
-    const filename = decodeHeaderValue(request.headers.get(FILENAME_HEADER)) ?? 'file'
+    const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
     const bytes = new Uint8Array(await request.arrayBuffer())
 
     if (bytes.byteLength === 0) {
