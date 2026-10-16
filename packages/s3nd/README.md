@@ -118,6 +118,11 @@ Every failure answers JSON. One the protocol has no name for (a throwing `author
 call) answers `INTERNAL` with a generic message, so nothing about your bucket leaks; pass
 `onError: (error, request) => …` to log the real error.
 
+When the app calls the routes from another origin, pass
+`cors: { origin: ['https://app.example.com'], credentials?, maxAge? }` (or a predicate, or `'*'`)
+and export `OPTIONS` too: the handler answers the preflight before `authorize`, and puts the CORS
+headers on every response, errors included.
+
 The browser half is a separate package, `@s3nd/protocol`, which has no runtime dependencies; no
 path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:

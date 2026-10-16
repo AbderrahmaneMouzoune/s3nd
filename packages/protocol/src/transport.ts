@@ -23,6 +23,7 @@ export interface Incoming {
   ok: boolean
   status: number
   statusText: string
+  headers: Headers
   json(): Promise<unknown>
 }
 
@@ -154,10 +155,17 @@ function sendWithXhr(outgoing: Outgoing, onProgress: (progress: TransferProgress
     xhr.onload = () => {
       done()
       const text = xhr.responseText
+      const headers = new Headers()
+      for (const line of (xhr.getAllResponseHeaders?.() ?? '').split(/\r?\n/)) {
+        const colon = line.indexOf(':')
+        if (colon > 0) headers.append(line.slice(0, colon).trim(), line.slice(colon + 1).trim())
+      }
+
       resolve({
         ok: xhr.status >= 200 && xhr.status < 300,
         status: xhr.status,
         statusText: xhr.statusText,
+        headers,
         json: async () => JSON.parse(text),
       })
     }

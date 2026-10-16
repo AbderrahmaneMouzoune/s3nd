@@ -62,6 +62,9 @@ describe('progress', () => {
       setRequestHeader(name: string, value: string) {
         this.request.headers[name] = value
       }
+      getAllResponseHeaders() {
+        return 'content-type: application/json\r\n'
+      }
       abort() {
         this.onabort?.()
       }

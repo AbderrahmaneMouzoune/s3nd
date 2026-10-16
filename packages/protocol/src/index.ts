@@ -20,6 +20,7 @@ export type {
   CreateSnapshotBody,
   PresignedUpload,
   PresignUploadBody,
+  TransferClientErrorCode,
   TransferErrorBody,
   TransferErrorCode,
   TransferKind,

@@ -37,8 +37,27 @@ const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
 /** A redirect is followed at once; its signed URL need not outlive that. */
 const MAX_REDIRECT_EXPIRES_IN = 300
+/** What a cross-origin client is allowed to send, and to read back. */
+const CORS_ALLOW_METHODS = 'GET, POST, DELETE'
+const CORS_ALLOW_HEADERS = `content-type, authorization, ${PROTOCOL_HEADER}, ${FILENAME_HEADER}`
+const CORS_EXPOSE_HEADERS = `${PROTOCOL_HEADER}, content-disposition`
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
 const CODE_ATTEMPTS = 5
+
+export interface TransferHandlerCors {
+  /**
+   * Which page origins may call these routes from a browser: a list of exact
+   * origins (`https://app.example.com`), a predicate, or `'*'` for any.
+   */
+  origin: '*' | readonly string[] | ((origin: string) => boolean)
+  /**
+   * Lets the browser send cookies and `authorization` with the request.
+   * Browsers refuse it with `origin: '*'`, so that combination throws.
+   */
+  credentials?: boolean
+  /** How long, in seconds, a browser may cache a preflight answer. */
+  maxAge?: number
+}
 
 export interface TransferHandlerConfig {
   /** The bucket every transfer is stored in. */
@@ -93,6 +112,13 @@ export interface TransferHandlerConfig {
    * SDK internal, so this is where to log it. An error thrown here is ignored.
    */
   onError?: (error: unknown, request: Request) => void
+  /**
+   * Answers browsers calling from another origin: the `OPTIONS` preflight,
+   * before `authorize`, and the CORS headers on every response, errors
+   * included. Without it nothing is added, which is right for same-origin
+   * routes.
+   */
+  cors?: TransferHandlerCors
 }
 
 export interface TransferHandler {
@@ -102,6 +128,8 @@ export interface TransferHandler {
   GET: (request: Request) => Promise<Response>
   POST: (request: Request) => Promise<Response>
   DELETE: (request: Request) => Promise<Response>
+  /** Answers the CORS preflight when `cors` is set, and refuses `OPTIONS` otherwise. */
+  OPTIONS: (request: Request) => Promise<Response>
 }
 
 function pendingKey(code: string): string {
@@ -155,22 +183,61 @@ function speaksOurVersion(request: Request): boolean {
 }
 
 /**
- * Stamps the protocol version on a response. Some responses have immutable
- * headers (`Response.redirect`, or whatever `authorize` built), so those are
- * rebuilt around the same body rather than mutated.
+ * Sets headers on a response. Some responses have immutable headers
+ * (`Response.redirect`, or whatever `authorize` built), so those are rebuilt
+ * around the same body rather than mutated.
  */
-function withProtocolVersion(response: Response): Response {
-  const version = String(PROTOCOL_VERSION)
+function withHeaders(response: Response, entries: Iterable<[string, string]>): Response {
+  const list = [...entries]
+  if (list.length === 0) return response
 
   try {
-    response.headers.set(PROTOCOL_HEADER, version)
+    for (const [name, value] of list) response.headers.set(name, value)
     return response
   } catch {
     const headers = new Headers(response.headers)
-    headers.set(PROTOCOL_HEADER, version)
+    for (const [name, value] of list) headers.set(name, value)
 
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
   }
+}
+
+/** A predicate that throws refuses the origin rather than costing the response. */
+function originAllowed(allowed: TransferHandlerCors['origin'], origin: string): boolean {
+  if (allowed === '*') return true
+  if (typeof allowed !== 'function') return allowed.includes(origin)
+
+  try {
+    return allowed(origin) === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The CORS headers a request gets, if any. Nothing for a request without an
+ * `Origin` (not a browser, or same-origin) or from an origin not allowed: the
+ * browser then blocks the response, which is the refusal.
+ */
+function corsHeaders(cors: TransferHandlerCors, request: Request, preflight: boolean): [string, string][] {
+  const origin = request.headers.get('origin')
+  const vary: [string, string][] = cors.origin === '*' ? [] : [['vary', 'origin']]
+  if (!origin) return vary
+
+  if (!originAllowed(cors.origin, origin)) return vary
+
+  const headers: [string, string][] = [['access-control-allow-origin', cors.origin === '*' ? '*' : origin], ...vary]
+  if (cors.credentials) headers.push(['access-control-allow-credentials', 'true'])
+
+  if (preflight) {
+    headers.push(['access-control-allow-methods', CORS_ALLOW_METHODS])
+    headers.push(['access-control-allow-headers', CORS_ALLOW_HEADERS])
+    if (cors.maxAge != null) headers.push(['access-control-max-age', String(cors.maxAge)])
+  } else {
+    headers.push(['access-control-expose-headers', CORS_EXPOSE_HEADERS])
+  }
+
+  return headers
 }
 
 /** The content type the client actually committed to, if it committed to one. */
@@ -254,6 +321,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   const rawMode = config.raw ?? 'stream'
   const uploadMode = config.upload ?? 'proxy'
   const presignExpiresIn = config.presignExpiresIn ?? DEFAULT_PRESIGN_EXPIRES_IN
+  const { cors } = config
+
+  if (cors?.origin === '*' && cors.credentials) {
+    throw new S3ndError(
+      'INVALID_CONFIG',
+      "`cors.origin: '*'` cannot be combined with `credentials: true`: browsers refuse it. List the origins instead.",
+    )
+  }
 
   /** Everything after the mount point: `[]`, `[code]` or `[code, 'raw']`. */
   function segmentsOf(request: Request): string[] | null {
@@ -614,6 +689,10 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const segments = segmentsOf(request)
     if (segments === null) return fail('NOT_FOUND', 'No transfer route matches this path.')
 
+    // A preflight carries no credentials and no s3nd headers, so it is
+    // answered before either is checked; the browser then sends the request.
+    if (cors && request.method === 'OPTIONS') return new Response(null, { status: 204 })
+
     // Before authorize: a client from the future should learn that much
     // whatever its credentials, and nothing below may read its payload.
     if (!speaksOurVersion(request)) {
@@ -672,7 +751,15 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
   }
 
-  const handler = async (request: Request): Promise<Response> => withProtocolVersion(await answer(request))
+  const handler = async (request: Request): Promise<Response> => {
+    const response = await answer(request)
+    const preflight = cors != null && request.method === 'OPTIONS'
+
+    return withHeaders(response, [
+      [PROTOCOL_HEADER, String(PROTOCOL_VERSION)],
+      ...(cors ? corsHeaders(cors, request, preflight) : []),
+    ])
+  }
 
   async function answer(request: Request): Promise<Response> {
     try {
@@ -680,7 +767,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     } catch (error) {
       // A TransferError raised here is already an answer: a code the sync code
       // rules refused, or a path that cannot hold one.
-      if (isTransferError(error)) return fail(error.code, error.message)
+      // TIMEOUT is a client's verdict; a server never answers with it.
+      if (isTransferError(error) && error.code !== 'TIMEOUT') return fail(error.code, error.message)
 
       const named = isS3ndError(error) ? fromS3ndError(error) : null
       if (named) return named
@@ -701,5 +789,5 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     }
   }
 
-  return Object.assign(handler, { GET: handler, POST: handler, DELETE: handler })
+  return Object.assign(handler, { GET: handler, POST: handler, DELETE: handler, OPTIONS: handler })
 }

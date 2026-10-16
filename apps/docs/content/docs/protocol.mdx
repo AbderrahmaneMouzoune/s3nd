@@ -65,6 +65,24 @@ path from it reaches the AWS SDK — so it bundles for a browser, a worker or Re
 dragging a storage client along. That is the reason it is a separate package rather than a subpath
 of `s3nd`: a subpath would have put the SDK in every front-end's `node_modules`.
 
+It checks what comes back instead of casting it. A `2xx` that is not JSON (an SSO login page, a
+`baseUrl` pointing at the wrong place) or JSON without a string `code`, a known `kind` and a
+`createdAt` rejects with a `TransferError` coded `INTERNAL`, whose message names the status and the
+content type received, rather than a `SyntaxError` or a code reading "undefined".
+
+A request to a server that never answers waits forever by default. Pass `timeout`, in
+milliseconds, to bound every call, reading the response included:
+
+```ts
+const transfers = createTransferClient({ baseUrl, timeout: 15_000 })
+```
+
+Past it, the call rejects with a `TransferError` coded `TIMEOUT`. That code is the client's own: no
+server sends it, so it is not in the table below, and its type is `TransferClientErrorCode` rather
+than `TransferErrorCode`. A `signal` you pass still works alongside the timeout, and aborting it
+still rejects with the plain `AbortError`, which the React hooks treat as a silent cancel while
+they show `TIMEOUT` as an error.
+
 In React you rarely call it directly — [the hooks](/docs/react) wrap it.
 
 ## The version header

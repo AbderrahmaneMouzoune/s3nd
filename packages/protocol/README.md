@@ -61,6 +61,11 @@ the bytes go to the bucket) or `'auto'` (presign when the server offers it). In 
 `fetch` and nothing else, so it runs in a browser, a worker, React Native, Deno or Node without a
 polyfill. Pass your own `fetch` to add retries, or to point it somewhere else in tests.
 
+Pass `timeout` (milliseconds) to bound every call: past it, the call rejects with a `TransferError`
+coded `TIMEOUT`, a code only the client raises. A response that is not the JSON the protocol
+promises (an HTML login page on a 200, a body without a `code`) rejects as `INTERNAL` with a message
+naming what came back.
+
 ## The routes
 
 All of them are relative to wherever the server mounted them.

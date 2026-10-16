@@ -254,12 +254,34 @@ with any status and body it likes.
 
 A client SHOULD treat a non-2xx response that does not carry this body (a proxy's error page, a
 platform limit) by its status: `401` and `403` as `UNAUTHORIZED`, anything else as `INTERNAL`.
+Likewise, a `2xx` whose body is not JSON, or not the shape section 5 describes, is `INTERNAL`.
+
+`TIMEOUT` is not in this table on purpose. `createTransferClient()` uses it when a call takes longer
+than the client allowed; a server MUST NOT send it.
 
 ## 7. Cross-origin requests
 
-> **To be specified (#36).** Which origins a server lets a browser call it from, how it answers a
-> preflight, and which headers it allows (`s3nd-protocol`, `x-s3nd-filename`) and exposes
-> (`s3nd-protocol`, `content-disposition`).
+A browser page on another origin than the server can only call it if the server answers
+[CORS](https://fetch.spec.whatwg.org/#http-cors-protocol). Every client request carries
+`s3nd-protocol`, and file uploads `x-s3nd-filename`, so every cross-origin request is preflighted.
+A server that accepts cross-origin requests:
+
+- MUST answer an `OPTIONS` preflight on any route with `204`, before any authorization check, since
+  a browser sends no credentials with it;
+- MUST, for an allowed origin, set on the preflight answer
+  - `access-control-allow-origin`: that origin, or `*` when any origin is allowed,
+  - `access-control-allow-methods`: at least `GET, POST, DELETE`,
+  - `access-control-allow-headers`: at least `content-type`, `authorization`, `s3nd-protocol` and
+    `x-s3nd-filename`;
+- MUST set `access-control-allow-origin` on every other response to an allowed origin, **errors
+  included**, so that the client can read the error body (section 6.1), and
+  `access-control-expose-headers` with at least `s3nd-protocol` and `content-disposition`;
+- MUST NOT combine `access-control-allow-origin: *` with `access-control-allow-credentials: true`;
+- SHOULD send `vary: origin` when the answer depends on the origin.
+
+A refused origin simply gets no `access-control-allow-origin`; the browser then withholds the
+response from the page. A server that does not accept cross-origin requests MAY answer `OPTIONS`
+with `INVALID_REQUEST`.
 
 ## 8. Uploads straight to storage
 

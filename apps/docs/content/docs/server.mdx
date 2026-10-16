@@ -240,36 +240,39 @@ A single presigned `PUT` is capped at 5 GiB by S3.
 ## When the app is on another origin
 
 Same-origin — the app and the route in one Next.js deployment — needs no CORS at all, which is the
-configuration to prefer. If the app is served from somewhere else, the preflight is yours to
-answer: the handler speaks the protocol and nothing more.
+configuration to prefer. If the app is served from somewhere else (another domain, an extension, a
+PWA hosted elsewhere), pass `cors`:
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
-const handler = createTransferHandler({ bucket, app: 'notes' })
-
-const CORS = {
-  'access-control-allow-origin': 'https://notes.example.com',
-  'access-control-allow-headers': 'content-type, authorization, x-s3nd-filename',
-  'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
-}
-
-async function withCors(request: Request): Promise<Response> {
-  const response = await handler(request)
-  const headers = new Headers(response.headers)
-
-  for (const [name, value] of Object.entries(CORS)) headers.set(name, value)
-
-  return new Response(response.body, { status: response.status, headers })
-}
-
-export const GET = withCors
-export const POST = withCors
-export const DELETE = withCors
-export const OPTIONS = () => new Response(null, { status: 204, headers: CORS })
+export const { GET, POST, DELETE, OPTIONS } = createTransferHandler({
+  bucket,
+  app: 'notes',
+  cors: {
+    origin: ['https://notes.example.com'], // or (origin) => boolean, or '*'
+    credentials: false,
+    maxAge: 600,
+  },
+})
 ```
 
-Note `x-s3nd-filename` in the allowed headers: it is how `createFile` carries the original
-filename, and a preflight that omits it fails on file uploads only — the confusing kind of bug,
-where snapshots work and files do not.
+|               |                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| `origin`      | The page origins allowed: a list of exact origins, a predicate, or `'*'` for any                   |
+| `credentials` | Lets the browser send cookies along. Cannot be combined with `'*'`: `createTransferHandler` throws |
+| `maxAge`      | Seconds a browser may cache the preflight answer                                                   |
+
+With it, the handler answers the `OPTIONS` preflight with `204`, before `authorize` runs (a
+preflight carries no credentials), and allows `content-type`, `authorization`, `s3nd-protocol` and
+`x-s3nd-filename`. Every other response carries the CORS headers too, errors included, so the page
+can read a `401` or a `TOO_LARGE` instead of seeing an opaque network failure. `s3nd-protocol` and
+`content-disposition` are exposed to the page.
+
+An origin that is not allowed gets no CORS headers at all, and the browser withholds the response.
+A predicate that throws refuses the origin. Without `cors`, nothing is added and `OPTIONS` answers
+`INVALID_REQUEST`, as before.
+
+Remember to export `OPTIONS` from the route: a Next route handler only answers the methods it
+exports.
 
 ## Proving it works
 

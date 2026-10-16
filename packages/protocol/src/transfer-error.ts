@@ -1,4 +1,4 @@
-import type { TransferErrorBody, TransferErrorCode } from './types.js'
+import type { TransferClientErrorCode, TransferErrorBody } from './types.js'
 
 /**
  * Shared by every s3nd error class, in every package. `Symbol.for` hands back
@@ -17,11 +17,11 @@ const BRAND = Symbol.for('s3nd.error')
  * means "something went wrong on the server's side of S3".
  */
 export class TransferError extends Error {
-  readonly code: TransferErrorCode
+  readonly code: TransferClientErrorCode
   /** HTTP status the server answered with, when there was a response at all. */
   readonly status: number | undefined
 
-  constructor(code: TransferErrorCode, message: string, options?: { status?: number; cause?: unknown }) {
+  constructor(code: TransferClientErrorCode, message: string, options?: { status?: number; cause?: unknown }) {
     super(message, options)
     this.name = 'TransferError'
     this.code = code
