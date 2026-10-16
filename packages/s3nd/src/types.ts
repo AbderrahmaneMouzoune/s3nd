@@ -41,7 +41,15 @@ export interface BucketConfig {
   publicUrl?: string
   /** Prefix prepended to every key, e.g. `"uploads"` or `"tenant-42/avatars"`. */
   prefix?: string
-  /** Rejects uploads above this size, in bytes, before any network call. */
+  /**
+   * Rejects uploads above this size, in bytes, before any network call.
+   *
+   * Measured on the bytes written to S3: for `putSnapshot()` that is the
+   * gzipped envelope (unless `compress: false`), not the JSON passed in. It
+   * guards the bucket, not the request: a platform's request limit applies
+   * earlier, to the incoming body, before any s3nd code runs. To bound that
+   * body, use the handler's `maxRequestSize`.
+   */
   maxSize?: number
   /**
    * Shape of the codes `store.codes` produces and accepts. Defaults to eight
@@ -89,9 +97,16 @@ export interface UploadOptions {
    * Only write if the object still carries this ETag. Optimistic concurrency:
    * a second device that wrote in the meantime makes this fail rather than
    * silently overwriting.
+   *
+   * Needs a backend that supports conditional writes (`If-Match` on
+   * `PutObject`). One that refuses the header throws
+   * `CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores it overwrites.
    */
   ifMatch?: string
-  /** Only write if nothing is stored under the key yet. */
+  /**
+   * Only write if nothing is stored under the key yet (`If-None-Match: *`).
+   * Same backend caveat as `ifMatch`.
+   */
   ifAbsent?: boolean
   signal?: AbortSignal
 }
@@ -123,7 +138,8 @@ export interface GetOptions {
   signal?: AbortSignal
 }
 
-export interface StoredFile {
+/** Everything S3 knows about an object, without its body — what `head()` returns. */
+export interface StoredFileInfo {
   bucket: string
   /** The key you asked for, without the configured `prefix`. */
   key: string
@@ -137,6 +153,12 @@ export interface StoredFile {
   lastModified?: Date
   /** Raw S3 user metadata. Keys come back lowercased. */
   metadata: Record<string, string>
+}
+
+/** `get()` options and `head()` options are the same thing. */
+export type HeadOptions = GetOptions
+
+export interface StoredFile extends StoredFileInfo {
   /**
    * The object body. It can only be read once, so use `body`, `bytes()` or
    * `text()` — exactly one of them.
@@ -147,6 +169,8 @@ export interface StoredFile {
 }
 
 export interface GetUrlOptions {
+  /** Prefix for this URL only. Overrides the bucket-level `prefix`. */
+  prefix?: string
   /** Lifetime of a signed URL, in seconds. Default `3600`, max `604800` (7 days). */
   expiresIn?: number
   /**
@@ -159,6 +183,56 @@ export interface GetUrlOptions {
    * filename. Signed URLs only.
    */
   download?: boolean | string
+}
+
+export interface DeleteOptions {
+  /** Prefix for this delete only. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  signal?: AbortSignal
+}
+
+export interface ListOptions {
+  /**
+   * Namespace to list. Overrides the bucket-level `prefix`, exactly as it does
+   * on every other method, so the keys that come back are the ones you would
+   * pass to `get()` with the same `prefix`.
+   */
+  prefix?: string
+  /** Only keys that start with this, inside the namespace, e.g. `"user-42/"`. */
+  startsWith?: string
+  /** Stop after this many objects. Omit to walk the whole namespace. */
+  limit?: number
+  signal?: AbortSignal
+}
+
+/** One entry of `list()`. `ListObjectsV2` reports no content type or metadata. */
+export interface ListedObject {
+  bucket: string
+  /** Relative to the namespace listed: hand it back to `get()` as is. */
+  key: string
+  /** Full object key in the bucket, `prefix` included. */
+  path: string
+  size?: number
+  etag?: string
+  lastModified?: Date
+}
+
+export interface CopyOptions {
+  /** Prefix for both keys. Overrides the bucket-level `prefix`. */
+  prefix?: string
+  /** Prefix for the destination only, e.g. to promote a transfer into `backups/`. */
+  toPrefix?: string
+  signal?: AbortSignal
+}
+
+export interface CopyResult {
+  bucket: string
+  /** The destination key, without its prefix. */
+  key: string
+  /** Full destination key in the bucket, prefix included. */
+  path: string
+  etag?: string
+  lastModified?: Date
 }
 
 /**
@@ -211,16 +285,28 @@ export interface SnapshotResult {
   expiresAt?: Date
 }
 
-export interface GetSnapshotOptions {
+export interface GetSnapshotOptions<T = unknown> {
   /**
    * The newest schema version this device understands. A snapshot written by a
    * newer build throws `SNAPSHOT_TOO_NEW` instead of being handed over half
    * understood.
    */
   maxVersion?: number
+  /**
+   * Validates the stored data and returns it typed: a Zod schema's `parse`, a
+   * hand-written guard, anything that throws on data it refuses. Its return
+   * type is the type of `data`, so `getSnapshot()` no longer needs a type
+   * argument. A throw surfaces as `INVALID_SNAPSHOT`, with the original error
+   * as `cause`. Runs after the expiry and `maxVersion` checks.
+   */
+  parse?: (data: unknown) => T
   prefix?: string
   signal?: AbortSignal
 }
+
+export type DeleteSnapshotOptions = DeleteOptions
+
+export type HasSnapshotOptions = HeadOptions
 
 export interface Snapshot<T = unknown> {
   bucket: string

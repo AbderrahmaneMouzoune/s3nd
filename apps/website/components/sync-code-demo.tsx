@@ -1,6 +1,6 @@
 'use client'
 
-import { createSyncCodes, isS3ndError, syncCodeAlphabets } from '@s3nd/protocol'
+import { createSyncCodes, isTransferError, syncCodeAlphabets } from '@s3nd/protocol'
 import { useId, useMemo, useState } from 'react'
 
 import { SplitFlap } from './split-flap'
@@ -38,7 +38,7 @@ export function SyncCodeDemo({ labels }: { labels: SyncCodeDemoLabels }) {
     try {
       return { code: codes.normalize(typed), error: null }
     } catch (error) {
-      if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') return { code: null, error: error.message }
+      if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') return { code: null, error: error.message }
 
       throw error
     }

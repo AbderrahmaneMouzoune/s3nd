@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 import { clearBucketEnv, createStubClient } from './helpers.js'
 
 const credentials = { accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' }

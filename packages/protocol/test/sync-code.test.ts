@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { createSyncCode, createSyncCodes, normalizeSyncCode, syncCodeAlphabets } from '../src/index.js'
+import {
+  createSyncCode,
+  createSyncCodes,
+  isTransferError,
+  normalizeSyncCode,
+  syncCodeAlphabets,
+  TransferError,
+} from '../src/index.js'
 
 describe('the default scheme', () => {
   it('is eight characters of Crockford base32', () => {
@@ -45,6 +52,18 @@ describe('the default scheme', () => {
     expect(() => normalizeSyncCode('')).toThrowError(/must not be empty/)
     expect(() => normalizeSyncCode('   ')).toThrowError(/must not be empty/)
     expect(() => normalizeSyncCode('nope!')).toThrowError(expect.objectContaining({ code: 'INVALID_SYNC_CODE' }))
+  })
+
+  it('says no with the same error a server would answer', () => {
+    let caught: unknown
+    try {
+      normalizeSyncCode('nope!')
+    } catch (error) {
+      caught = error
+    }
+
+    expect(isTransferError(caught)).toBe(true)
+    expect(caught).toBeInstanceOf(TransferError)
   })
 
   it('reports what a code is worth guessing against', () => {
@@ -94,17 +113,50 @@ describe('a custom alphabet', () => {
     expect(codes.normalize('OI1L0Z')).toBe('OI1L0Z')
   })
 
+  it('draws every character of an alphabet that is not a power of two', () => {
+    const codes = createSyncCodes({ alphabet: 'ABCDEFGHIJ', length: 64 })
+    const seen = new Set(Array.from({ length: 20 }, () => codes.create()).join(''))
+
+    expect([...seen].sort().join('')).toBe('ABCDEFGHIJ')
+  })
+
+  it('favours no character over another', () => {
+    // 10 characters over bytes: a plain modulo would give 0-5 a 26/256 share
+    // and 6-9 a 25/256 one. Rejection sampling keeps every share at a tenth.
+    const codes = createSyncCodes({ alphabet: syncCodeAlphabets.digits, length: 64 })
+    const counts = new Map<string, number>()
+    for (let attempt = 0; attempt < 2000; attempt += 1) {
+      for (const character of codes.create()) counts.set(character, (counts.get(character) ?? 0) + 1)
+    }
+
+    const expected = (2000 * 64) / 10
+    for (const count of counts.values()) {
+      expect(Math.abs(count - expected) / expected).toBeLessThan(0.05)
+    }
+  })
+
+  it('handles an alphabet of 256 characters', () => {
+    const alphabet = Array.from({ length: 256 }, (_, i) => String.fromCharCode(0x100 + i)).join('')
+    const code = createSyncCodes({ alphabet, length: 16 }).create()
+
+    expect(code).toHaveLength(16)
+    for (const character of code) expect(alphabet).toContain(character)
+  })
+
   it.each([
     ['a single character', 'A'],
     ['a repeated character', 'ABCA'],
     ['a dash', 'ABC-DEF'],
     ['a space', 'ABC DEF'],
     ['an underscore', 'ABC_DEF'],
+    ['more than 256 characters', Array.from({ length: 257 }, (_, i) => String.fromCharCode(0x100 + i)).join('')],
   ])('rejects %s', (_label, alphabet) => {
-    expect(() => createSyncCodes({ alphabet })).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIG' }))
+    // A programming error, not a protocol answer: a plain TypeError.
+    expect(() => createSyncCodes({ alphabet })).toThrowError(TypeError)
   })
 
   it.each([0, -1, 65, 4.5])('rejects a length of %s', (length) => {
-    expect(() => createSyncCodes({ length })).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIG' }))
+    expect(() => createSyncCodes({ length })).toThrowError(/length must be an integer/)
+    expect(() => createSyncCodes({ length })).toThrowError(TypeError)
   })
 })

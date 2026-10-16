@@ -14,7 +14,8 @@ store.codes.normalize('k7-qp2m4x') // "K7QP2M4X"
 ```
 
 `store.codes` pairs generation with the normalization that reads codes back, so the two can never
-disagree about the alphabet. Codes are generated with [nanoid](https://github.com/ai/nanoid).
+disagree about the alphabet. Codes are drawn from `crypto.getRandomValues`,
+with no bias toward any character.
 
 ## Choosing a shape
 
@@ -62,14 +63,16 @@ typed, since upper-casing it would break the lookup.
 
 Call `normalize()` on user input before you look anything up, and let it throw: a code with a
 character the alphabet cannot contain does not exist, so `INVALID_SYNC_CODE` is a better answer
-than a lookup that finds nothing — and it costs no request.
+than a lookup that finds nothing — and it costs no request. It throws a `TransferError`, the same
+error a client gets when a server answers `INVALID_SYNC_CODE`, imported from `@s3nd/core` or
+`@s3nd/protocol`.
 
 ```ts
 try {
   const code = store.codes.normalize(typed)
   return await store.getSnapshot(code)
 } catch (error) {
-  if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') {
+  if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') {
     return Response.json({ error: 'That does not look like a code' }, { status: 400 })
   }
 
@@ -121,11 +124,11 @@ same validation as any key, and the configured `prefix` applies:
 const store = createBucket({ bucket: 'my-bucket', prefix: 'snapshots' })
 
 await store.putSnapshot('K7QP2M4X', state) // stores snapshots/K7QP2M4X
-await store.delete('K7QP2M4X') // burns it, once the transfer is done
+await store.deleteSnapshot('K7QP2M4X') // burns it, once the transfer is done
 ```
 
 Burning a code after a successful restore is a good habit: the transfer is over, and the token
-should stop working. There is no separate call for it — `delete()` is the whole of it.
+should stop working. `deleteSnapshot()` is the whole of it.
 
 ## Outside a store
 

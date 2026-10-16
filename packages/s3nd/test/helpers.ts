@@ -62,7 +62,17 @@ export function notFoundError(): Error {
  * A miniature S3: keeps objects in a Map and honours the conditional headers,
  * so a snapshot can genuinely round-trip without a network.
  */
-export function createMemoryClient() {
+export interface MemoryClientOptions {
+  /**
+   * How the backend treats `If-None-Match` / `If-Match` on `PutObject`:
+   * honour them like S3 and R2 (the default), refuse them with a status like
+   * some older builds (`{ refuse: 501 }`), or ignore them and overwrite.
+   */
+  conditionalWrites?: 'supported' | 'ignored' | { refuse: number; name?: string }
+}
+
+export function createMemoryClient(options: MemoryClientOptions = {}) {
+  const conditionalWrites = options.conditionalWrites ?? 'supported'
   const objects = new Map<
     string,
     {
@@ -89,11 +99,25 @@ export function createMemoryClient() {
     const stored = objects.get(input.Key)
 
     if (name === 'PutObjectCommand') {
-      if (input.IfNoneMatch === '*' && stored) {
+      const conditional = input.IfNoneMatch != null || input.IfMatch != null
+
+      if (conditional && typeof conditionalWrites === 'object') {
+        throw Object.assign(new Error('A header you provided implies functionality that is not implemented'), {
+          name: conditionalWrites.name ?? 'NotImplemented',
+          $metadata: { httpStatusCode: conditionalWrites.refuse },
+        })
+      }
+
+      // A backend that does not know the headers writes unconditionally.
+      if (conditionalWrites === 'supported' && input.IfNoneMatch === '*' && stored) {
         throw precondition('At least one of the pre-conditions you specified did not hold')
       }
 
-      if (input.IfMatch != null && (!stored || input.IfMatch !== `"${stored.etag}"`)) {
+      if (
+        conditionalWrites === 'supported' &&
+        input.IfMatch != null &&
+        (!stored || input.IfMatch !== `"${stored.etag}"`)
+      ) {
         throw precondition('At least one of the pre-conditions you specified did not hold')
       }
 
@@ -143,6 +167,43 @@ export function createMemoryClient() {
         Metadata: stored.metadata ?? {},
         ETag: `"${stored.etag}"`,
       }
+    }
+
+    if (name === 'ListObjectsV2Command') {
+      const keys = [...objects.keys()].filter((key) => key.startsWith(input.Prefix ?? '')).sort()
+      const start = input.ContinuationToken ? Number(input.ContinuationToken) : 0
+      const maxKeys = input.MaxKeys ?? 1000
+      const page = keys.slice(start, start + maxKeys)
+      const truncated = start + maxKeys < keys.length
+
+      return {
+        Contents: page.map((key) => {
+          const object = objects.get(key)!
+          return { Key: key, Size: object.body.byteLength, ETag: `"${object.etag}"`, LastModified: object.lastModified }
+        }),
+        IsTruncated: truncated,
+        NextContinuationToken: truncated ? String(start + maxKeys) : undefined,
+      }
+    }
+
+    if (name === 'CopyObjectCommand') {
+      const [, ...rest] = String(input.CopySource).split('/')
+      const sourceKey = rest.map(decodeURIComponent).join('/')
+      const source = objects.get(sourceKey)
+
+      if (!source) {
+        throw Object.assign(new Error('The specified key does not exist.'), {
+          name: 'NoSuchKey',
+          $metadata: { httpStatusCode: 404 },
+        })
+      }
+
+      counter += 1
+      const etag = `etag-${counter}`
+      const lastModified = new Date()
+      objects.set(input.Key, { ...source, etag, lastModified })
+
+      return { CopyObjectResult: { ETag: `"${etag}"`, LastModified: lastModified } }
     }
 
     if (name === 'DeleteObjectCommand') {

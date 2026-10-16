@@ -1,6 +1,6 @@
 import { gunzipSync, gzipSync } from 'node:zlib'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import type { SnapshotEnvelope } from './types.js'
 
 /** Bumped only if the envelope shape itself changes, never for your own data. */

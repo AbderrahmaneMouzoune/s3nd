@@ -1,6 +1,4 @@
-import { customAlphabet } from 'nanoid'
-
-import { S3ndError } from './s3nd-error.js'
+import { TransferError } from './transfer-error.js'
 import type { SyncCodeOptions, SyncCodes } from './types-codes.js'
 
 /**
@@ -23,18 +21,23 @@ export const syncCodeAlphabets = {
 const DEFAULT_ALPHABET = syncCodeAlphabets.crockford
 const DEFAULT_LENGTH = 8
 const MAX_LENGTH = 64
+/** Each character is drawn from one random byte, so an alphabet tops out at 256. */
+const MAX_ALPHABET = 256
 /** Stripped before matching, so a code can be shown grouped: "K7QP 2M4X". */
 const SEPARATORS = /[\s\-_]+/g
 
 function assertValidAlphabet(alphabet: string): void {
   if (typeof alphabet !== 'string' || alphabet.length < 2) {
-    throw new S3ndError('INVALID_CONFIG', 'A sync code alphabet needs at least two characters.')
+    throw new TypeError('A sync code alphabet needs at least two characters.')
+  }
+
+  if (alphabet.length > MAX_ALPHABET) {
+    throw new TypeError(`A sync code alphabet can hold at most ${MAX_ALPHABET} characters.`)
   }
 
   if (SEPARATORS.test(alphabet)) {
     SEPARATORS.lastIndex = 0
-    throw new S3ndError(
-      'INVALID_CONFIG',
+    throw new TypeError(
       'A sync code alphabet must not contain spaces, dashes or underscores: those are stripped when a code is read back.',
     )
   }
@@ -42,13 +45,40 @@ function assertValidAlphabet(alphabet: string): void {
   SEPARATORS.lastIndex = 0
 
   if (new Set(alphabet).size !== alphabet.length) {
-    throw new S3ndError('INVALID_CONFIG', 'A sync code alphabet must not repeat a character.')
+    throw new TypeError('A sync code alphabet must not repeat a character.')
   }
 }
 
 function assertValidLength(length: number): void {
   if (!Number.isInteger(length) || length < 1 || length > MAX_LENGTH) {
-    throw new S3ndError('INVALID_CONFIG', `A sync code length must be an integer between 1 and ${MAX_LENGTH}.`)
+    throw new TypeError(`A sync code length must be an integer between 1 and ${MAX_LENGTH}.`)
+  }
+}
+
+/**
+ * A generator of uniformly random codes over `alphabet`. Bytes are masked to
+ * the smallest power of two that covers the alphabet and the ones that land
+ * past its end are thrown away, so no character comes up more often than
+ * another (a plain `byte % alphabet.length` would favour the first few).
+ */
+function randomCodes(alphabet: string, length: number): () => string {
+  const mask = (2 << (31 - Math.clz32((alphabet.length - 1) | 1))) - 1
+  // Enough bytes that one draw almost always fills the code.
+  const step = Math.ceil((1.6 * mask * length) / alphabet.length)
+
+  return () => {
+    let code = ''
+    while (code.length < length) {
+      const bytes = crypto.getRandomValues(new Uint8Array(step))
+      for (const byte of bytes) {
+        const index = byte & mask
+        if (index < alphabet.length) {
+          code += alphabet[index]
+          if (code.length === length) break
+        }
+      }
+    }
+    return code
   }
 }
 
@@ -82,7 +112,7 @@ export function createSyncCodes(options: SyncCodeOptions = {}): SyncCodes {
   assertValidAlphabet(alphabet)
   assertValidLength(length)
 
-  const generate = customAlphabet(alphabet, length)
+  const generate = randomCodes(alphabet, length)
   const folds = buildFoldMap(alphabet)
   // Upper-casing what someone typed only helps when the alphabet has one case.
   const foldCase = !/[a-z]/.test(alphabet)
@@ -96,7 +126,7 @@ export function createSyncCodes(options: SyncCodeOptions = {}): SyncCodes {
 
     normalize(input: string): string {
       if (typeof input !== 'string') {
-        throw new S3ndError('INVALID_SYNC_CODE', 'A sync code must be a string.')
+        throw new TransferError('INVALID_SYNC_CODE', 'A sync code must be a string.')
       }
 
       let normalized = input.trim().replace(SEPARATORS, '')
@@ -105,12 +135,12 @@ export function createSyncCodes(options: SyncCodeOptions = {}): SyncCodes {
       normalized = [...normalized].map((character) => folds.get(character) ?? character).join('')
 
       if (normalized.length === 0) {
-        throw new S3ndError('INVALID_SYNC_CODE', 'A sync code must not be empty.')
+        throw new TransferError('INVALID_SYNC_CODE', 'A sync code must not be empty.')
       }
 
       for (const character of normalized) {
         if (!alphabet.includes(character)) {
-          throw new S3ndError(
+          throw new TransferError(
             'INVALID_SYNC_CODE',
             `"${input}" is not a valid sync code: "${character}" is not one of ${alphabet}.`,
           )
