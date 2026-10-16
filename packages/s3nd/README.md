@@ -72,7 +72,10 @@ That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` 
 - throws `SNAPSHOT_TOO_NEW` when the snapshot's `version` is above the `maxVersion` this build
   understands, instead of feeding an old app data it will misread;
 - gives you back `createdAt`, `device` and `etag`, which is what you need to show the user _what_
-  they are about to restore.
+  they are about to restore;
+- validates `data` when you pass `parse` (a Zod schema's `parse`, or any function that throws on
+  what it refuses), whose return type becomes the type of `data`; a refusal is `INVALID_SNAPSHOT`.
+  Without it, `getSnapshot<T>()` is an unchecked assertion.
 
 Compression is on by default and is not a detail: an IndexedDB dump is repetitive JSON, so gzip
 routinely cuts it by 5 to 10× in the bucket. `maxSize` measures those stored, gzipped bytes; the

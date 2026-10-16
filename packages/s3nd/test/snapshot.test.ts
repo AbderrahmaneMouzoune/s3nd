@@ -1,9 +1,10 @@
 import { gunzipSync } from 'node:zlib'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
 import type { S3ndError } from '../src/errors.js'
+import type { Snapshot } from '../src/types.js'
 import { clearBucketEnv, createMemoryClient, createStubClient } from './helpers.js'
 
 beforeEach(clearBucketEnv)
@@ -265,5 +266,88 @@ describe('concurrent devices', () => {
     await expect(bucket.putSnapshot('XK5892', STATE, { ifAbsent: true })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     })
+  })
+})
+
+describe('getSnapshot parse', () => {
+  interface Notes {
+    notes: string[]
+  }
+
+  function isNotes(data: unknown): Notes {
+    if (
+      typeof data === 'object' &&
+      data !== null &&
+      Array.isArray((data as Notes).notes) &&
+      (data as Notes).notes.every((note) => typeof note === 'string')
+    ) {
+      return data as Notes
+    }
+    throw new TypeError('Not a list of notes.')
+  }
+
+  it('hands back what parse returns, typed by it', async () => {
+    const { client } = createMemoryClient()
+    const bucket = createBucket({ bucket: 'assets', client })
+    await bucket.putSnapshot('XK5892', { notes: ['a'], extra: true })
+
+    const snapshot = await bucket.getSnapshot('XK5892', {
+      parse: (data) => ({ notes: isNotes(data).notes }),
+    })
+
+    expectTypeOf(snapshot).toEqualTypeOf<Snapshot<Notes> | null>()
+    expect(snapshot?.data).toEqual({ notes: ['a'] })
+  })
+
+  it('surfaces a refusal as INVALID_SNAPSHOT, with the original error as cause', async () => {
+    const { client } = createMemoryClient()
+    const bucket = createBucket({ bucket: 'assets', client })
+    await bucket.putSnapshot('XK5892', { notes: [1, 2] })
+
+    const error = (await bucket.getSnapshot('XK5892', { parse: isNotes }).catch((e) => e)) as S3ndError
+
+    expect(error.code).toBe('INVALID_SNAPSHOT')
+    expect(error.message).toMatch(/refused by `parse`: Not a list of notes/)
+    expect(error.cause).toBeInstanceOf(TypeError)
+  })
+
+  it('is not called for an expired snapshot, which is simply gone', async () => {
+    vi.useFakeTimers()
+    try {
+      const { client } = createMemoryClient()
+      const bucket = createBucket({ bucket: 'assets', client })
+      await bucket.putSnapshot('XK5892', { notes: [] }, { expiresIn: 60 })
+      vi.advanceTimersByTime(61_000)
+
+      const parse = vi.fn(isNotes)
+      expect(await bucket.getSnapshot('XK5892', { parse })).toBeNull()
+      expect(parse).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('runs after the version check', async () => {
+    const { client } = createMemoryClient()
+    const bucket = createBucket({ bucket: 'assets', client })
+    await bucket.putSnapshot('XK5892', { notes: [] }, { version: 4 })
+
+    const parse = vi.fn(isNotes)
+    await expect(bucket.getSnapshot('XK5892', { maxVersion: 3, parse })).rejects.toMatchObject({
+      code: 'SNAPSHOT_TOO_NEW',
+    })
+    expect(parse).not.toHaveBeenCalled()
+  })
+
+  it('keeps the bare generic as an assertion, for compatibility', async () => {
+    const { client } = createMemoryClient()
+    const bucket = createBucket({ bucket: 'assets', client })
+    await bucket.putSnapshot('XK5892', { anything: 'at all' })
+
+    const snapshot = await bucket.getSnapshot<Notes>('XK5892')
+
+    expectTypeOf(snapshot).toEqualTypeOf<Snapshot<Notes> | null>()
+    // Typed as Notes, but nothing checked it: that is what parse is for.
+    expect(snapshot?.data).toEqual({ anything: 'at all' })
   })
 })

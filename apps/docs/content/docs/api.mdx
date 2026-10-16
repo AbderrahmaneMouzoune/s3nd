@@ -59,24 +59,28 @@ Reads a snapshot back, or `null` when there is none — including one past its `
 never handed over even while the object is still in the bucket.
 
 ```ts
-const snapshot = await store.getSnapshot<AppState>(code, { maxVersion: SCHEMA_VERSION })
+const snapshot = await store.getSnapshot(code, { maxVersion: SCHEMA_VERSION, parse: (data) => AppState.parse(data) })
 ```
 
-| Option       | Type                                          |
-| ------------ | --------------------------------------------- |
-| `maxVersion` | `number` — throws `SNAPSHOT_TOO_NEW` above it |
-| `prefix`     | `string`                                      |
-| `signal`     | `AbortSignal`                                 |
+| Option       | Type                                                                     |
+| ------------ | ------------------------------------------------------------------------ |
+| `maxVersion` | `number` — throws `SNAPSHOT_TOO_NEW` above it                            |
+| `parse`      | `(data: unknown) => T` — validates `data`; a throw is `INVALID_SNAPSHOT` |
+| `prefix`     | `string`                                                                 |
+| `signal`     | `AbortSignal`                                                            |
 
-| Field                   | Type                                      |
-| ----------------------- | ----------------------------------------- |
-| `data`                  | `T` — the generic you passed, unvalidated |
-| `app`, `device`         | `string \| undefined`                     |
-| `version`               | `number \| undefined`                     |
-| `createdAt`             | `Date`                                    |
-| `expiresAt`             | `Date \| undefined`                       |
-| `etag`, `size`          | `string` / `number`, when S3 reports them |
-| `bucket`, `key`, `path` | `string`                                  |
+| Field                   | Type                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `data`                  | `T` — what `parse` returned; without it, the generic you passed, unvalidated |
+| `app`, `device`         | `string \| undefined`                                                        |
+| `version`               | `number \| undefined`                                                        |
+| `createdAt`             | `Date`                                                                       |
+| `expiresAt`             | `Date \| undefined`                                                          |
+| `etag`, `size`          | `string` / `number`, when S3 reports them                                    |
+| `bucket`, `key`, `path` | `string`                                                                     |
+
+Without `parse`, `getSnapshot<T>()` is an unchecked assertion: nothing compares the stored JSON to
+`T`. See [reading one back](/docs/snapshots#reading-one-back) for a Zod and a hand-written `parse`.
 
 Compression is detected rather than assumed, so a snapshot written with `compress: false` reads
 back the same way.
