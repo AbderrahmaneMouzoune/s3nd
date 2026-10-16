@@ -162,3 +162,135 @@ describe('createTransferClient', () => {
     }
   })
 })
+
+describe('createTransferClient — response validation', () => {
+  it('names the cause when a 200 is not JSON, as a login page would be', async () => {
+    const { fetchImpl } = stubFetch(
+      new Response('<!doctype html><title>Sign in</title>', { status: 200, headers: { 'content-type': 'text/html' } }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    const error = await client.read('K7QP2M4X').catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(TransferError)
+    expect(error).toMatchObject({ code: 'INTERNAL', status: 200 })
+    expect((error as Error).message).toMatch(/200 with text\/html/)
+  })
+
+  it('refuses JSON that does not parse', async () => {
+    const { fetchImpl } = stubFetch(
+      new Response('{"code":', { status: 201, headers: { 'content-type': 'application/json' } }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    await expect(client.createSnapshot({ data: 1 })).rejects.toMatchObject({ code: 'INTERNAL', status: 201 })
+  })
+
+  it('refuses JSON of the wrong shape rather than handing back an undefined code', async () => {
+    const { fetchImpl } = stubFetch(Response.json({ ok: true }, { status: 201 }))
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    await expect(client.createSnapshot({ data: 1 })).rejects.toMatchObject({ code: 'INTERNAL' })
+  })
+
+  it('refuses an unknown kind', async () => {
+    const { fetchImpl } = stubFetch(
+      Response.json({ code: 'K7QP2M4X', kind: 'folder', createdAt: '2026-01-01T00:00:00.000Z' }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    await expect(client.read('K7QP2M4X')).rejects.toMatchObject({ code: 'INTERNAL' })
+  })
+
+  it('accepts a JSON content type with parameters', async () => {
+    const { fetchImpl } = stubFetch(
+      new Response(JSON.stringify({ code: 'K7QP2M4X', kind: 'file', createdAt: '2026-01-01T00:00:00.000Z' }), {
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    expect((await client.read('K7QP2M4X'))?.kind).toBe('file')
+  })
+})
+
+describe('createTransferClient — timeout', () => {
+  /** A fetch that never answers, but gives up when its signal aborts, as a real one does. */
+  function hangingFetch() {
+    return vi.fn(
+      (_input: any, init: any) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal: AbortSignal | undefined = init?.signal
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+    ) as unknown as typeof globalThis.fetch
+  }
+
+  it('rejects with TIMEOUT once the timeout passes', async () => {
+    const client = createTransferClient({ baseUrl: BASE, fetch: hangingFetch(), timeout: 20 })
+
+    const error = await client.read('K7QP2M4X').catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(TransferError)
+    expect(error).toMatchObject({ code: 'TIMEOUT' })
+    expect((error as Error).message).toMatch(/20 ms/)
+  })
+
+  it("keeps the caller's own abort an AbortError, not a timeout", async () => {
+    const client = createTransferClient({ baseUrl: BASE, fetch: hangingFetch(), timeout: 10_000 })
+    const controller = new AbortController()
+
+    const pending = client.read('K7QP2M4X', { signal: controller.signal }).catch((caught: unknown) => caught)
+    controller.abort()
+
+    const error = await pending
+    expect(error).not.toBeInstanceOf(TransferError)
+    expect((error as Error).name).toBe('AbortError')
+  })
+
+  it('still passes the signal through when there is no timeout', async () => {
+    const { fetchImpl, calls } = stubFetch(Response.json(null, { status: 404 }))
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+    const controller = new AbortController()
+
+    await client.read('K7QP2M4X', { signal: controller.signal }).catch(() => undefined)
+    expect(calls[0]!.init.signal).toBe(controller.signal)
+  })
+
+  it('does not fire after a call that finished in time', async () => {
+    vi.useFakeTimers()
+    try {
+      const { fetchImpl } = stubFetch(created())
+      const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl, timeout: 50 })
+
+      await client.createSnapshot({ data: 1 })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('combines the signals by hand where AbortSignal.any is missing, as on Node 20.0', async () => {
+    const original = AbortSignal.any
+    // @ts-expect-error — simulating a runtime from before AbortSignal.any.
+    delete AbortSignal.any
+
+    try {
+      const timedOut = createTransferClient({ baseUrl: BASE, fetch: hangingFetch(), timeout: 20 })
+      const controller = new AbortController()
+      await expect(timedOut.read('K7QP2M4X', { signal: controller.signal })).rejects.toMatchObject({
+        code: 'TIMEOUT',
+      })
+
+      const aborted = createTransferClient({ baseUrl: BASE, fetch: hangingFetch(), timeout: 10_000 })
+      const pending = aborted.read('K7QP2M4X', { signal: controller.signal }).catch((caught: unknown) => caught)
+      controller.abort()
+      expect(((await pending) as Error).name).toBe('AbortError')
+    } finally {
+      AbortSignal.any = original
+    }
+  })
+
+  it('refuses a timeout that is not a positive number', () => {
+    expect(() => createTransferClient({ baseUrl: BASE, timeout: 0 })).toThrowError(TypeError)
+    expect(() => createTransferClient({ baseUrl: BASE, timeout: Number.NaN })).toThrowError(TypeError)
+  })
+})

@@ -18,6 +18,7 @@ export { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STAT
 export type {
   CreatedTransfer,
   CreateSnapshotBody,
+  TransferClientErrorCode,
   TransferErrorBody,
   TransferErrorCode,
   TransferKind,

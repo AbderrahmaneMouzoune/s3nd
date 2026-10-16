@@ -253,6 +253,10 @@ with any status and body it likes.
 
 A client SHOULD treat a non-2xx response that does not carry this body (a proxy's error page, a
 platform limit) by its status: `401` and `403` as `UNAUTHORIZED`, anything else as `INTERNAL`.
+Likewise, a `2xx` whose body is not JSON, or not the shape section 5 describes, is `INTERNAL`.
+
+`TIMEOUT` is not in this table on purpose. `createTransferClient()` uses it when a call takes longer
+than the client allowed; a server MUST NOT send it.
 
 ## 7. Cross-origin requests
 
