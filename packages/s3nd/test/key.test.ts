@@ -54,6 +54,17 @@ describe('normalizePrefix', () => {
     expect(normalizePrefix('///')).toBeUndefined()
     expect(normalizePrefix(undefined)).toBeUndefined()
   })
+
+  it('keeps inner slashes, and stays linear on a long run of them', () => {
+    expect(normalizePrefix('//a//b//')).toBe('a//b')
+
+    // A regex trimming trailing slashes backtracks over this one quadratically.
+    const hostile = `${'/'.repeat(200_000)}x`
+    const started = performance.now()
+    expect(normalizePrefix(hostile)).toBe('x')
+    expect(normalizePrefix(`x${'/'.repeat(200_000)}y`)).toBe(`x${'/'.repeat(200_000)}y`)
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
 })
 
 describe('joinKey', () => {
