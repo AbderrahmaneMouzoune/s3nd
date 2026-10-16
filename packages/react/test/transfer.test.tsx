@@ -211,7 +211,7 @@ describe('useReceiveTransfer', () => {
     expect(result.current.notFound).toBe(false)
   })
 
-  it('fetches the bytes behind a file', async () => {
+  it('fetches the bytes behind a file into state', async () => {
     const client = fakeClient()
     const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
 
@@ -221,6 +221,80 @@ describe('useReceiveTransfer', () => {
     })
 
     expect(bytes).toEqual(new Uint8Array([1, 2, 3]))
+    expect(result.current.bytes).toEqual(new Uint8Array([1, 2, 3]))
+    expect(result.current.status).toBe('success')
+    expect(client.readBytes).toHaveBeenCalledWith('ABCD1234', { signal: expect.any(AbortSignal) })
+  })
+
+  it('shows a download in progress, the long operation of the hook', async () => {
+    let finish: (bytes: Uint8Array) => void = () => {}
+    const client = fakeClient({
+      readBytes: vi.fn(() => new Promise<Uint8Array>((resolve) => (finish = resolve))) as TransferClient['readBytes'],
+    })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    act(() => {
+      void result.current.loadBytes('ABCD1234')
+    })
+
+    expect(result.current.status).toBe('pending')
+    expect(result.current.isPending).toBe(true)
+
+    await act(async () => finish(new Uint8Array([9])))
+
+    expect(result.current.isPending).toBe(false)
+    expect(result.current.bytes).toEqual(new Uint8Array([9]))
+  })
+
+  it('leaves what load found alone when it fetches the bytes', async () => {
+    const client = fakeClient({ read: vi.fn(async () => metadata({ kind: 'file', filename: 'report.pdf' })) })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.load('ABCD1234')
+    })
+    await act(async () => {
+      await result.current.loadBytes('ABCD1234')
+    })
+
+    expect(result.current.transfer?.filename).toBe('report.pdf')
+    expect(result.current.bytes).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  it('exposes a failed download as error, without dropping the transfer', async () => {
+    const client = fakeClient({
+      readBytes: vi.fn(async () => {
+        throw new TransferError('INTERNAL', 'The server answered 500.', { status: 500 })
+      }),
+    })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.load('ABCD1234')
+    })
+
+    let returned: unknown = 'unset'
+    await act(async () => {
+      returned = await result.current.loadBytes('ABCD1234')
+    })
+
+    expect(returned).toBeNull()
+    expect(result.current.status).toBe('error')
+    expect((result.current.error as TransferError).code).toBe('INTERNAL')
+    expect(result.current.notFound).toBe(false)
+    expect(result.current.transfer).not.toBeNull()
+  })
+
+  it('reports a file that is gone as not found', async () => {
+    const client = fakeClient({ readBytes: vi.fn(async () => null) })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.loadBytes('ABCD1234')
+    })
+
+    expect(result.current.notFound).toBe(true)
+    expect(result.current.bytes).toBeNull()
   })
 
   it('burns a code', async () => {
@@ -231,6 +305,82 @@ describe('useReceiveTransfer', () => {
       await result.current.burn('K7QP2M4X')
     })
 
-    expect(client.remove).toHaveBeenCalledWith('K7QP2M4X')
+    expect(client.remove).toHaveBeenCalledWith('K7QP2M4X', { signal: expect.any(AbortSignal) })
+    expect(result.current.status).toBe('success')
+  })
+
+  it('exposes a failed burn as error rather than a rejection', async () => {
+    const client = fakeClient({
+      remove: vi.fn(async () => {
+        throw new TransferError('UNAUTHORIZED', 'Not allowed.', { status: 401 })
+      }),
+    })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      // No try/catch: an event handler should not need one.
+      await result.current.burn('K7QP2M4X')
+    })
+
+    expect(result.current.status).toBe('error')
+    expect((result.current.error as TransferError).code).toBe('UNAUTHORIZED')
+  })
+
+  it('aborts a download on unmount', async () => {
+    let seen: AbortSignal | undefined
+    const client = fakeClient({
+      readBytes: vi.fn((_code: string, options?: { signal?: AbortSignal }) => {
+        seen = options?.signal
+        return new Promise<Uint8Array | null>(() => {})
+      }),
+    })
+    const { result, unmount } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    act(() => {
+      void result.current.loadBytes('ABCD1234')
+    })
+    unmount()
+
+    expect(seen?.aborted).toBe(true)
+  })
+
+  it('aborts a running load when a burn starts', async () => {
+    let seen: AbortSignal | undefined
+    const client = fakeClient({
+      read: vi.fn((_code: string, options?: { signal?: AbortSignal }) => {
+        seen = options?.signal
+        return new Promise<TransferMetadata | null>(() => {})
+      }),
+    })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    act(() => {
+      void result.current.load('K7QP2M4X')
+    })
+    await act(async () => {
+      await result.current.burn('K7QP2M4X')
+    })
+
+    expect(seen?.aborted).toBe(true)
+    expect(result.current.status).toBe('success')
+  })
+
+  it('drops the bytes on reset and on the next load', async () => {
+    const client = fakeClient()
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    await act(async () => {
+      await result.current.loadBytes('ABCD1234')
+    })
+    act(() => result.current.reset())
+    expect(result.current.bytes).toBeNull()
+
+    await act(async () => {
+      await result.current.loadBytes('ABCD1234')
+    })
+    await act(async () => {
+      await result.current.load('K7QP2M4X')
+    })
+    expect(result.current.bytes).toBeNull()
   })
 })
