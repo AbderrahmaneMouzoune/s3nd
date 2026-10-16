@@ -285,7 +285,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       const result = await bucket.putSnapshot(code, body.data, {
         app: config.app,
         version: body.version,
-        device: body.device ?? request.headers.get('user-agent') ?? undefined,
+        // Only what the client chose to say. The User-Agent is not a device
+        // name, and storing it would hand it to anyone who knows the code.
+        device: body.device,
         expiresIn,
         ifAbsent: true,
       })
