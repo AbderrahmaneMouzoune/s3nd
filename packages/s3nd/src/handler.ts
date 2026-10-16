@@ -49,6 +49,13 @@ export interface TransferHandlerConfig {
    * `redirect` answers 302 with a presigned URL so they never transit it.
    */
   raw?: 'stream' | 'redirect'
+  /**
+   * Called with any error that answers `INTERNAL`: a throwing `authorize`, a
+   * failed S3 call, a network error, a corrupt stored snapshot. The client only
+   * sees a generic `INTERNAL`, since the raw message can name a bucket or an
+   * SDK internal, so this is where to log it. An error thrown here is ignored.
+   */
+  onError?: (error: unknown, request: Request) => void
 }
 
 export interface TransferHandler {
@@ -64,8 +71,12 @@ function fail(code: TransferErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status: TRANSFER_ERROR_STATUS[code] })
 }
 
-/** Every S3ndError that means something to a client gets its own code. */
-function fromS3ndError(error: S3ndError): Response {
+/**
+ * Every S3ndError that means something to a client gets its own code. The rest
+ * (a failed S3 call, a corrupt envelope) is the server's problem: `null` sends
+ * it to the same net as an unexpected exception.
+ */
+function fromS3ndError(error: S3ndError): Response | null {
   switch (error.code) {
     case 'FILE_TOO_LARGE':
       return fail('TOO_LARGE', error.message)
@@ -78,7 +89,7 @@ function fromS3ndError(error: S3ndError): Response {
     case 'INVALID_KEY':
       return fail('INVALID_SYNC_CODE', error.message)
     default:
-      return fail('INTERNAL', error.message)
+      return null
   }
 }
 
@@ -136,7 +147,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       .slice(basePath.length)
       .split('/')
       .filter((segment) => segment.length > 0)
-      .map(decodeURIComponent)
+      .map((segment) => {
+        try {
+          return decodeURIComponent(segment)
+        } catch {
+          // A stray `%E0` is a code nobody could have been handed, not a crash.
+          throw new S3ndError('INVALID_SYNC_CODE', 'The code in the path is not validly encoded.')
+        }
+      })
   }
 
   function normalize(raw: string): string {
@@ -324,13 +342,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         : createFile(request)
     }
 
-    let code: string
-    try {
-      code = normalize(rawCode)
-    } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
-      throw error
-    }
+    const code = normalize(rawCode)
 
     if (tail === 'raw') {
       if (request.method !== 'GET') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
@@ -353,9 +365,22 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     try {
       return await route(request)
     } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
+      const named = isS3ndError(error) ? fromS3ndError(error) : null
+      if (named) return named
 
-      throw error
+      // The protocol promises a JSON error body on every failure, so nothing
+      // leaves as a bare framework 500. The message stays generic: the raw one,
+      // a wrapped S3 failure's included, can carry a bucket name or SDK internals.
+      try {
+        // An async logger type-checks as `void` too; its rejection is swallowed
+        // here rather than surfacing as an unhandled one.
+        const logged = config.onError?.(error, request) as unknown
+        if (logged instanceof Promise) logged.catch(() => undefined)
+      } catch {
+        // A logger that throws must not cost the client its answer.
+      }
+
+      return fail('INTERNAL', 'Internal error.')
     }
   }
 
