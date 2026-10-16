@@ -755,7 +755,7 @@ describe('createTransferHandler — cors', () => {
       cors: {
         origin: (origin) => {
           if (origin === 'https://broken.test') throw new Error('lookup down')
-          return origin.endsWith('.example.com')
+          return new URL(origin).hostname.endsWith('.example.com')
         },
       },
     })
