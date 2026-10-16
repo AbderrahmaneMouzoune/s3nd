@@ -118,12 +118,12 @@ store.codes.create() // "K7QP2M4X"
 store.codes.normalize('k7-qp2m4x') // "K7QP2M4X"
 ```
 
-| Member               |                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `create()`           | A fresh code, drawn from `crypto.getRandomValues` with no bias toward any character.                   |
-| `normalize(input)`   | What someone typed, canonicalized. Throws `INVALID_SYNC_CODE` on anything the alphabet cannot contain. |
-| `alphabet`, `length` | What the scheme was configured with.                                                                   |
-| `entropyBits`        | What a code is worth guessing against — 40 for the default, 13.29 for four digits.                     |
+| Member               |                                                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `create()`           | A fresh code, drawn from `crypto.getRandomValues` with no bias toward any character.                                   |
+| `normalize(input)`   | What someone typed, canonicalized. Throws `TransferError` `INVALID_SYNC_CODE` on anything the alphabet cannot contain. |
+| `alphabet`, `length` | What the scheme was configured with.                                                                                   |
+| `entropyBits`        | What a code is worth guessing against — 40 for the default, 13.29 for four digits.                                     |
 
 ## `createSyncCodes(options?)`
 
@@ -367,4 +367,10 @@ alone — it is yours to close.
 
 ## `S3ndError` and `isS3ndError(error)`
 
-See [Errors](/docs/errors).
+What `@s3nd/core` throws, with a stable `code`. See [Errors](/docs/errors).
+
+## `TransferError` and `isTransferError(error)`
+
+Re-exported from `@s3nd/protocol`: a protocol answer such as `INVALID_SYNC_CODE`, which
+`store.codes.normalize()` throws for a code that cannot exist. Both guards check a brand rather than
+`instanceof`, so they hold across two copies of a package. See [Errors](/docs/errors).

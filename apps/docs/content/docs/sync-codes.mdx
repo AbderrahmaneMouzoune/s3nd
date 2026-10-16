@@ -63,14 +63,16 @@ typed, since upper-casing it would break the lookup.
 
 Call `normalize()` on user input before you look anything up, and let it throw: a code with a
 character the alphabet cannot contain does not exist, so `INVALID_SYNC_CODE` is a better answer
-than a lookup that finds nothing — and it costs no request.
+than a lookup that finds nothing — and it costs no request. It throws a `TransferError`, the same
+error a client gets when a server answers `INVALID_SYNC_CODE`, imported from `@s3nd/core` or
+`@s3nd/protocol`.
 
 ```ts
 try {
   const code = store.codes.normalize(typed)
   return await store.getSnapshot(code)
 } catch (error) {
-  if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') {
+  if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') {
     return Response.json({ error: 'That does not look like a code' }, { status: 400 })
   }
 

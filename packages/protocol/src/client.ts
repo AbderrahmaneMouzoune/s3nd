@@ -1,4 +1,4 @@
-import { parseTransferErrorBody, TransferError } from './transfer-error.js'
+import { isTransferError, parseTransferErrorBody, TransferError } from './transfer-error.js'
 import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION } from './types.js'
 import type { CreatedTransfer, CreateSnapshotBody, TransferMetadata } from './types.js'
 
@@ -117,7 +117,7 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
     try {
       return await send(path, init)
     } catch (error) {
-      if (error instanceof TransferError && error.code === 'NOT_FOUND') return null
+      if (isTransferError(error) && error.code === 'NOT_FOUND') return null
       throw error
     }
   }

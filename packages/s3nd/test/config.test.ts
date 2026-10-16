@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createS3Client, resolveConfig } from '../src/config.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 import { clearBucketEnv } from './helpers.js'
 
 beforeEach(clearBucketEnv)
