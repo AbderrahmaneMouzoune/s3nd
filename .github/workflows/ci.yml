@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job only reads the checkout; none of them writes back to the repository.
+permissions:
+  contents: read
+
 jobs:
   commit-convention:
     name: Conventional pull request title
