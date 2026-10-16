@@ -34,7 +34,7 @@ Get started
   init                 The same, for a project: ./s3nd.config.json to commit, keys in .env
 
 Move files
-  put <file>           Store a file and print the code to carry. "-" reads stdin
+  put <path>           Store a file or a directory, print the code to carry. "-" reads stdin
   get <code>           Fetch what a code points at
   rm <code>            Burn a code
 
@@ -54,6 +54,7 @@ Options
       --remote <url>     Talk to a s3nd server instead of S3 directly
       --token <token>    Bearer token sent with --remote
       --name <filename>  Filename to store the transfer under
+  -z, --compress         put: gzip a file before it goes (a directory always is)
   -o, --output <path>    Where get writes. "-" is stdout
       --json             Machine-readable output
   -y, --yes              Never ask: take flags and defaults, fail on what is missing
@@ -73,7 +74,8 @@ Examples
   s3nd setup
   s3nd put ./report.pdf
   s3nd get K7QP2M4X -o ./report.pdf
-  tar cz ./project | s3nd put - --name project.tar.gz
+  s3nd put ./project
+  pg_dump notes | s3nd put - -z --name notes.sql.gz
   s3nd --remote https://drop.example.com/api/transfers put ./report.pdf
 `
 
@@ -99,12 +101,14 @@ The same questions as setup. Writes ./s3nd.config.json, which is meant to be
 committed, and puts the keys in ./.env beside it, which is not.
 
 ${SETUP_FLAGS}`,
-  put: `s3nd put <file> — store a file and print the code to carry
+  put: `s3nd put <path> — store a file or a directory and print the code to carry
 
 The code goes to stdout and everything else to stderr: CODE=$(s3nd put ./f).
-"-" reads stdin: tar cz ./project | s3nd put - --name project.tar.gz
+A directory is sent as a .tar.gz archive: s3nd put ./project → project.tar.gz.
+"-" reads stdin: pg_dump notes | s3nd put - -z --name notes.sql.gz
 
   --name <filename>   Filename to store it under
+  -z, --compress      gzip a file (or stdin) on the way: dump.sql → dump.sql.gz
   --expires-in <d>    How long the code works: 30m, 24h, 7d, or never
   --json              The whole transfer, as JSON`,
   get: `s3nd get <code> — fetch what a code points at
@@ -143,6 +147,7 @@ const options = {
   remote: { type: 'string' },
   token: { type: 'string' },
   name: { type: 'string' },
+  compress: { type: 'boolean', short: 'z', default: false },
   output: { type: 'string', short: 'o' },
   provider: { type: 'string' },
   force: { type: 'boolean', default: false },
@@ -164,6 +169,7 @@ type Flags = {
   remote?: string
   token?: string
   name?: string
+  compress: boolean
   output?: string
   provider?: string
   force: boolean
@@ -331,7 +337,11 @@ async function commandPut(client: TransferClient, flags: Flags, file: string, re
   // Streamed, never read whole. Stdin goes straight into a multipart upload
   // locally; against a server it is spooled to disk first, since a presigned
   // upload needs its size upfront.
-  const source = await openSource(file === '-' ? file : resolvePath(file), { name: flags.name, spool: remote })
+  const source = await openSource(file === '-' ? file : resolvePath(file), {
+    name: flags.name,
+    compress: flags.compress,
+    spool: remote,
+  })
   const progress = progressFor(flags)
 
   let created
@@ -348,9 +358,13 @@ async function commandPut(client: TransferClient, flags: Flags, file: string, re
   }
 
   const { filename } = source
+  const original = source.original?.size
+  const payload =
+    original != null ? { ...created, filename, compressed: true, originalSize: original } : { ...created, filename }
 
-  emit(flags.json, created, () => {
-    const parts = [filename, formatBytes(created.size ?? source.size)]
+  emit(flags.json, payload, () => {
+    const size = formatBytes(created.size ?? source.size)
+    const parts = [filename, original != null ? `${size} (${formatBytes(original)} before compression)` : size]
 
     if (created.expiresAt) {
       const seconds = Math.round((new Date(created.expiresAt).getTime() - Date.now()) / 1000)

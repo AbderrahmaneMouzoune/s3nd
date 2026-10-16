@@ -53,9 +53,8 @@ describe('openSource', () => {
     expect((await openSource(path, { name: 'final.pdf', spool: false })).filename).toBe('final.pdf')
   })
 
-  it('says what is wrong with a missing file or a directory', async () => {
+  it('says what is wrong with a missing file', async () => {
     await expect(openSource(join(root, 'nope'), { spool: false })).rejects.toThrow(/No such file/)
-    await expect(openSource(root, { spool: false })).rejects.toThrow(/is a directory/)
   })
 
   it('streams stdin as it comes, size unknown, nothing lost from the first chunk', async () => {
