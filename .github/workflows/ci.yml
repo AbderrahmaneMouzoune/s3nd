@@ -76,6 +76,13 @@ jobs:
 
       - run: bun run lint
 
+      # Exports nothing imports, dependencies nothing uses, files nothing
+      # reaches, in the four packages. Run before the build so it reads the
+      # source, not dist.
+      - run: bun run knip
+
+      # Also checks the type tests (test/types.test.ts*), which are assertions
+      # for tsc rather than for vitest.
       - run: bun run type-check
 
       - run: bun run build

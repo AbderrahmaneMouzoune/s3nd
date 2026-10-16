@@ -32,6 +32,11 @@ bun run smoke-test      # npm pack the four packages, install them in an empty p
 bun run test:coverage   # the suite with coverage, gated by a threshold on core and protocol
 ```
 
+`bun run knip` reports an export nothing imports or a dependency nothing uses in the four
+packages; CI runs it too. The public generics have type tests in `test/types.test.ts` (and
+`.tsx` in react): `expectTypeOf` assertions that `bun run type-check` verifies, so a type that
+drifts from its documentation fails there.
+
 ## Where things live
 
 | Path                | What it is                                                                                                 |

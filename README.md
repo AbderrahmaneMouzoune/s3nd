@@ -13,6 +13,7 @@
 [![@s3nd/protocol](https://img.shields.io/npm/v/%40s3nd%2Fprotocol?color=ffb000&labelColor=111111&label=%40s3nd%2Fprotocol)](https://www.npmjs.com/package/@s3nd/protocol)
 [![MIT](https://img.shields.io/badge/license-MIT-ffb000.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/docs-doc.s3nd.sh-111111.svg)](https://doc.s3nd.sh)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/AbderrahmaneMouzoune/s3nd/badge)](https://scorecard.dev/viewer/?uri=github.com/AbderrahmaneMouzoune/s3nd)
 
 ```sh
 $ s3nd put ./report.pdf
