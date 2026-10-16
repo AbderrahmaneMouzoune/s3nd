@@ -19,7 +19,7 @@ function serve(config: Partial<TransferHandlerConfig> = {}, maxSize?: number) {
   // The server and the bucket's HTTP side, behind one fetch.
   const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
-    return request.url.startsWith(MEMORY_ENDPOINT) ? bucketPut(memory, request) : handler(request)
+    return new URL(request.url).origin === MEMORY_ENDPOINT ? bucketPut(memory, request) : handler(request)
   }
 
   return { handler, fetch: fetch as typeof globalThis.fetch }

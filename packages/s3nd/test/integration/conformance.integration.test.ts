@@ -45,7 +45,7 @@ describe.skipIf(!endpoint)('runConformance against createTransferHandler on a re
     // The routes are served in process; the presigned PUT goes to MinIO.
     const fetch: typeof globalThis.fetch = async (input, init) => {
       const request = new Request(input, init)
-      return request.url.startsWith(BASE) ? handler(request) : globalThis.fetch(request)
+      return new URL(request.url).origin === new URL(BASE).origin ? handler(request) : globalThis.fetch(request)
     }
 
     const report = await runConformance({
