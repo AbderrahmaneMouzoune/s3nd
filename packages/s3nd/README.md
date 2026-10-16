@@ -281,8 +281,9 @@ createBucket({
 })
 ```
 
-With an `endpoint` set, `region` defaults to `"auto"` and path-style addressing is enabled, which is what
-R2, MinIO and Scaleway expect. Every option except `client` falls back to an environment variable,
+With an `endpoint` set, `region` defaults to `"auto"`, path-style addressing is enabled, and the
+AWS SDK's default checksums are only sent when an operation requires them, which is what R2, MinIO
+and Scaleway expect. Every option except `client` falls back to an environment variable,
 so `createBucket()` with no arguments works once `S3_BUCKET` and the usual `AWS_*` variables are
 set.
 

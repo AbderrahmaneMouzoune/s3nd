@@ -3,14 +3,39 @@ title: 'S3-compatible providers'
 description: 'Cloudflare R2, MinIO, Scaleway, Wasabi — the endpoint is the only difference.'
 ---
 
-Set `endpoint` and s3nd adjusts two defaults for you:
+Set `endpoint` and s3nd adjusts three defaults for you:
 
 - `region` becomes `"auto"`, which is the convention for providers that ignore the region but
   whose SDK still demands one.
 - `forcePathStyle` becomes `true` — `https://endpoint/bucket/key` rather than
   `https://bucket.endpoint/key`. Self-hosted gateways require it and managed providers accept it.
+- Checksums are only sent and checked when an operation requires them. See below.
 
-Both stay overridable.
+The first two stay overridable; for the third, bring your own client.
+
+## Checksums
+
+Since `@aws-sdk/client-s3` 3.729, the SDK adds a CRC32 checksum to every request (sent as a
+trailer on streaming, `aws-chunked` bodies) and validates the ones that come back. AWS supports
+that; Cloudflare R2 and older MinIO or Ceph builds may not, and the symptom is a 400, a
+`XAmzContentSHA256Mismatch` or a `NotImplemented` on every upload.
+
+So when you set an `endpoint`, the client s3nd creates uses
+`requestChecksumCalculation: 'WHEN_REQUIRED'` and `responseChecksumValidation: 'WHEN_REQUIRED'`.
+Plain AWS (no `endpoint`) keeps the SDK defaults. A `client` you pass in is used as is, so if you
+build your own for R2, set the same two options on it:
+
+```ts
+const store = createBucket({
+  bucket: 'my-bucket',
+  client: new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  }),
+})
+```
 
 ## Cloudflare R2
 
@@ -40,13 +65,18 @@ const store = createBucket({
 })
 ```
 
-A local MinIO is the cheapest way to exercise the real code path in development and in CI:
+A local MinIO is the cheapest way to exercise the real code path in development and in CI.
+MinIO no longer publishes community images or binaries, so build it from source (Go required), or
+run an image you already trust:
 
 ```sh
-docker run -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-  quay.io/minio/minio server /data --console-address ":9001"
+go install github.com/minio/minio@latest
+MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin ~/go/bin/minio server ./data
 ```
+
+s3nd's own CI runs its integration suite against MinIO on every pull request: uploads of a buffer
+and of a stream, snapshots, `ifMatch` and `ifAbsent` (MinIO honours `If-None-Match: *` on
+`PutObject`), presigned URLs, batched deletes and a transfer handler round trip.
 
 ## Scaleway Object Storage
 
