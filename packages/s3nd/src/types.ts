@@ -285,13 +285,21 @@ export interface SnapshotResult {
   expiresAt?: Date
 }
 
-export interface GetSnapshotOptions {
+export interface GetSnapshotOptions<T = unknown> {
   /**
    * The newest schema version this device understands. A snapshot written by a
    * newer build throws `SNAPSHOT_TOO_NEW` instead of being handed over half
    * understood.
    */
   maxVersion?: number
+  /**
+   * Validates the stored data and returns it typed: a Zod schema's `parse`, a
+   * hand-written guard, anything that throws on data it refuses. Its return
+   * type is the type of `data`, so `getSnapshot()` no longer needs a type
+   * argument. A throw surfaces as `INVALID_SNAPSHOT`, with the original error
+   * as `cause`. Runs after the expiry and `maxVersion` checks.
+   */
+  parse?: (data: unknown) => T
   prefix?: string
   signal?: AbortSignal
 }

@@ -148,13 +148,48 @@ have none. Since s3nd cannot tell which you are doing, it does not guess — pas
 ## Reading one back
 
 ```ts
-const snapshot = await store.getSnapshot<AppState>(code, { maxVersion: SCHEMA_VERSION })
+const snapshot = await store.getSnapshot(code, { maxVersion: SCHEMA_VERSION, parse: (data) => AppState.parse(data) })
 ```
 
-`getSnapshot` is generic, so `snapshot.data` comes back as your own type rather than `unknown`.
-That is a convenience, not a validation — nothing checks the bytes against that type. If the
-snapshot can come from an older build of your app, or from anywhere you do not fully control,
-parse it before you trust it.
+A snapshot is the one input s3nd exists to move between machines, across app versions, and into
+someone else's hands whenever a code leaks. So validate `data` with `parse`: it receives the stored
+JSON as `unknown`, returns it typed, and throws on anything it refuses. Its return type becomes the
+type of `snapshot.data`, and a throw surfaces as `INVALID_SNAPSHOT` with your error as `cause`. It
+runs after the expiry and `maxVersion` checks, so an expired or too-new snapshot never reaches it.
+
+With [Zod](https://zod.dev), or any schema library whose `parse` throws:
+
+```ts
+import { z } from 'zod'
+
+const AppState = z.object({ notes: z.array(z.object({ id: z.string(), text: z.string() })) })
+
+const snapshot = await store.getSnapshot(code, { parse: (data) => AppState.parse(data) })
+// snapshot.data: { notes: { id: string; text: string }[] }
+```
+
+With a hand-written guard, and no dependency at all:
+
+```ts
+interface AppState {
+  notes: string[]
+}
+
+function parseAppState(data: unknown): AppState {
+  const notes = (data as AppState | null)?.notes
+  if (!Array.isArray(notes) || !notes.every((note) => typeof note === 'string')) {
+    throw new TypeError('Not an AppState.')
+  }
+  return { notes }
+}
+
+const snapshot = await store.getSnapshot(code, { parse: parseAppState })
+```
+
+<Callout type="warn">
+  `getSnapshot<AppState>(code)` without `parse` still compiles, for compatibility, but it is an unchecked assertion:
+  `data` is whatever JSON is stored, typed as `AppState` because you said so. Nothing checks it.
+</Callout>
 
 | Field                      |                                                                                    |
 | -------------------------- | ---------------------------------------------------------------------------------- |
