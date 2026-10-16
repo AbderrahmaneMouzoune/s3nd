@@ -115,7 +115,8 @@ The server decides what the transfer is, in this order:
    bytes, and the header carries the original filename, percent-encoded. A `.json` file is sent
    as `application/json` and stays a file.
 2. **Otherwise, `Content-Type: application/json`**: a **snapshot**. The body is
-   `{ data, version?, device? }`, structured state handed back inline on read.
+   `{ data, version?, device? }`, structured state handed back inline on read. `device` is stored
+   as sent; without it the snapshot has none, and the server does not fill it in.
 3. **Otherwise**: a **file** named `file`.
 
 `createFile()` always sends the filename and `createSnapshot()` never does, so a client built on

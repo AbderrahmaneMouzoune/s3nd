@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
@@ -69,6 +70,34 @@ describe('createTransferHandler — snapshots', () => {
     const response = await handler(new Request(`${BASE}/${typed}`))
     expect(response.status).toBe(200)
     expect((await response.json()).data).toBe(1)
+  })
+
+  it('records the device the client names', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: 1, device: 'Pixel 8' }))).json()
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).device).toBe('Pixel 8')
+  })
+
+  it('does not store the User-Agent when the client names no device', async () => {
+    const { memory, handler } = setup()
+    const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1'
+
+    const { code } = await (
+      await handler(
+        new Request(BASE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'user-agent': userAgent },
+          body: JSON.stringify({ data: 1 }),
+        }),
+      )
+    ).json()
+
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).device).toBeUndefined()
+    for (const stored of memory.objects.values()) {
+      const envelope = gunzipSync(stored.body).toString('utf8')
+      expect(envelope).not.toContain('iPhone')
+    }
   })
 
   it('refuses a snapshot written by a newer schema', async () => {
@@ -748,5 +777,102 @@ describe('createTransferHandler — cors', () => {
     expect(() => setup({ cors: { origin: '*', credentials: true } })).toThrowError(
       expect.objectContaining({ code: 'INVALID_CONFIG' }),
     )
+  })
+})
+
+describe('createTransferHandler — request size', () => {
+  /** A body that counts how much of it was actually pulled. */
+  function countedStream(chunks: number, chunkSize: number) {
+    let pulled = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= chunks) return controller.close()
+        pulled += 1
+        controller.enqueue(new Uint8Array(chunkSize))
+      },
+    })
+
+    return { stream, pulled: () => pulled }
+  }
+
+  function streamed(body: ReadableStream<Uint8Array>, headers: Record<string, string> = {}): Request {
+    return new Request(BASE, {
+      method: 'POST',
+      headers: { 'x-s3nd-filename': 'big.bin', ...headers },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+  }
+
+  it('refuses a declared content-length above the limit without reading the body', async () => {
+    const { memory, handler } = setup({ maxRequestSize: 1024 })
+    const body = countedStream(100, 1024)
+
+    const response = await handler(streamed(body.stream, { 'content-length': String(100 * 1024) }))
+
+    expect(response.status).toBe(413)
+    expect((await response.json()).error.code).toBe('TOO_LARGE')
+    expect(body.pulled()).toBeLessThanOrEqual(1)
+    expect(memory.objects.size).toBe(0)
+  })
+
+  it('stops reading a body with no content-length once it passes the limit', async () => {
+    const { memory, handler } = setup({ maxRequestSize: 4096 })
+    const body = countedStream(1000, 1024)
+
+    const response = await handler(streamed(body.stream))
+
+    expect(response.status).toBe(413)
+    expect(body.pulled()).toBeLessThan(10)
+    expect(memory.objects.size).toBe(0)
+  })
+
+  it('does not trust a content-length that understates the body', async () => {
+    const { handler } = setup({ maxRequestSize: 4096 })
+    const body = countedStream(1000, 1024)
+
+    const response = await handler(streamed(body.stream, { 'content-length': '10' }))
+    expect(response.status).toBe(413)
+  })
+
+  it('bounds the raw JSON of a snapshot before parsing it', async () => {
+    const { memory, handler } = setup({ maxRequestSize: 1024 })
+    // Compresses to almost nothing, so only a limit on the request catches it.
+    const data = 'a'.repeat(10_000)
+
+    const response = await handler(postSnapshot({ data }))
+
+    expect(response.status).toBe(413)
+    expect(memory.objects.size).toBe(0)
+  })
+
+  it('accepts a body under the limit', async () => {
+    const { handler } = setup({ maxRequestSize: 1024 })
+
+    expect((await handler(postSnapshot({ data: 'small' }))).status).toBe(201)
+    expect((await handler(postFile(new Uint8Array(1024), 'exact.bin'))).status).toBe(201)
+  })
+
+  it("defaults to the bucket's maxSize for files, and to no limit for snapshots", async () => {
+    const memory = createMemoryClient()
+    const bucket = createBucket({ bucket: 'transfers', client: memory.client, maxSize: 4096 })
+    const handler = createTransferHandler({ bucket })
+    const body = countedStream(1000, 1024)
+
+    expect((await handler(streamed(body.stream))).status).toBe(413)
+    expect(body.pulled()).toBeLessThan(10)
+
+    // 10 kB of JSON gzips well under the bucket's 4 kB: the request is not bounded by it.
+    expect((await handler(postSnapshot({ data: 'a'.repeat(10_000) }))).status).toBe(201)
+  })
+
+  it('refuses a limit that is not a positive number', () => {
+    const { bucket } = setup()
+
+    for (const maxRequestSize of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => createTransferHandler({ bucket, maxRequestSize })).toThrowError(
+        expect.objectContaining({ code: 'INVALID_CONFIG' }),
+      )
+    }
   })
 })
