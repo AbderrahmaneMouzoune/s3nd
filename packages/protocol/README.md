@@ -69,8 +69,14 @@ if (isTransferError(error) && error.code === 'TOO_LARGE') {
 `NOT_FOUND` deliberately covers an expired code as well as one that never existed: telling them
 apart would let someone probe which codes have been used.
 
-The [protocol documentation](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
-describes each route and every error code in full.
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md),
+shipped in this package, is the normative specification: every route, header, body, error code and
+rule a server or a client has to follow. The
+[protocol guide](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/apps/docs/content/docs/protocol.mdx)
+is the readable tour of it.
+
+Every request carries `s3nd-protocol: 1` (`PROTOCOL_HEADER`), and a server answers a newer version
+with `UNSUPPORTED_PROTOCOL` instead of misreading it.
 
 ## Sync codes
 

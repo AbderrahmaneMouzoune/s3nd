@@ -390,3 +390,83 @@ describe('createTransferHandler — unexpected errors', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 })
+
+describe('createTransferHandler — protocol version', () => {
+  it('announces its version on a success', async () => {
+    const { handler } = setup()
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on an error too', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(404)
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on a response authorize built itself', async () => {
+    const { handler } = setup({ authorize: () => Response.redirect('http://login.test/', 302) })
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('http://login.test/')
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on a /raw redirect, whose headers are immutable', async () => {
+    const memory = createMemoryClient()
+    const bucket = createBucket({ bucket: 'transfers', client: memory.client, publicUrl: 'https://cdn.test' })
+    const handler = createTransferHandler({ bucket, raw: 'redirect' })
+
+    const { code } = await (await handler(postFile(new Uint8Array([1]), 'a.pdf'))).json()
+    const response = await handler(new Request(`${BASE}/${code}/raw`))
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('accepts a request that announces version 1', async () => {
+    const { handler } = setup()
+
+    const request = postSnapshot({ data: 1 })
+    request.headers.set('s3nd-protocol', '1')
+
+    expect((await handler(request)).status).toBe(201)
+  })
+
+  it('accepts a request without the header, as a 0.x client sends', async () => {
+    const { handler } = setup()
+
+    expect((await handler(postSnapshot({ data: 1 }))).status).toBe(201)
+  })
+
+  it('refuses a newer version before reading the payload', async () => {
+    const { memory, handler } = setup()
+
+    const request = postSnapshot({ data: 1 })
+    request.headers.set('s3nd-protocol', '2')
+
+    const response = await handler(request)
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe('UNSUPPORTED_PROTOCOL')
+    expect(memory.send).not.toHaveBeenCalled()
+  })
+
+  it('refuses a version it cannot read', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { 's3nd-protocol': 'v1' } }))
+    expect((await response.json()).error.code).toBe('UNSUPPORTED_PROTOCOL')
+  })
+
+  it('refuses it before authorize runs', async () => {
+    const authorize = vi.fn(() => true)
+    const { handler } = setup({ authorize })
+
+    await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { 's3nd-protocol': '2' } }))
+    expect(authorize).not.toHaveBeenCalled()
+  })
+})

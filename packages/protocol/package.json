@@ -36,6 +36,7 @@
   "files": [
     "dist",
     "README.md",
+    "PROTOCOL.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
