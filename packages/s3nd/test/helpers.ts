@@ -231,7 +231,7 @@ export function createMemoryClient() {
 
     if (name === 'HeadObjectCommand') {
       if (!stored) {
-        throw Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+        throw Object.assign(new Error('Not Found'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
       }
 
       return {

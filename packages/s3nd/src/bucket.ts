@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   type S3Client,
 } from '@aws-sdk/client-s3'
@@ -402,6 +403,42 @@ export class Bucket {
       expiresAt,
       etag: file.etag,
       size: file.size,
+    }
+  }
+
+  /**
+   * Everything `get()` reports about an object except its bytes, for one
+   * `HeadObject` — nothing to stream, nothing to discard. Returns `null` when
+   * the key does not exist.
+   */
+  async head(key: string, options: GetOptions = {}): Promise<Omit<StoredFile, 'body' | 'bytes' | 'text'> | null> {
+    const path = this.resolvePath(key, options.prefix)
+
+    let response
+    try {
+      response = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: path }), {
+        abortSignal: options.signal,
+      })
+    } catch (error) {
+      if (isNotFound(error)) return null
+
+      throw new S3ndError('GET_FAILED', `Failed to read "${path}" from bucket "${this.bucket}": ${describe(error)}`, {
+        cause: error,
+      })
+    }
+
+    const metadata = response.Metadata ?? {}
+
+    return {
+      bucket: this.bucket,
+      key,
+      path,
+      contentType: response.ContentType ?? DEFAULT_CONTENT_TYPE,
+      filename: decodeMetadataValue(metadata[FILENAME_METADATA_KEY]),
+      size: response.ContentLength,
+      etag: response.ETag?.replace(/"/g, ''),
+      lastModified: response.LastModified,
+      metadata,
     }
   }
 

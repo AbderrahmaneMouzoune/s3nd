@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.1](https://github.com/AbderrahmaneMouzoune/s3nd/compare/cli-v0.2.0...cli-v0.2.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **cli:** keep only the base name of a received filename ([d62b1cc](https://github.com/AbderrahmaneMouzoune/s3nd/commit/d62b1cc0a1f64c11e95d7d680a467012c6dd7432))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @s3nd/core bumped from ^0.1.1 to ^0.1.2
+
 ## [0.2.0](https://github.com/AbderrahmaneMouzoune/s3nd/compare/cli-v0.1.0...cli-v0.2.0) (2026-09-29)
 
 
