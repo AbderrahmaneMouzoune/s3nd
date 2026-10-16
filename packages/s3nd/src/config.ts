@@ -2,6 +2,7 @@ import { S3Client } from '@aws-sdk/client-s3'
 
 import { S3ndError } from '@s3nd/protocol'
 import { normalizePrefix } from './key.js'
+import { DEFAULT_MULTIPART_THRESHOLD, DEFAULT_PART_SIZE, MIN_PART_SIZE } from './multipart.js'
 import type { BucketConfig, ResolvedConfig } from './types.js'
 
 function env(...names: string[]): string | undefined {
@@ -42,6 +43,19 @@ export function resolveConfig(config: BucketConfig = {}): ResolvedConfig {
     throw new S3ndError('INVALID_CONFIG', '`maxSize` must be a positive number of bytes.')
   }
 
+  const partSize = config.partSize ?? DEFAULT_PART_SIZE
+  if (!Number.isInteger(partSize) || partSize < MIN_PART_SIZE) {
+    throw new S3ndError(
+      'INVALID_CONFIG',
+      `\`partSize\` must be a whole number of bytes, at least ${MIN_PART_SIZE} (5 MiB).`,
+    )
+  }
+
+  const multipartThreshold = config.multipartThreshold ?? DEFAULT_MULTIPART_THRESHOLD
+  if (!Number.isFinite(multipartThreshold) || multipartThreshold < 0) {
+    throw new S3ndError('INVALID_CONFIG', '`multipartThreshold` must be a non-negative number of bytes.')
+  }
+
   const endpoint = config.endpoint ?? env('S3ND_ENDPOINT', 'S3_ENDPOINT')
 
   return {
@@ -57,6 +71,8 @@ export function resolveConfig(config: BucketConfig = {}): ResolvedConfig {
     publicUrl: normalizePublicUrl(config.publicUrl ?? env('S3ND_PUBLIC_URL', 'S3_PUBLIC_URL')),
     prefix: normalizePrefix(config.prefix),
     maxSize: config.maxSize,
+    multipartThreshold,
+    partSize,
     syncCode: config.syncCode,
     client: config.client,
   }

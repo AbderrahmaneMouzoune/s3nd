@@ -168,14 +168,17 @@ describe('upload', () => {
     expect(calls[0]!.command.input.ContentLength).toBe(3)
   })
 
-  it('refuses a stream of unknown length', async () => {
-    const { client, send } = createStubClient()
+  it('sends a short stream of unknown length in one PutObject', async () => {
+    const { client, calls } = createStubClient()
     const bucket = createBucket({ bucket: 'assets', client })
 
-    await expect(bucket.upload(Readable.from([Buffer.from('abc')]), { key: 'a.bin' })).rejects.toMatchObject({
-      code: 'MISSING_CONTENT_LENGTH',
-    })
-    expect(send).not.toHaveBeenCalled()
+    const result = await bucket.upload(Readable.from([Buffer.from('ab'), Buffer.from('c')]), { key: 'a.bin' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.command.constructor.name).toBe('PutObjectCommand')
+    expect(Buffer.from(calls[0]!.command.input.Body).toString()).toBe('abc')
+    expect(calls[0]!.command.input.ContentLength).toBe(3)
+    expect(result.size).toBe(3)
   })
 
   it('forwards an abort signal', async () => {

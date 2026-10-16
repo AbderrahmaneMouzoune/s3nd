@@ -98,9 +98,20 @@ prefix, which runs server-side, costs nothing, and keeps working when your appli
       "Filter": { "Prefix": "snapshots/" },
       "Expiration": { "Days": 1 },
     },
+    {
+      "ID": "abort-incomplete-multipart-uploads",
+      "Status": "Enabled",
+      "Filter": {},
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 },
+    },
   ],
 }
 ```
+
+The second rule is for large snapshots. Above `multipartThreshold` an upload goes through a
+multipart upload, and s3nd aborts one that fails or is cancelled, but a process that dies halfway
+cannot: its parts stay in the bucket, invisible to a listing and billed, until a rule removes them.
+The rule applies to the whole bucket on purpose; an unfinished upload is never worth keeping.
 
 There is no default expiry. A transfer code should have a short one; a per-account backup should
 have none. Since s3nd cannot tell which you are doing, it does not guess — passing
