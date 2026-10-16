@@ -164,6 +164,34 @@ describe('createTransferHandler — files', () => {
     expect(metadata.filename).toBe('file')
   })
 
+  it('keeps a JSON file a file, even one with a top-level `data` key', async () => {
+    const { handler } = setup()
+    const json = new TextEncoder().encode('{"data":{"secret":true}}')
+
+    const response = await handler(postFile(json, 'export.json', 'application/json'))
+    expect(response.status).toBe(201)
+
+    const { code, kind } = await response.json()
+    expect(kind).toBe('file')
+
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+    expect(metadata).toMatchObject({ kind: 'file', filename: 'export.json', contentType: 'application/json' })
+    expect(metadata.data).toBeUndefined()
+
+    const raw = await handler(new Request(`${BASE}/${code}/raw`))
+    expect(new Uint8Array(await raw.arrayBuffer())).toEqual(json)
+  })
+
+  it('stores a nameless body that is not JSON as a file named `file`', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(BASE, { method: 'POST', body: 'plain bytes' }))
+    const { code, kind } = await response.json()
+    expect(kind).toBe('file')
+
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).filename).toBe('file')
+  })
+
   it('rejects an empty body', async () => {
     const { handler } = setup()
 

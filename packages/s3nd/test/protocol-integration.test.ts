@@ -45,6 +45,17 @@ describe('createTransferClient — against a real handler', () => {
     expect((await client.read(created.code))?.filename).toBe('hello.txt')
   })
 
+  it('keeps a JSON file a file, with its name', async () => {
+    const client = wired()
+    const bytes = new TextEncoder().encode('{"data":1}')
+
+    const created = await client.createFile({ body: bytes, filename: 'x.json', contentType: 'application/json' })
+    expect(created.kind).toBe('file')
+
+    expect(await client.read(created.code)).toMatchObject({ kind: 'file', filename: 'x.json' })
+    expect(await client.readBytes(created.code)).toEqual(bytes)
+  })
+
   it('returns null rather than throwing on an unknown code', async () => {
     const client = wired()
 
