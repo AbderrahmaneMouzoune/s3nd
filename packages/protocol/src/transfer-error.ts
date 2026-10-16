@@ -20,12 +20,22 @@ export class TransferError extends Error {
   readonly code: TransferClientErrorCode
   /** HTTP status the server answered with, when there was a response at all. */
   readonly status: number | undefined
+  /**
+   * Seconds the server asked to wait before trying again, from `retry-after`,
+   * on a `RATE_LIMITED` answer that carried one.
+   */
+  readonly retryAfter: number | undefined
 
-  constructor(code: TransferClientErrorCode, message: string, options?: { status?: number; cause?: unknown }) {
+  constructor(
+    code: TransferClientErrorCode,
+    message: string,
+    options?: { status?: number; retryAfter?: number; cause?: unknown },
+  ) {
     super(message, options)
     this.name = 'TransferError'
     this.code = code
     this.status = options?.status
+    this.retryAfter = options?.retryAfter
     Object.defineProperty(this, BRAND, { value: 'TransferError' })
 
     if (Error.captureStackTrace) {

@@ -1,6 +1,6 @@
 export { Bucket, createBucket } from './bucket.js'
 export { createTransferHandler } from './handler.js'
-export type { TransferHandler, TransferHandlerConfig, TransferHandlerCors } from './handler.js'
+export type { RateLimitContext, TransferHandler, TransferHandlerConfig, TransferHandlerCors } from './handler.js'
 
 export { S3ndError, isS3ndError, type S3ndErrorCode } from './errors.js'
 

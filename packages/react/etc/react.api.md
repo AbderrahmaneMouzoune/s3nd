@@ -25,7 +25,9 @@ export { isTransferError }
 
 // @public (undocumented)
 export interface ReceiveTransfer<T = unknown> {
-    burn: (code: string) => Promise<void>;
+    burn: (code: string, options?: {
+        deleteToken?: string;
+    }) => Promise<void>;
     bytes: Uint8Array | null;
     data: T | undefined;
     // (undocumented)

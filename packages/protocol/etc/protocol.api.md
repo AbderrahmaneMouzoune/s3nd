@@ -13,6 +13,7 @@ export interface CreatedTransfer {
     code: string;
     // (undocumented)
     createdAt: string;
+    deleteToken?: string;
     expiresAt?: string;
     // (undocumented)
     kind: TransferKind;
@@ -55,6 +56,9 @@ export function createSyncCodes(options?: SyncCodeOptions): SyncCodes;
 
 // @public
 export function createTransferClient(config: TransferClientConfig): TransferClient;
+
+// @public
+export const DELETE_TOKEN_HEADER = "x-s3nd-delete-token";
 
 // @public
 export const FILENAME_HEADER = "x-s3nd-filename";
@@ -102,6 +106,13 @@ export interface ReadBytesOptions {
     signal?: AbortSignal;
 }
 
+// @public (undocumented)
+export interface RemoveOptions {
+    deleteToken?: string;
+    // (undocumented)
+    signal?: AbortSignal;
+}
+
 // @public
 export const syncCodeAlphabets: {
     readonly crockford: "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -140,9 +151,7 @@ export interface TransferClient {
     readStream(code: string, options?: {
         signal?: AbortSignal;
     }): Promise<TransferStream | null>;
-    remove(code: string, options?: {
-        signal?: AbortSignal;
-    }): Promise<void>;
+    remove(code: string, options?: RemoveOptions): Promise<void>;
 }
 
 // @public (undocumented)
@@ -161,10 +170,12 @@ export type TransferClientErrorCode = TransferErrorCode | 'TIMEOUT';
 export class TransferError extends Error {
     constructor(code: TransferClientErrorCode, message: string, options?: {
         status?: number;
+        retryAfter?: number;
         cause?: unknown;
     });
     // (undocumented)
     readonly code: TransferClientErrorCode;
+    readonly retryAfter: number | undefined;
     readonly status: number | undefined;
 }
 
@@ -178,7 +189,7 @@ export interface TransferErrorBody {
 }
 
 // @public
-export type TransferErrorCode = 'INVALID_REQUEST' | 'INVALID_SYNC_CODE' | 'UNAUTHORIZED' | 'NOT_FOUND' | 'CODE_TAKEN' | 'SNAPSHOT_TOO_NEW' | 'TOO_LARGE' | 'UNSUPPORTED_PROTOCOL' | 'INTERNAL';
+export type TransferErrorCode = 'INVALID_REQUEST' | 'INVALID_SYNC_CODE' | 'UNAUTHORIZED' | 'NOT_FOUND' | 'CODE_TAKEN' | 'SNAPSHOT_TOO_NEW' | 'TOO_LARGE' | 'RATE_LIMITED' | 'UNSUPPORTED_PROTOCOL' | 'INTERNAL';
 
 // @public
 export type TransferKind = 'snapshot' | 'file';

@@ -131,7 +131,8 @@ useSyncCodeInput({ length: 4, alphabet: '0123456789' }) // inputProps.inputMode 
 `status` is `'idle' | 'pending' | 'success' | 'error'`. On the receiving side, `load`, `loadBytes`
 and `burn` share it, along with `isPending` and `error`: it describes whatever the device is doing
 now, so a large download shows as pending and a failed burn lands in `error`. `loadBytes` keeps
-its result in `bytes` and leaves `transfer` and `data` alone.
+its result in `bytes` and leaves `transfer` and `data` alone. `burn(code, { deleteToken })` passes the token a server with `protectDelete`
+asks for; `useSendTransfer`'s `transfer.deleteToken` is where it comes from.
 
 Every call aborts the one before it, a late reply from a superseded call is dropped rather than
 published, and nothing is written after unmount, so a user hammering a button does not end up with

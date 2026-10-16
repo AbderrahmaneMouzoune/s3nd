@@ -293,4 +293,48 @@ describe('createTransferClient — timeout', () => {
     expect(() => createTransferClient({ baseUrl: BASE, timeout: 0 })).toThrowError(TypeError)
     expect(() => createTransferClient({ baseUrl: BASE, timeout: Number.NaN })).toThrowError(TypeError)
   })
+
+  it('sends a delete token in its own header', async () => {
+    const { fetchImpl, calls } = stubFetch(new Response(null, { status: 204 }))
+    const client = createTransferClient({
+      baseUrl: BASE,
+      fetch: fetchImpl,
+      headers: { authorization: 'Bearer server' },
+    })
+
+    await client.remove('K7QP2M4X', { deleteToken: 'tok' })
+
+    const headers = calls[0]!.init.headers as Record<string, string>
+    expect(headers['x-s3nd-delete-token']).toBe('tok')
+    expect(headers.authorization).toBe('Bearer server')
+  })
+
+  it('reads a bare 429 as RATE_LIMITED, with its retry-after', async () => {
+    const { fetchImpl } = stubFetch(
+      new Response('Too Many Requests', { status: 429, headers: { 'retry-after': '12' } }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    const error = (await client.read('K7QP2M4X').catch((e) => e)) as TransferError
+
+    expect(error.code).toBe('RATE_LIMITED')
+    expect(error.status).toBe(429)
+    expect(error.retryAfter).toBe(12)
+  })
+
+  it('turns a retry-after date into seconds from now', async () => {
+    const later = new Date(Date.now() + 90_000).toUTCString()
+    const { fetchImpl } = stubFetch(
+      Response.json(
+        { error: { code: 'RATE_LIMITED', message: 'slow' } },
+        { status: 429, headers: { 'retry-after': later } },
+      ),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    const error = (await client.read('K7QP2M4X').catch((e) => e)) as TransferError
+
+    expect(error.retryAfter).toBeGreaterThanOrEqual(88)
+    expect(error.retryAfter).toBeLessThanOrEqual(90)
+  })
 })

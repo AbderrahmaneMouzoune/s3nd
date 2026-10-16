@@ -169,6 +169,11 @@ from `GET /:code`.
 Burns a code, and answers `204`. Deleting one that is already gone is not an error — a client that
 burns a code after a successful restore should not have to care whether it won that race.
 
+Every `201` carries a `deleteToken`, stored by the server only as a hash. A server with
+`protectDelete` answers `401` to a `DELETE` that does not carry it, in `x-s3nd-delete-token` or as
+`authorization: Bearer`. A server with `burnAfterRead` deletes a transfer itself once it has been
+handed over.
+
 ### Presigned uploads: `POST /` with `upload: "presign"`, then `POST /:code/complete`
 
 A server with `upload: 'presign'` or `'both'` also takes a file without its bytes. The client
@@ -200,6 +205,7 @@ Every non-2xx answer carries the same body, unexpected failures included:
 | `CODE_TAKEN`           | `409` | No free code found; vanishingly unlikely at 40 bits                  |
 | `SNAPSHOT_TOO_NEW`     | `409` | Written by a newer schema than this deployment reads                 |
 | `TOO_LARGE`            | `413` | Over the configured `maxSize`, refused before the whole body is read |
+| `RATE_LIMITED`         | `429` | `rateLimit` refused; `retry-after` says when to try again            |
 | `INTERNAL`             | `500` | Anything else                                                        |
 
 `NOT_FOUND` deliberately covers expiry as well as absence. Distinguishing them would let someone

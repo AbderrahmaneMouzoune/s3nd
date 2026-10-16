@@ -31,6 +31,12 @@ export const PROTOCOL_HEADER = 's3nd-protocol'
 export const FILENAME_HEADER = 'x-s3nd-filename'
 
 /**
+ * Header a `DELETE` carries a delete token in. `authorization: Bearer` works
+ * too, but that one may already carry the server's own credentials.
+ */
+export const DELETE_TOKEN_HEADER = 'x-s3nd-delete-token'
+
+/**
  * What sits behind a code.
  *
  * `snapshot` is structured application state — JSON, handed back inline,
@@ -55,6 +61,7 @@ export type TransferErrorCode =
   | 'CODE_TAKEN'
   | 'SNAPSHOT_TOO_NEW'
   | 'TOO_LARGE'
+  | 'RATE_LIMITED'
   | 'UNSUPPORTED_PROTOCOL'
   | 'INTERNAL'
 
@@ -83,6 +90,12 @@ export interface CreatedTransfer {
   expiresAt?: string
   /** Stored size in bytes, after compression for snapshots. */
   size?: number
+  /**
+   * Proof of the right to burn this code, when the server issues one: pass it
+   * to `remove(code, { deleteToken })`. Handed out once, here, and stored by
+   * the server only as a hash, so keep it if you may need it.
+   */
+  deleteToken?: string
 }
 
 /** 200 body of `GET /:code`. */
@@ -158,6 +171,7 @@ export const TRANSFER_ERROR_STATUS: Record<TransferErrorCode, number> = {
   CODE_TAKEN: 409,
   SNAPSHOT_TOO_NEW: 409,
   TOO_LARGE: 413,
+  RATE_LIMITED: 429,
   UNSUPPORTED_PROTOCOL: 400,
   INTERNAL: 500,
 }

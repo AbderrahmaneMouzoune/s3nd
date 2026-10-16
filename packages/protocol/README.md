@@ -38,7 +38,7 @@ const transfers = createTransferClient({
 const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typed) // null when unknown or expired
 const bytes = await transfers.readBytes(code) // for a file transfer
-await transfers.remove(code)
+await transfers.remove(code, { deleteToken }) // the deleteToken createSnapshot() returned
 ```
 
 Files can go straight to the bucket instead of through the server, with progress:

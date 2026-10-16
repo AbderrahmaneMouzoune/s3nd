@@ -166,13 +166,14 @@ MAY infer one from the filename. An empty body MUST be answered `INVALID_REQUEST
 { "code": "K7QP2M4X", "kind": "snapshot", "createdAt": "2026-01-01T00:00:00.000Z", "expiresAt": "…", "size": 412 }
 ```
 
-| Field       | Type                     | Meaning                                                |
-| ----------- | ------------------------ | ------------------------------------------------------ |
-| `code`      | string                   | What the user carries to the other device              |
-| `kind`      | `"snapshot"` \| `"file"` | What was stored                                        |
-| `createdAt` | ISO 8601 date            |                                                        |
-| `expiresAt` | ISO 8601 date            | Absent when the transfer does not expire               |
-| `size`      | integer                  | Stored size in bytes, after compression for a snapshot |
+| Field         | Type                     | Meaning                                                                       |
+| ------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| `code`        | string                   | What the user carries to the other device                                     |
+| `kind`        | `"snapshot"` \| `"file"` | What was stored                                                               |
+| `createdAt`   | ISO 8601 date            |                                                                               |
+| `expiresAt`   | ISO 8601 date            | Absent when the transfer does not expire                                      |
+| `size`        | integer                  | Stored size in bytes, after compression for a snapshot                        |
+| `deleteToken` | string                   | Proof of the right to burn the code (section 5.4), when the server issues one |
 
 ### 5.2 `GET /:code`: describe a transfer
 
@@ -217,8 +218,34 @@ of the protocol.
 also answer `204`: a client burning a code after a successful restore should not have to care
 whether it won that race.
 
-> **To be specified (#43).** Who may delete a transfer, and with what proof, beyond the server's
-> general authorization.
+**Delete tokens.** Knowing a code is enough to read a transfer, and by default to burn it, so
+someone who saw the code go by can destroy a transfer before its recipient reads it. A server MAY
+issue a **delete token** when it creates a transfer, as `deleteToken` in the `201` body
+(sections 5.1 and 8.6):
+
+- the token MUST be unpredictable, with at least 128 bits of entropy (`createTransferHandler()`
+  uses 32 random bytes, base64url);
+- the server MUST NOT store it in clear: it keeps a one-way hash (SHA-256), so reading the bucket
+  does not give the token away, and it compares hashes in constant time;
+- it is returned once, in the creation answer, and never again.
+
+A client sends it with `DELETE /:code`, in the `x-s3nd-delete-token` header, or as
+`authorization: Bearer <token>`. When both are present, `x-s3nd-delete-token` is the token: the
+`authorization` header may be carrying the server's own credentials.
+
+A server that **requires** the token (`protectDelete` on `createTransferHandler()`):
+
+- MUST answer `401 UNAUTHORIZED` to a `DELETE` without a token, without looking the code up;
+- MUST answer `401 UNAUTHORIZED` when the transfer exists and the token does not match;
+- MUST answer `204` when a token is sent and nothing is stored under the code any more, as above.
+
+A transfer created before the server issued tokens carries no hash; a server requiring tokens
+MUST refuse to burn it with `401`, and leaves it to expire.
+
+**Burn after read.** A server MAY delete a transfer once it has been handed over: a snapshot after
+the first `200` of `GET /:code`, a file after the first `200` of `GET /:code/raw` has been sent in
+full. A client SHOULD NOT assume a code can be read twice. Two reads racing each other can both
+succeed; burning after read is a cleanup, not a lock.
 
 ## 6. Errors
 
@@ -250,10 +277,12 @@ with any status and body it likes.
 | `CODE_TAKEN`           | `409` | The server found no free code                                            |
 | `SNAPSHOT_TOO_NEW`     | `409` | The snapshot's schema version is newer than the server accepts           |
 | `TOO_LARGE`            | `413` | Over the server's size limit (section 4.3)                               |
+| `RATE_LIMITED`         | `429` | Too many requests from this client; try again later (section 9)          |
 | `INTERNAL`             | `500` | Anything else                                                            |
 
 A client SHOULD treat a non-2xx response that does not carry this body (a proxy's error page, a
-platform limit) by its status: `401` and `403` as `UNAUTHORIZED`, anything else as `INTERNAL`.
+platform limit) by its status: `401` and `403` as `UNAUTHORIZED`, `429` as `RATE_LIMITED`, anything
+else as `INTERNAL`.
 Likewise, a `2xx` whose body is not JSON, or not the shape section 5 describes, is `INTERNAL`.
 
 `TIMEOUT` is not in this table on purpose. `createTransferClient()` uses it when a call takes longer
@@ -408,6 +437,9 @@ Response, `201`, the usual `CreatedTransfer`:
 { "code": "K7QP2M4X", "kind": "file", "createdAt": "…", "expiresAt": "…", "size": 734003200 }
 ```
 
+A server that issues delete tokens (section 5.4) issues this transfer's here. A repeated
+completion answers without one: the token is never handed out twice.
+
 ### 8.7 Pending uploads expire
 
 A client can ask for an upload URL and never complete it. The pending object then stays in the
@@ -429,12 +461,29 @@ Nothing in the protocol carries progress: the client counts what it sends. In a 
 
 ## 9. Rate limiting
 
-> **To be specified (#43).** How a server limits attempts to guess codes, and how it tells a
-> client to slow down.
+A code is a bearer secret, and a short one can be guessed. A server SHOULD limit how many requests
+a client makes against routes that take a code (`GET /:code`, `GET /:code/raw`,
+`DELETE /:code`, `POST /:code/complete`), and MAY limit `POST /` too, which fills storage.
+
+A request refused for that reason:
+
+- MUST be answered `429` with the `RATE_LIMITED` error body (section 6.1);
+- SHOULD carry `retry-after`, in seconds, when the server knows when the client may try again;
+- MUST be refused before the code is looked up, so that a refused guess says nothing about the
+  code it guessed.
+
+A client MUST treat `RATE_LIMITED` as a failure worth retrying later, and SHOULD wait at least
+`retry-after` before it does. It MUST NOT retry in a tight loop.
+
+How a server identifies a client (an address, an account, a key), and what the limits are, is the
+server's own business. The strength a code needs depends on it: with the default eight Crockford
+characters (40 bits), guessing one live code is out of reach even without a limit; four digits (13
+bits) are not, and are only reasonable behind a strict limit, a short lifetime and burn after read.
 
 ## 10. Security considerations
 
-- **A code is a bearer secret.** Whoever holds it can read and burn the transfer. Its strength is
+- **A code is a bearer secret.** Whoever holds it can read the transfer, and burn it unless the
+  server requires a delete token (section 5.4). Its strength is
   its entropy: 40 bits for the default, far less for a short numeric code, which then relies on
   rate limiting (section 9) and a short lifetime.
 - **Expired and unknown look the same** (section 4.2), so the protocol does not reveal which codes

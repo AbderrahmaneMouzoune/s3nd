@@ -1,6 +1,6 @@
 import { isTransferError, parseTransferErrorBody, TransferError } from './transfer-error.js'
 import { readCounted, sizeOf, transmit, type Incoming } from './transport.js'
-import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION } from './types.js'
+import { DELETE_TOKEN_HEADER, FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION } from './types.js'
 import type {
   CreatedTransfer,
   CreateSnapshotBody,
@@ -86,6 +86,15 @@ export interface TransferStream {
   contentType?: string
 }
 
+export interface RemoveOptions {
+  signal?: AbortSignal
+  /**
+   * The `deleteToken` the transfer was created with. Required by a server
+   * with `protectDelete`; sent in `x-s3nd-delete-token`.
+   */
+  deleteToken?: string
+}
+
 export interface ReadBytesOptions {
   signal?: AbortSignal
   /** Called as the bytes come in, against the response's `Content-Length`. */
@@ -107,7 +116,7 @@ export interface TransferClient {
    */
   readStream(code: string, options?: { signal?: AbortSignal }): Promise<TransferStream | null>
   /** Burns a code. Deleting one that is already gone is not an error. */
-  remove(code: string, options?: { signal?: AbortSignal }): Promise<void>
+  remove(code: string, options?: RemoveOptions): Promise<void>
 }
 
 const TRANSFER_KINDS: readonly unknown[] = ['snapshot', 'file']
@@ -211,16 +220,34 @@ async function toTransferError(response: Incoming): Promise<TransferError> {
   }
 
   const parsed = parseTransferErrorBody(payload)
+  const retryAfter = retryAfterOf(response)
 
   if (parsed) {
-    return new TransferError(parsed.code, parsed.message, { status: response.status })
+    return new TransferError(parsed.code, parsed.message, { status: response.status, retryAfter })
   }
 
-  return new TransferError(
-    response.status === 401 || response.status === 403 ? 'UNAUTHORIZED' : 'INTERNAL',
-    `The server answered ${response.status} ${response.statusText || ''}`.trim() + '.',
-    { status: response.status },
-  )
+  // A platform's own rate limiter answers 429 without our body; it means the same.
+  const code =
+    response.status === 401 || response.status === 403
+      ? 'UNAUTHORIZED'
+      : response.status === 429
+        ? 'RATE_LIMITED'
+        : 'INTERNAL'
+
+  return new TransferError(code, `The server answered ${response.status} ${response.statusText || ''}`.trim() + '.', {
+    status: response.status,
+    retryAfter,
+  })
+}
+
+/** `retry-after` in seconds; the HTTP-date form is turned into seconds from now. */
+function retryAfterOf(response: Incoming): number | undefined {
+  const value = response.headers.get('retry-after')?.trim()
+  if (!value) return undefined
+  if (/^\d+$/.test(value)) return Number(value)
+
+  const date = Date.parse(value)
+  return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000))
 }
 
 /**
@@ -479,7 +506,11 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
 
     remove(code, options = {}) {
       return withTimeout(options.signal, async (signal) => {
-        await sendAllowingMissing(`/${encodeURIComponent(code)}`, { method: 'DELETE', signal })
+        await sendAllowingMissing(`/${encodeURIComponent(code)}`, {
+          method: 'DELETE',
+          headers: options.deleteToken ? { [DELETE_TOKEN_HEADER]: options.deleteToken } : undefined,
+          signal,
+        })
       })
     },
   }

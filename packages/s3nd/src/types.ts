@@ -312,6 +312,11 @@ export interface PutSnapshotOptions {
   ifMatch?: string
   /** Only write if nothing is stored under the key yet. */
   ifAbsent?: boolean
+  /**
+   * Extra S3 user metadata, beside the envelope: visible to `head()` without
+   * reading the snapshot. Keys s3nd uses itself (`s3nd-…`) are its own.
+   */
+  metadata?: Record<string, string>
   prefix?: string
   signal?: AbortSignal
 }

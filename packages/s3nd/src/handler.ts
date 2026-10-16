@@ -1,6 +1,7 @@
 import type { Bucket } from './bucket.js'
 import { S3ndError, isS3ndError } from './errors.js'
 import {
+  DELETE_TOKEN_HEADER,
   FILENAME_HEADER,
   isTransferError,
   PROTOCOL_HEADER,
@@ -33,14 +34,16 @@ const FILENAME_METADATA_KEY = 'filename'
  */
 const PENDING_PREFIX = 'pending'
 const DEFAULT_PRESIGN_EXPIRES_IN = 900
+/** Where a transfer keeps the SHA-256 of its delete token, never the token. */
+const DELETE_TOKEN_METADATA_KEY = 's3nd-delete-token-sha256'
 const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
 /** A redirect is followed at once; its signed URL need not outlive that. */
 const MAX_REDIRECT_EXPIRES_IN = 300
 /** What a cross-origin client is allowed to send, and to read back. */
 const CORS_ALLOW_METHODS = 'GET, POST, DELETE'
-const CORS_ALLOW_HEADERS = `content-type, authorization, ${PROTOCOL_HEADER}, ${FILENAME_HEADER}`
-const CORS_EXPOSE_HEADERS = `${PROTOCOL_HEADER}, content-disposition`
+const CORS_ALLOW_HEADERS = `content-type, authorization, ${PROTOCOL_HEADER}, ${FILENAME_HEADER}, ${DELETE_TOKEN_HEADER}`
+const CORS_EXPOSE_HEADERS = `${PROTOCOL_HEADER}, content-disposition, retry-after`
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
 const CODE_ATTEMPTS = 5
 
@@ -130,6 +133,37 @@ export interface TransferHandlerConfig {
    * where the bucket's `maxSize` measures the gzipped bytes stored.
    */
   maxRequestSize?: number
+  /**
+   * Called on every request once its code is read, before anything is looked
+   * up, so a refused guess learns nothing. Return `false` for a `429
+   * RATE_LIMITED`, or a `Response` to answer with your own (a `retry-after`
+   * on it reaches the client). `code` is the normalised code, absent on
+   * `create`. Without it nothing is limited, which is fine for eight-character
+   * codes and not for short ones: see the sync code docs.
+   */
+  rateLimit?: (request: Request, context: RateLimitContext) => boolean | Response | Promise<boolean | Response>
+  /**
+   * Require the transfer's delete token on `DELETE /:code`, in the
+   * `x-s3nd-delete-token` header or as `authorization: Bearer`. Every
+   * transfer is created with one either way; it is returned once, in the
+   * `201`, and stored only as its SHA-256. Off by default, so anyone who knows
+   * a code can burn it, as before.
+   */
+  protectDelete?: boolean
+  /**
+   * Delete a transfer once it has been handed over: a snapshot after its
+   * first `GET /:code`, a file once `GET /:code/raw` has sent it in full. Two
+   * reads racing can both succeed. Not with `raw: 'redirect'`, where the
+   * bytes are read from the bucket after the handler has answered.
+   */
+  burnAfterRead?: boolean
+}
+
+/** What `rateLimit` is told about the request it is asked about. */
+export interface RateLimitContext {
+  route: 'create' | 'read' | 'raw' | 'delete' | 'complete'
+  /** The normalised code. Absent on `create`, which has none yet. */
+  code?: string
 }
 
 export interface TransferHandler {
@@ -374,6 +408,55 @@ function bounded(body: ReadableStream<Uint8Array>, limit: number): ReadableStrea
   )
 }
 
+function base64url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+async function sha256(text: string): Promise<string> {
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * A delete token and the hash that is all the bucket ever sees of it. Web
+ * Crypto rather than `node:crypto`, so the handler keeps running outside Node.
+ */
+async function newDeleteToken(): Promise<{ token: string; hash: string }> {
+  const token = base64url(globalThis.crypto.getRandomValues(new Uint8Array(32)))
+  return { token, hash: await sha256(token) }
+}
+
+/** Compares two hex digests without stopping at the first difference. */
+function sameDigest(left: string, right: string): boolean {
+  if (left.length !== right.length) return false
+
+  let difference = 0
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index)
+  return difference === 0
+}
+
+/** The delete token a request carries: its own header first, then a bearer. */
+function deleteTokenOf(request: Request): string | undefined {
+  const header = request.headers.get(DELETE_TOKEN_HEADER)?.trim()
+  if (header) return header
+
+  const bearer = /^Bearer\s+(.+)$/i.exec(request.headers.get('authorization') ?? '')?.[1]?.trim()
+  return bearer || undefined
+}
+
+/** Runs `onEnd` once the whole body has been read, and not if the reader gives up halfway. */
+function afterFullRead(body: ReadableStream, onEnd: () => Promise<void>): ReadableStream {
+  return body.pipeThrough(
+    new TransformStream({
+      async flush() {
+        await onEnd()
+      },
+    }),
+  )
+}
+
 function discard(body: unknown): void {
   const stream = body as { destroy?: () => void; cancel?: () => void }
   stream?.destroy?.()
@@ -402,6 +485,13 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     throw new S3ndError(
       'INVALID_CONFIG',
       "`cors.origin: '*'` cannot be combined with `credentials: true`: browsers refuse it. List the origins instead.",
+    )
+  }
+
+  if (config.burnAfterRead && rawMode === 'redirect') {
+    throw new S3ndError(
+      'INVALID_CONFIG',
+      "`burnAfterRead` cannot be combined with `raw: 'redirect'`: the bytes are fetched from the bucket after the handler answered, so it cannot tell when they were read.",
     )
   }
 
@@ -482,6 +572,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       return fail('INVALID_REQUEST', 'Request body must be an object with a `data` property.')
     }
 
+    const deletion = await newDeleteToken()
+
     const created = await claimCode(async (code) => {
       const result = await bucket.putSnapshot(code, body.data, {
         app: config.app,
@@ -490,6 +582,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         // name, and storing it would hand it to anyone who knows the code.
         device: body.device,
         expiresIn,
+        metadata: { [DELETE_TOKEN_METADATA_KEY]: deletion.hash },
         ifAbsent: true,
       })
 
@@ -499,6 +592,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         createdAt: result.createdAt.toISOString(),
         expiresAt: result.expiresAt?.toISOString(),
         size: result.size,
+        deleteToken: deletion.token,
       }
     })
 
@@ -626,7 +720,11 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const createdAt = new Date()
     const expiresAt = expiresIn != null ? new Date(createdAt.getTime() + expiresIn * 1000) : undefined
 
-    const metadata: Record<string, string> = { [KIND_METADATA_KEY]: 'file' }
+    const deletion = await newDeleteToken()
+    const metadata: Record<string, string> = {
+      [KIND_METADATA_KEY]: 'file',
+      [DELETE_TOKEN_METADATA_KEY]: deletion.hash,
+    }
     const filename = pending.metadata[FILENAME_METADATA_KEY]
     if (filename) metadata[FILENAME_METADATA_KEY] = filename
     if (expiresAt) metadata[EXPIRES_METADATA_KEY] = expiresAt.toISOString()
@@ -647,6 +745,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       createdAt: createdAt.toISOString(),
       expiresAt: expiresAt?.toISOString(),
       size: pending.size,
+      deleteToken: deletion.token,
     }
 
     return Response.json(created, { status: 201 })
@@ -686,6 +785,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       return fail('CODE_TAKEN', `Could not find a free code in ${CODE_ATTEMPTS} attempts.`)
     }
 
+    const deletion = await newDeleteToken()
+
     {
       const result = await bucket.put(code, fileLimit != null ? bounded(request.body, fileLimit) : request.body, {
         contentLength: declared,
@@ -696,6 +797,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         cacheControl: 'private, no-store',
         metadata: {
           [KIND_METADATA_KEY]: 'file',
+          [DELETE_TOKEN_METADATA_KEY]: deletion.hash,
           ...(expiresAt ? { [EXPIRES_METADATA_KEY]: expiresAt.toISOString() } : {}),
         },
         ifAbsent: true,
@@ -712,6 +814,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
         createdAt: createdAt.toISOString(),
         expiresAt: expiresAt?.toISOString(),
         size: result.size,
+        deleteToken: deletion.token,
       }
 
       return Response.json(created, { status: 201 })
@@ -761,6 +864,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       data: snapshot.data,
     }
 
+    // Handed over in full: the transfer has done its job.
+    if (config.burnAfterRead) await bucket.deleteSnapshot(code)
+
     return Response.json(metadata)
   }
 
@@ -805,7 +911,45 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       headers.set('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`)
     }
 
-    return new Response(toWebStream(file.body), { headers })
+    const body = toWebStream(file.body)
+
+    // Burned once the last byte is out, not when the response starts: a
+    // download cut short leaves the transfer for another try.
+    return new Response(config.burnAfterRead ? afterFullRead(body, () => bucket.delete(code)) : body, { headers })
+  }
+
+  /** `DELETE /:code`, with the delete token checked first when `protectDelete` is on. */
+  async function burn(request: Request, code: string): Promise<Response> {
+    if (config.protectDelete) {
+      const token = deleteTokenOf(request)
+      if (!token) return fail('UNAUTHORIZED', 'Burning this transfer needs its delete token.')
+
+      const head = await bucket.head(code)
+      // Already gone: deleting it again is the no-op it always was.
+      if (!head) return new Response(null, { status: 204 })
+
+      const expected = head.metadata[DELETE_TOKEN_METADATA_KEY]
+      if (!expected || !sameDigest(await sha256(token), expected)) {
+        return fail('UNAUTHORIZED', 'That is not the delete token of this transfer.')
+      }
+
+      await bucket.deleteSnapshot(code)
+      return new Response(null, { status: 204 })
+    }
+
+    // A pending upload under the code is burned with it.
+    await bucket.deleteSnapshot(code)
+    if (uploadMode !== 'proxy') await bucket.delete(pendingKey(code))
+    return new Response(null, { status: 204 })
+  }
+
+  /** `rateLimit`'s answer as a response, or `null` to go on. */
+  async function limited(request: Request, context: RateLimitContext): Promise<Response | null> {
+    if (!config.rateLimit) return null
+
+    const allowed = await config.rateLimit(request, context)
+    if (allowed instanceof Response) return allowed
+    return allowed ? null : fail('RATE_LIMITED', 'Too many requests. Try again later.')
   }
 
   async function route(request: Request): Promise<Response> {
@@ -838,6 +982,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (rawCode === undefined) {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
 
+      const refused = await limited(request, { route: 'create' })
+      if (refused) return refused
+
       // A filename means a file, whatever its type: a `.json` picked from a
       // file input is sent as `application/json`, and is still a file. Only a
       // nameless JSON body is a snapshot.
@@ -850,28 +997,38 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
     const code = normalize(rawCode)
 
-    if (tail === 'complete') {
-      if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
-      return complete(code)
+    const match =
+      tail === 'complete' && request.method === 'POST'
+        ? 'complete'
+        : tail === 'raw' && request.method === 'GET'
+          ? 'raw'
+          : tail === undefined && request.method === 'GET'
+            ? 'read'
+            : tail === undefined && request.method === 'DELETE'
+              ? 'delete'
+              : undefined
+
+    if (match === undefined) {
+      if (tail !== undefined && tail !== 'complete' && tail !== 'raw') {
+        return fail('NOT_FOUND', 'No transfer route matches this path.')
+      }
+      return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
     }
 
-    if (tail === 'raw') {
-      if (request.method !== 'GET') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
-      return readRaw(code)
+    // After the code is read, before it is looked up: a refused guess learns nothing.
+    const refused = await limited(request, { route: match, code })
+    if (refused) return refused
+
+    switch (match) {
+      case 'complete':
+        return complete(code)
+      case 'raw':
+        return readRaw(code)
+      case 'read':
+        return read(code)
+      case 'delete':
+        return burn(request, code)
     }
-
-    if (tail !== undefined) return fail('NOT_FOUND', 'No transfer route matches this path.')
-
-    if (request.method === 'GET') return read(code)
-
-    if (request.method === 'DELETE') {
-      // A pending upload under the code is burned with it.
-      await bucket.deleteSnapshot(code)
-      if (uploadMode !== 'proxy') await bucket.delete(pendingKey(code))
-      return new Response(null, { status: 204 })
-    }
-
-    return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
   }
 
   const handler = async (request: Request): Promise<Response> => {

@@ -214,12 +214,20 @@ export interface PutSnapshotOptions {
     expiresIn?: number;
     ifAbsent?: boolean;
     ifMatch?: string;
+    metadata?: Record<string, string>;
     // (undocumented)
     prefix?: string;
     // (undocumented)
     signal?: AbortSignal;
     // (undocumented)
     version?: number;
+}
+
+// @public
+export interface RateLimitContext {
+    code?: string;
+    // (undocumented)
+    route: 'create' | 'read' | 'raw' | 'delete' | 'complete';
 }
 
 // @public (undocumented)
@@ -345,12 +353,15 @@ export interface TransferHandlerConfig {
     authorize?: (request: Request) => boolean | Response | Promise<boolean | Response>;
     basePath?: string;
     bucket: Bucket;
+    burnAfterRead?: boolean;
     cors?: TransferHandlerCors;
     expiresIn?: number | null;
     maxRequestSize?: number;
     maxVersion?: number;
     onError?: (error: unknown, request: Request) => void;
     presignExpiresIn?: number;
+    protectDelete?: boolean;
+    rateLimit?: (request: Request, context: RateLimitContext) => boolean | Response | Promise<boolean | Response>;
     raw?: 'stream' | 'redirect';
     upload?: UploadMode;
 }
