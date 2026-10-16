@@ -83,6 +83,13 @@ than `TransferErrorCode`. A `signal` you pass still works alongside the timeout,
 still rejects with the plain `AbortError`, which the React hooks treat as a silent cancel while
 they show `TIMEOUT` as an error.
 
+A file's bytes come back from `readBytes(code)`, or as a stream from `readStream(code)`.
+`readBytes` reports how far the download has got, with the total when the server sent a length:
+
+```ts
+const bytes = await transfers.readBytes(code, { onProgress: ({ loaded, total }) => render(loaded, total) })
+```
+
 In React you rarely call it directly — [the hooks](/docs/react) wrap it.
 
 ## The version header

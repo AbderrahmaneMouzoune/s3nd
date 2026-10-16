@@ -286,7 +286,9 @@ the pull request title is the message that counts, and CI checks its shape on ev
 | `fix: …`                                   | 0.1.1                                 |
 | `feat: …`                                  | 0.2.0                                 |
 | `feat!: …`, or a `BREAKING CHANGE:` footer | 0.2.0; the major bump waits for 1.0.0 |
-| `chore: …`, `ci: …`, `docs: …`, `test: …`  | nowhere, no release                   |
+
+From 1.0.0 on, a breaking change is a major release, as the [support policy](#support-policy) says.
+| `chore: …`, `ci: …`, `docs: …`, `test: …` | nowhere, no release |
 
 The four packages version independently: a commit releases whichever of `packages/*` it touched,
 and a package whose dependency moved is carried along. The docs site, the website, the examples,
@@ -327,6 +329,27 @@ Two repository secrets:
 
 Running the workflow by hand with **Publish** ticked publishes the version currently on `main`: the way out
 when a release was tagged but the publish step failed.
+
+## Support policy
+
+**Versioning.** From 1.0.0, every package follows [semantic versioning](https://semver.org)
+strictly: a breaking change to an export, an option, a CLI command or flag, or the wire protocol
+waits for the next major. What counts as the public API is what each package's API report in
+`packages/*/etc/*.api.md` lists, the CLI's documented commands and flags, and
+[`PROTOCOL.md`](./packages/protocol/PROTOCOL.md). A new optional field, a new error code or a new
+option is a minor release, as the protocol's own versioning rules allow. Before 1.0.0, a `1.0.0-rc`
+under the npm `next` tag can still change.
+
+**Node.** The packages need Node 20 or later (their `engines` field), and CI runs them on 20, 22
+and 24. A Node line is dropped only in a major release, and only once it is past its end of life.
+`@s3nd/core` also runs on Bun and Deno, which CI checks.
+
+**Maintenance.** The latest minor of the current major gets bug and security fixes. When a new
+major comes out, the previous one keeps getting security fixes for six months; 0.x releases get
+none once 1.0.0 is out. [`SECURITY.md`](./.github/SECURITY.md) says how to report a vulnerability.
+
+**Upgrading from 0.x.** The [migration guide](https://doc.s3nd.sh/docs/migration) lists every change
+that can break an application, with the code before and after.
 
 ## License
 

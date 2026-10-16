@@ -98,7 +98,7 @@ if (!(await store.hasSnapshot(code))) return notFound()
 ```
 
 Takes `{ prefix, signal }`. Expiry is read from the `s3nd-expires-at` metadata that
-`putSnapshot()` writes since v0.2; a snapshot written by v0.1 has none, so it counts as present
+`putSnapshot()` writes since 1.0; a snapshot written by 0.1.x has none, so it counts as present
 until `getSnapshot()` opens it.
 
 ---

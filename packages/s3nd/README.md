@@ -362,6 +362,14 @@ and Scaleway expect. Every option except `client` falls back to an environment v
 so `createBucket()` with no arguments works once `S3_BUCKET` and the usual `AWS_*` variables are
 set.
 
+## Upgrading, and security
+
+Coming from 0.x? The [migration guide](https://doc.s3nd.sh/docs/migration) lists every change that
+can break an application on the way to 1.0, with the code before and after. The
+[threat model](https://doc.s3nd.sh/docs/security) says what a code protects, what the bucket
+operator sees and what expiry guarantees; vulnerabilities go through the
+[security policy](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/.github/SECURITY.md).
+
 ## License
 
 MIT © Abderrahmane Mouzoune

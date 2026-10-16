@@ -555,8 +555,8 @@ export class Bucket {
    * no body crosses the wire. An expired snapshot counts as absent, the same
    * way `getSnapshot()` treats it.
    *
-   * Expiry is read from metadata that snapshots written since v0.2 carry; an
-   * older snapshot has none, so it counts as present until `getSnapshot()`
+   * Expiry is read from metadata that snapshots written since 1.0 carry; one
+   * written by 0.1.x has none, so it counts as present until `getSnapshot()`
    * opens it.
    */
   async hasSnapshot(key: string, options: HasSnapshotOptions = {}): Promise<boolean> {
