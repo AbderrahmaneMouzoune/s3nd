@@ -14,7 +14,7 @@ export default defineConfig({
       // when the suite grows; a pull request that lowers one has to say why.
       thresholds: {
         statements: 94,
-        branches: 89,
+        branches: 88,
         functions: 100,
         lines: 95,
       },

@@ -11,6 +11,8 @@ const KIND_METADATA_KEY = 's3nd-kind'
 const EXPIRES_METADATA_KEY = 's3nd-expires-at'
 const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
+/** A redirect is followed at once; its signed URL need not outlive that. */
+const MAX_REDIRECT_EXPIRES_IN = 300
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
 const CODE_ATTEMPTS = 5
 
@@ -97,6 +99,23 @@ function decodeHeaderValue(value: string | null): string | undefined {
   } catch {
     return value
   }
+}
+
+/**
+ * The sender names the file, and every client that reads it back may write it
+ * under that name — so it is a name and nothing more: no directory, from either
+ * kind of separator, no control characters, no leading dots.
+ */
+function safeFilename(received: string | undefined): string | undefined {
+  const name = received
+    ?.split(/[\\/]/)
+    .pop()!
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+
+  return name ? name : undefined
 }
 
 /** The AWS SDK hands back a Node stream; `Response` wants a web one. */
@@ -196,7 +215,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   }
 
   async function createFile(request: Request): Promise<Response> {
-    const filename = decodeHeaderValue(request.headers.get(FILENAME_HEADER)) ?? 'file'
+    const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
     const bytes = new Uint8Array(await request.arrayBuffer())
 
     if (bytes.byteLength === 0) {
@@ -280,7 +299,19 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
   async function readRaw(code: string): Promise<Response> {
     if (rawMode === 'redirect') {
-      const url = await bucket.getUrl(code, { download: true })
+      // Signing reads nothing, so check what stream mode would have checked
+      // first: that the object is there, is a file, and has not expired.
+      const head = await bucket.head(code)
+      if (!head || head.metadata[KIND_METADATA_KEY] !== 'file') return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const expiresAt = head.metadata[EXPIRES_METADATA_KEY]
+      const remaining = expiresAt ? Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000) : Infinity
+      if (!(remaining >= 1)) return fail('NOT_FOUND', 'Unknown or expired code.')
+
+      const url = await bucket.getUrl(code, {
+        download: true,
+        expiresIn: Math.min(remaining, MAX_REDIRECT_EXPIRES_IN),
+      })
       return Response.redirect(url, 302)
     }
 
