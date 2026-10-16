@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 
 /** S3 hard limit: an object key is at most 1024 bytes of UTF-8. */
 const MAX_KEY_BYTES = 1024

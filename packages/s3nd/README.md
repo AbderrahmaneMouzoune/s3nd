@@ -273,7 +273,6 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | Code                                                            | When                                                                                                    |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `INVALID_CONFIG`                                                | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`.                        |
-| `INVALID_SYNC_CODE`                                             | The code is empty, or holds characters outside the alphabet.                                            |
 | `INVALID_SNAPSHOT`                                              | Data JSON cannot represent, a stored object that is not a snapshot, or an envelope from a newer format. |
 | `SNAPSHOT_TOO_NEW`                                              | The snapshot's schema version is above the `maxVersion` given.                                          |
 | `PRECONDITION_FAILED`                                           | An `ifMatch` or `ifAbsent` write lost the race.                                                         |
@@ -283,6 +282,12 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`.                                                                    |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
 | `LIST_FAILED` / `COPY_FAILED`                                   | S3 rejected a `list()` or `copy()`, or its arguments were invalid.                                      |
+
+A typed code that cannot exist is the one exception: `store.codes.normalize()` throws a
+`TransferError` with `INVALID_SYNC_CODE`, the protocol's own answer, which the handler sends as is.
+`TransferError` and `isTransferError` are re-exported here, so a server imports from one package.
+Both `isS3ndError` and `isTransferError` check a `Symbol.for('s3nd.error')` brand rather than
+`instanceof`, so they hold when an application ends up with two copies of a package.
 
 Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
 raised before anything reaches the network.

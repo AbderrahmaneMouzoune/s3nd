@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { createSyncCode, createSyncCodes, normalizeSyncCode, syncCodeAlphabets } from '../src/index.js'
+import {
+  createSyncCode,
+  createSyncCodes,
+  isTransferError,
+  normalizeSyncCode,
+  syncCodeAlphabets,
+  TransferError,
+} from '../src/index.js'
 
 describe('the default scheme', () => {
   it('is eight characters of Crockford base32', () => {
@@ -45,6 +52,18 @@ describe('the default scheme', () => {
     expect(() => normalizeSyncCode('')).toThrowError(/must not be empty/)
     expect(() => normalizeSyncCode('   ')).toThrowError(/must not be empty/)
     expect(() => normalizeSyncCode('nope!')).toThrowError(expect.objectContaining({ code: 'INVALID_SYNC_CODE' }))
+  })
+
+  it('says no with the same error a server would answer', () => {
+    let caught: unknown
+    try {
+      normalizeSyncCode('nope!')
+    } catch (error) {
+      caught = error
+    }
+
+    expect(isTransferError(caught)).toBe(true)
+    expect(caught).toBeInstanceOf(TransferError)
   })
 
   it('reports what a code is worth guessing against', () => {
@@ -132,10 +151,12 @@ describe('a custom alphabet', () => {
     ['an underscore', 'ABC_DEF'],
     ['more than 256 characters', Array.from({ length: 257 }, (_, i) => String.fromCharCode(0x100 + i)).join('')],
   ])('rejects %s', (_label, alphabet) => {
-    expect(() => createSyncCodes({ alphabet })).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIG' }))
+    // A programming error, not a protocol answer: a plain TypeError.
+    expect(() => createSyncCodes({ alphabet })).toThrowError(TypeError)
   })
 
   it.each([0, -1, 65, 4.5])('rejects a length of %s', (length) => {
-    expect(() => createSyncCodes({ length })).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIG' }))
+    expect(() => createSyncCodes({ length })).toThrowError(/length must be an integer/)
+    expect(() => createSyncCodes({ length })).toThrowError(TypeError)
   })
 })

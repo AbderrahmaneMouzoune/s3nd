@@ -1,8 +1,15 @@
 import { Readable } from 'node:stream'
 
 import type { Bucket } from './bucket.js'
-import { S3ndError, isS3ndError } from '@s3nd/protocol'
-import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
+import { S3ndError, isS3ndError } from './errors.js'
+import {
+  FILENAME_HEADER,
+  isTransferError,
+  PROTOCOL_HEADER,
+  PROTOCOL_VERSION,
+  TRANSFER_ERROR_STATUS,
+  TransferError,
+} from '@s3nd/protocol'
 import type { CreatedTransfer, CreateSnapshotBody, TransferErrorCode, TransferMetadata } from '@s3nd/protocol'
 
 /** Marks a stored object as opaque bytes rather than a snapshot envelope. */
@@ -80,8 +87,6 @@ function fromS3ndError(error: S3ndError): Response | null {
   switch (error.code) {
     case 'FILE_TOO_LARGE':
       return fail('TOO_LARGE', error.message)
-    case 'INVALID_SYNC_CODE':
-      return fail('INVALID_SYNC_CODE', error.message)
     case 'SNAPSHOT_TOO_NEW':
       return fail('SNAPSHOT_TOO_NEW', error.message)
     case 'PRECONDITION_FAILED':
@@ -184,7 +189,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
           return decodeURIComponent(segment)
         } catch {
           // A stray `%E0` is a code nobody could have been handed, not a crash.
-          throw new S3ndError('INVALID_SYNC_CODE', 'The code in the path is not validly encoded.')
+          throw new TransferError('INVALID_SYNC_CODE', 'The code in the path is not validly encoded.')
         }
       })
   }
@@ -408,6 +413,10 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     try {
       return await route(request)
     } catch (error) {
+      // A TransferError raised here is already an answer: a code the sync code
+      // rules refused, or a path that cannot hold one.
+      if (isTransferError(error)) return fail(error.code, error.message)
+
       const named = isS3ndError(error) ? fromS3ndError(error) : null
       if (named) return named
 

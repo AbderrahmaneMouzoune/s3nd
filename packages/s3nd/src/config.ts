@@ -1,6 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import { normalizePrefix } from './key.js'
 import type { BucketConfig, ResolvedConfig } from './types.js'
 

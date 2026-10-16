@@ -13,7 +13,7 @@ import type { Readable } from 'node:stream'
 
 import { normalizeBody } from './body.js'
 import { createS3Client, resolveConfig } from './config.js'
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import { assertValidKey, encodeKey, generateKey, joinKey, normalizePrefix, sanitizeFilename } from './key.js'
 import { DEFAULT_CONTENT_TYPE, lookupContentType } from './mime.js'
 import { decodeSnapshot, encodeSnapshot, ENVELOPE_VERSION } from './snapshot.js'
@@ -110,6 +110,22 @@ function decodeMetadataValue(value: string | undefined): string | undefined {
   }
 }
 
+/**
+ * `createSyncCodes` throws a plain `TypeError` for a shape it cannot use, since
+ * `@s3nd/protocol` has no configuration errors of its own. Here it is this
+ * package's configuration, so it reads as one.
+ */
+function codesFor(options: ResolvedConfig['syncCode']): SyncCodes {
+  try {
+    return createSyncCodes(options)
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new S3ndError('INVALID_CONFIG', `\`syncCode\`: ${error.message}`, { cause: error })
+    }
+    throw error
+  }
+}
+
 /** The fields `GetObject` and `HeadObject` responses share. */
 interface ObjectHeaders {
   ContentType?: string
@@ -165,7 +181,7 @@ export class Bucket {
   constructor(config: BucketConfig = {}) {
     this.config = resolveConfig(config)
     this.bucket = this.config.bucket
-    this.codes = createSyncCodes(this.config.syncCode)
+    this.codes = codesFor(this.config.syncCode)
   }
 
   /** Underlying `S3Client`, created on first use. */
