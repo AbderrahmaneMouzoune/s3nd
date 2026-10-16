@@ -628,3 +628,125 @@ describe('createTransferHandler — protocol version', () => {
     expect(authorize).not.toHaveBeenCalled()
   })
 })
+
+describe('createTransferHandler — cors', () => {
+  const APP = 'https://app.example.com'
+
+  function preflight(origin = APP): Request {
+    return new Request(BASE, {
+      method: 'OPTIONS',
+      headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'x-s3nd-filename' },
+    })
+  }
+
+  it('adds nothing without the option', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { origin: APP } }))
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+    expect((await handler(preflight())).status).toBe(400)
+  })
+
+  it('answers a preflight from an allowed origin', async () => {
+    const { handler } = setup({ cors: { origin: [APP], maxAge: 600 } })
+
+    const response = await handler.OPTIONS(preflight())
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP)
+    expect(response.headers.get('access-control-allow-methods')).toBe('GET, POST, DELETE')
+    expect(response.headers.get('access-control-allow-headers')).toBe(
+      'content-type, authorization, s3nd-protocol, x-s3nd-filename',
+    )
+    expect(response.headers.get('access-control-max-age')).toBe('600')
+    expect(response.headers.get('vary')).toBe('origin')
+  })
+
+  it('answers the preflight before authorize', async () => {
+    const authorize = vi.fn(() => false)
+    const { handler } = setup({ authorize, cors: { origin: [APP] } })
+
+    const response = await handler(preflight())
+    expect(response.status).toBe(204)
+    expect(authorize).not.toHaveBeenCalled()
+  })
+
+  it('gives a refused origin no CORS headers, so the browser blocks it', async () => {
+    const { handler } = setup({ cors: { origin: [APP] } })
+
+    const response = await handler(preflight('https://evil.example.com'))
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+    expect(response.headers.get('access-control-allow-methods')).toBeNull()
+  })
+
+  it('exposes the protocol and filename headers on an actual response', async () => {
+    const { handler } = setup({ cors: { origin: [APP], credentials: true } })
+
+    const request = postSnapshot({ data: 1 })
+    request.headers.set('origin', APP)
+    const response = await handler(request)
+
+    expect(response.status).toBe(201)
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP)
+    expect(response.headers.get('access-control-allow-credentials')).toBe('true')
+    expect(response.headers.get('access-control-expose-headers')).toBe('s3nd-protocol, content-disposition')
+  })
+
+  it('carries the CORS headers on an error, so the browser can read it', async () => {
+    const { handler } = setup({ cors: { origin: [APP] }, authorize: () => false })
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { origin: APP } }))
+    expect(response.status).toBe(401)
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP)
+    expect((await response.json()).error.code).toBe('UNAUTHORIZED')
+  })
+
+  it('carries them on a response authorize built, even an immutable one', async () => {
+    const { handler } = setup({
+      cors: { origin: [APP] },
+      authorize: () => Response.redirect('http://login.test/', 302),
+    })
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { origin: APP } }))
+    expect(response.status).toBe(302)
+    expect(response.headers.get('access-control-allow-origin')).toBe(APP)
+  })
+
+  it("answers any origin with '*'", async () => {
+    const { handler } = setup({ cors: { origin: '*' } })
+
+    const response = await handler(preflight('https://anywhere.test'))
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    expect(response.headers.get('vary')).toBeNull()
+  })
+
+  it('asks a predicate, and refuses when it throws', async () => {
+    const { handler } = setup({
+      cors: {
+        origin: (origin) => {
+          if (origin === 'https://broken.test') throw new Error('lookup down')
+          return origin.endsWith('.example.com')
+        },
+      },
+    })
+
+    expect((await handler(preflight())).headers.get('access-control-allow-origin')).toBe(APP)
+    expect((await handler(preflight('https://other.test'))).headers.get('access-control-allow-origin')).toBeNull()
+
+    const broken = await handler(preflight('https://broken.test'))
+    expect(broken.status).toBe(204)
+    expect(broken.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('adds nothing to a request without an Origin', async () => {
+    const { handler } = setup({ cors: { origin: [APP] } })
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it("refuses origin '*' with credentials", () => {
+    expect(() => setup({ cors: { origin: '*', credentials: true } })).toThrowError(
+      expect.objectContaining({ code: 'INVALID_CONFIG' }),
+    )
+  })
+})
