@@ -97,9 +97,16 @@ export interface UploadOptions {
    * Only write if the object still carries this ETag. Optimistic concurrency:
    * a second device that wrote in the meantime makes this fail rather than
    * silently overwriting.
+   *
+   * Needs a backend that supports conditional writes (`If-Match` on
+   * `PutObject`). One that refuses the header throws
+   * `CONDITIONAL_WRITE_UNSUPPORTED`; one that ignores it overwrites.
    */
   ifMatch?: string
-  /** Only write if nothing is stored under the key yet. */
+  /**
+   * Only write if nothing is stored under the key yet (`If-None-Match: *`).
+   * Same backend caveat as `ifMatch`.
+   */
   ifAbsent?: boolean
   signal?: AbortSignal
 }
