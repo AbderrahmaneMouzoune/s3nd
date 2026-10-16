@@ -5,7 +5,6 @@
 
 ### Bug Fixes
 
-* **cli:** keep only the base name of a received filename ([3e961b5](https://github.com/AbderrahmaneMouzoune/s3nd/commit/3e961b53dea54628a2e988f3162bac49f41e6e78))
 * **cli:** keep only the base name of a received filename ([d62b1cc](https://github.com/AbderrahmaneMouzoune/s3nd/commit/d62b1cc0a1f64c11e95d7d680a467012c6dd7432))
 
 
