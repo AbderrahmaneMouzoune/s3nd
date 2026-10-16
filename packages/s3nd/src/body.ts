@@ -36,13 +36,13 @@ function isWebStream(value: unknown): value is ReadableStream {
   return typeof value === 'object' && value !== null && typeof (value as ReadableStream).getReader === 'function'
 }
 
-function assertStreamLength(contentLength: number | undefined): number {
-  if (typeof contentLength !== 'number' || !Number.isFinite(contentLength) || contentLength < 0) {
+function streamLength(contentLength: number | undefined): number | undefined {
+  if (contentLength == null) return undefined
+
+  if (!Number.isFinite(contentLength) || contentLength < 0) {
     throw new S3ndError(
-      'MISSING_CONTENT_LENGTH',
-      'Uploading a stream requires an explicit `contentLength` (in bytes): a single PutObject ' +
-        'request cannot use chunked encoding. Pass `contentLength`, or buffer the stream first. ' +
-        'Multipart upload — which streams without knowing the size upfront — is planned for v0.2.',
+      'INVALID_BODY',
+      `\`contentLength\` must be a non-negative number of bytes (received ${contentLength}).`,
     )
   }
 
@@ -50,7 +50,7 @@ function assertStreamLength(contentLength: number | undefined): number {
 }
 
 /**
- * Turns any accepted body into something `PutObjectCommand` understands, and
+ * Turns any accepted body into something `PutObject` or `UploadPart` understands, and
  * reports back whatever metadata the body itself carries (size, type, name).
  */
 export async function normalizeBody(input: UploadBody, contentLength?: number): Promise<NormalizedBody> {
@@ -87,7 +87,9 @@ export async function normalizeBody(input: UploadBody, contentLength?: number): 
   }
 
   if (isNodeReadable(input) || isWebStream(input)) {
-    return { body: input, contentLength: assertStreamLength(contentLength) }
+    // A stream of unknown length is fine: upload() sends it through a multipart
+    // upload, which never needs the total size upfront.
+    return { body: input, contentLength: streamLength(contentLength) }
   }
 
   throw new S3ndError(

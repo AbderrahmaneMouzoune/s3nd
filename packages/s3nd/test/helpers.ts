@@ -73,6 +73,11 @@ export function createMemoryClient() {
       lastModified: Date
     }
   >()
+  /** Multipart uploads started and neither completed nor aborted. */
+  const uploads = new Map<
+    string,
+    { key: string; contentType?: string; metadata?: Record<string, string>; parts: Map<number, Uint8Array> }
+  >()
   let counter = 0
   let lifecycle: Record<string, any>[] | undefined
 
@@ -83,24 +88,117 @@ export function createMemoryClient() {
     })
   }
 
-  const send = vi.fn(async (command: any) => {
+  async function bytesOf(body: any): Promise<Uint8Array> {
+    if (body instanceof Uint8Array || typeof body === 'string') return Buffer.from(body)
+
+    const chunks: Uint8Array[] = []
+    for await (const chunk of body) chunks.push(Buffer.from(chunk))
+    return Buffer.concat(chunks)
+  }
+
+  function checkPreconditions(input: any, stored: { etag: string } | undefined): void {
+    if (input.IfNoneMatch === '*' && stored) {
+      throw precondition('At least one of the pre-conditions you specified did not hold')
+    }
+
+    if (input.IfMatch != null && (!stored || input.IfMatch !== `"${stored.etag}"`)) {
+      throw precondition('At least one of the pre-conditions you specified did not hold')
+    }
+  }
+
+  function noSuchUpload(): Error {
+    return Object.assign(new Error('The specified upload does not exist.'), {
+      name: 'NoSuchUpload',
+      $metadata: { httpStatusCode: 404 },
+    })
+  }
+
+  const send = vi.fn(async (command: any, options?: { abortSignal?: AbortSignal }) => {
     const name = command.constructor.name
     const input = command.input
     const stored = objects.get(input.Key)
 
-    if (name === 'PutObjectCommand') {
-      if (input.IfNoneMatch === '*' && stored) {
-        throw precondition('At least one of the pre-conditions you specified did not hold')
-      }
+    if (options?.abortSignal?.aborted) {
+      throw Object.assign(new Error('Request aborted'), { name: 'AbortError' })
+    }
 
-      if (input.IfMatch != null && (!stored || input.IfMatch !== `"${stored.etag}"`)) {
-        throw precondition('At least one of the pre-conditions you specified did not hold')
-      }
+    if (name === 'CreateMultipartUploadCommand') {
+      counter += 1
+      const uploadId = `upload-${counter}`
+      uploads.set(uploadId, {
+        key: input.Key,
+        contentType: input.ContentType,
+        metadata: input.Metadata,
+        parts: new Map(),
+      })
+
+      return { UploadId: uploadId }
+    }
+
+    if (name === 'UploadPartCommand') {
+      const upload = uploads.get(input.UploadId)
+      if (!upload || upload.key !== input.Key) throw noSuchUpload()
+
+      const body = await bytesOf(input.Body)
+      upload.parts.set(input.PartNumber, body)
+
+      return { ETag: `"part-${input.PartNumber}-${body.byteLength}"` }
+    }
+
+    if (name === 'CompleteMultipartUploadCommand') {
+      const upload = uploads.get(input.UploadId)
+      if (!upload || upload.key !== input.Key) throw noSuchUpload()
+
+      checkPreconditions(input, stored)
+
+      const listed: { PartNumber: number; ETag: string }[] = input.MultipartUpload?.Parts ?? []
+      const pieces = listed.map((part, index) => {
+        const body = upload.parts.get(part.PartNumber)
+        // S3 wants every listed part, in ascending order, with the ETag it
+        // handed out, and every part but the last at least 5 MiB.
+        if (!body || part.PartNumber !== index + 1 || part.ETag !== `"part-${part.PartNumber}-${body.byteLength}"`) {
+          throw Object.assign(new Error('One or more of the specified parts could not be found.'), {
+            name: 'InvalidPart',
+            $metadata: { httpStatusCode: 400 },
+          })
+        }
+
+        if (index < listed.length - 1 && body.byteLength < 5 * 1024 * 1024) {
+          throw Object.assign(new Error('Your proposed upload is smaller than the minimum allowed size.'), {
+            name: 'EntityTooSmall',
+            $metadata: { httpStatusCode: 400 },
+          })
+        }
+
+        return body
+      })
+
+      uploads.delete(input.UploadId)
+      counter += 1
+      const etag = `etag-${counter}-${listed.length}`
+      objects.set(input.Key, {
+        body: Buffer.concat(pieces),
+        contentType: upload.contentType,
+        metadata: upload.metadata,
+        etag,
+        lastModified: new Date(),
+      })
+
+      return { ETag: `"${etag}"` }
+    }
+
+    if (name === 'AbortMultipartUploadCommand') {
+      if (!uploads.delete(input.UploadId)) throw noSuchUpload()
+      return {}
+    }
+
+    if (name === 'PutObjectCommand') {
+      checkPreconditions(input, stored)
 
       counter += 1
       const etag = `etag-${counter}`
       objects.set(input.Key, {
-        body: Buffer.from(input.Body),
+        body: await bytesOf(input.Body),
         contentType: input.ContentType,
         metadata: input.Metadata,
         etag,
@@ -165,6 +263,7 @@ export function createMemoryClient() {
       },
     } as unknown as S3Client,
     objects,
+    uploads,
     send,
     /** Installs the lifecycle rules `GetBucketLifecycleConfiguration` reports. */
     setLifecycle(rules: Record<string, any>[] | undefined) {

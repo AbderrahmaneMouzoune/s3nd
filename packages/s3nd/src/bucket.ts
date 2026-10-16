@@ -8,11 +8,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import type { Readable } from 'node:stream'
 
-import { normalizeBody } from './body.js'
+import { normalizeBody, type NormalizedBody } from './body.js'
 import { createS3Client, resolveConfig } from './config.js'
 import { S3ndError } from '@s3nd/protocol'
 import { assertValidKey, encodeKey, generateKey, joinKey, normalizePrefix, sanitizeFilename } from './key.js'
 import { DEFAULT_CONTENT_TYPE, lookupContentType } from './mime.js'
+import { chunksOf, partsOf, SizeExceeded, slicesOf, uploadMultipart } from './multipart.js'
 import { decodeSnapshot, encodeSnapshot, ENVELOPE_VERSION } from './snapshot.js'
 import { createSyncCodes } from '@s3nd/protocol'
 import type {
@@ -91,6 +92,18 @@ function decodeMetadataValue(value: string | undefined): string | undefined {
   }
 }
 
+function tooLarge(size: number, maxSize: number): S3ndError {
+  return new S3ndError(
+    'FILE_TOO_LARGE',
+    `Upload is ${size} bytes, which exceeds the configured maxSize of ${maxSize} bytes.`,
+  )
+}
+
+async function* prepend<T>(head: T, rest: AsyncIterable<T>): AsyncGenerator<T> {
+  yield head
+  yield* rest
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const batches: T[][] = []
   for (let index = 0; index < items.length; index += size) {
@@ -140,23 +153,26 @@ export class Bucket {
   }
 
   /**
-   * Uploads a body to the bucket in a single `PutObject` request. Writing to a
-   * key that already exists replaces it — S3 has no distinct "update" call.
+   * Uploads a body to the bucket. Writing to a key that already exists replaces
+   * it — S3 has no distinct "update" call.
    *
-   * Note that the payload transits through your server, so it is bound by your
-   * runtime's request limit (6 MB on synchronous Lambda, 4.5 MB on Vercel
-   * serverless functions). Multipart upload for large files is planned for v0.2.
+   * A body up to `multipartThreshold` goes in one `PutObject`. Anything larger,
+   * and any stream without a `contentLength`, goes through a multipart upload
+   * cut in `partSize` pieces, so a stream of any size reaches S3 without being
+   * buffered whole and without its length being known upfront.
+   *
+   * Multipart does not raise your runtime's request limit, though: a body that
+   * reaches your server through a request is still bound by it (6 MB on
+   * synchronous Lambda, 4.5 MB on Vercel serverless functions).
    */
   async upload(body: UploadBody, options: UploadOptions = {}): Promise<UploadResult> {
     const normalized = await normalizeBody(body, options.contentLength)
-    const size = normalized.contentLength ?? options.contentLength
+    const declaredSize = normalized.contentLength
     const filename = options.filename ?? normalized.filename
+    const maxSize = this.config.maxSize
 
-    if (this.config.maxSize != null && size != null && size > this.config.maxSize) {
-      throw new S3ndError(
-        'FILE_TOO_LARGE',
-        `Upload is ${size} bytes, which exceeds the configured maxSize of ${this.config.maxSize} bytes.`,
-      )
+    if (maxSize != null && declaredSize != null && declaredSize > maxSize) {
+      throw tooLarge(declaredSize, maxSize)
     }
 
     const key = options.key ?? generateKey(filename)
@@ -176,33 +192,93 @@ export class Bucket {
       metadata[FILENAME_METADATA_KEY] = encodeURIComponent(filename)
     }
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: path,
-      Body: normalized.body,
+    const object = {
       ContentType: contentType,
-      ContentLength: size,
       CacheControl: options.cacheControl,
       ContentDisposition: options.contentDisposition,
       Metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       ACL: options.acl,
-      IfMatch: options.ifMatch ? quoteEtag(options.ifMatch) : undefined,
-      IfNoneMatch: options.ifAbsent ? '*' : undefined,
-    })
+    }
+    const ifMatch = options.ifMatch ? quoteEtag(options.ifMatch) : undefined
+    const ifNoneMatch = options.ifAbsent ? '*' : undefined
+
+    const putObject = async (payload: NormalizedBody['body'], size: number | undefined) => {
+      const response = await this.client.send(
+        new PutObjectCommand({
+          ...object,
+          Bucket: this.bucket,
+          Key: path,
+          Body: payload,
+          ContentLength: size,
+          IfMatch: ifMatch,
+          IfNoneMatch: ifNoneMatch,
+        }),
+        { abortSignal: options.signal },
+      )
+
+      return { etag: response.ETag?.replace(/"/g, ''), size }
+    }
+
+    const multipart = (parts: AsyncIterable<Uint8Array>) =>
+      uploadMultipart({
+        client: this.client,
+        bucket: this.bucket,
+        key: path,
+        create: object,
+        parts,
+        maxSize,
+        ifMatch,
+        ifNoneMatch,
+        signal: options.signal,
+      })
 
     try {
-      const response = await this.client.send(command, { abortSignal: options.signal })
+      let stored: { etag?: string; size?: number }
+
+      if (declaredSize != null && declaredSize <= this.config.multipartThreshold) {
+        stored = await putObject(normalized.body, declaredSize)
+      } else if (normalized.body instanceof Uint8Array) {
+        stored = await multipart(slicesOf(normalized.body, this.config.partSize))
+      } else {
+        const parts = partsOf(chunksOf(normalized.body), this.config.partSize)
+
+        if (declaredSize != null) {
+          stored = await multipart(parts)
+        } else {
+          // A stream of unknown length that ends inside its first part is a
+          // small body after all: one PutObject, no multipart round trips.
+          const first = await parts.next()
+          const head = first.done ? new Uint8Array(0) : first.value
+
+          if (head.byteLength < this.config.partSize) {
+            await parts.return(undefined)
+            if (maxSize != null && head.byteLength > maxSize) throw new SizeExceeded(maxSize)
+            stored = await putObject(head, head.byteLength)
+          } else {
+            stored = await multipart(prepend(head, parts))
+          }
+        }
+      }
 
       return {
         bucket: this.bucket,
         key,
         path,
         contentType,
-        size,
-        etag: response.ETag?.replace(/"/g, ''),
+        size: stored.size,
+        etag: stored.etag,
         url: this.publicUrlFor(path),
       }
     } catch (error) {
+      if (error instanceof S3ndError) throw error
+
+      if (error instanceof SizeExceeded) {
+        throw new S3ndError(
+          'FILE_TOO_LARGE',
+          `Upload exceeds the configured maxSize of ${error.limit} bytes; it was stopped and nothing was stored.`,
+        )
+      }
+
       if ((options.ifMatch != null || options.ifAbsent) && isPreconditionFailure(error)) {
         throw new S3ndError(
           'PRECONDITION_FAILED',

@@ -73,7 +73,40 @@ defeats gzip. Store blobs as objects and reference them by key — see
 **Presign the upload.** For a genuinely large database, have the browser talk to S3 directly so
 the bytes never touch your runtime. That needs CORS on the bucket, which is the thing s3nd
 otherwise saves you from — worth it above a certain size, not before. Today you build it over
-`store.client`; v0.2 makes it first-class, along with multipart.
+`store.client`.
+
+## Multipart, and what it does not change
+
+Between your server and S3 there is no ceiling. Above `multipartThreshold` (16 MiB by default),
+and for any stream whose length you do not pass, `upload()` switches to a multipart upload: the
+body is cut in `partSize` pieces (8 MiB by default, 5 MiB at least), up to four of them in flight
+at once. A stream of any size goes through without being held in memory and without its length
+being known upfront:
+
+```ts
+const store = createBucket({
+  bucket: process.env.S3_BUCKET,
+  multipartThreshold: 16 * 1024 * 1024, // the default
+  partSize: 8 * 1024 * 1024, // the default; memory stays around four parts
+})
+
+await store.upload(fs.createReadStream('export.ndjson'), { key: 'exports/2026-10.ndjson' })
+```
+
+`maxSize` still holds. A body of known size is refused before anything is sent; a stream is
+counted as it goes, and the upload is aborted the moment it passes the limit. An `ifAbsent` or
+`ifMatch` write is checked when the multipart upload completes, which is when the object comes
+into existence. A failure or an aborted `signal` sends `AbortMultipartUpload`, so the parts
+already sent stop costing you.
+
+What multipart does **not** do is raise your runtime's request limit. A Vercel function still
+cannot receive more than 4.5 MB in one request, so a browser still cannot post a 20 MB snapshot
+to your API in one call. Multipart lets your server stream a large body _to S3_; for the
+browser-to-server leg, presign the upload as above.
+
+A process killed halfway through a multipart upload cannot abort it. Its parts stay in the bucket
+and are billed until an `AbortIncompleteMultipartUpload` lifecycle rule removes them, which is
+why the rules below carry one.
 
 ## Storage cost
 
@@ -89,9 +122,16 @@ only grows. Put a lifecycle rule on the prefix and stop thinking about it:
       "Filter": { "Prefix": "snapshots/" },
       "Expiration": { "Days": 1 },
     },
+    {
+      "ID": "abort-incomplete-multipart-uploads",
+      "Status": "Enabled",
+      "Filter": {},
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 },
+    },
   ],
 }
 ```
 
-Per-account backups want a different rule, or none — keep them under their own prefix so the two
+The second rule cleans up after a multipart upload that never finished, see below. Per-account
+backups want a different expiry rule, or none — keep them under their own prefix so the two
 policies do not collide.

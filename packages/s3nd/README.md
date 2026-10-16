@@ -245,8 +245,8 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `PRECONDITION_FAILED`                                           | An `ifMatch` or `ifAbsent` write lost the race.                                                         |
 | `INVALID_KEY`                                                   | Empty key, leading or trailing `/`, `..` segment, backslash, over 1024 bytes.                           |
 | `INVALID_BODY`                                                  | Unsupported upload body type.                                                                           |
-| `MISSING_CONTENT_LENGTH`                                        | A stream uploaded without `contentLength`.                                                              |
-| `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`.                                                                    |
+| `MISSING_CONTENT_LENGTH`                                        | No longer raised: a stream without `contentLength` goes through multipart.                              |
+| `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`, known upfront or counted while streaming.                          |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
 
 Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
@@ -261,7 +261,14 @@ magnitude of headroom, and `maxSize` lets you refuse an oversized snapshot befor
 request.
 
 Above that, split the snapshot per object store, or presign an upload so the browser talks to S3
-directly. Both get first-class support in v0.2, along with multipart.
+directly.
+
+Between your server and S3 there is no ceiling: above `multipartThreshold` (16 MiB), and for any
+stream whose length you do not pass, `upload()` uses a multipart upload in `partSize` pieces
+(8 MiB), so a stream of any size goes through without being buffered whole. `maxSize` is counted
+while streaming, and a failed or aborted upload sends `AbortMultipartUpload`. Add an
+`AbortIncompleteMultipartUpload` lifecycle rule for the uploads a crashed process leaves behind.
+Multipart does not raise your runtime's request limit, though.
 
 ## Configuration
 
@@ -272,7 +279,9 @@ createBucket({
   credentials: { accessKeyId: '…', secretAccessKey: '…' }, // omit for the AWS provider chain
   endpoint: 'https://…', // S3-compatible storage, or S3ND_ENDPOINT / S3_ENDPOINT
   prefix: 'snapshots', // internal namespace, applied on the way in and out
-  maxSize: 5 * 1024 * 1024, // reject bigger writes before any network call
+  maxSize: 5 * 1024 * 1024, // reject bigger writes, counted while streaming
+  multipartThreshold: 16 * 1024 * 1024, // above this, a multipart upload
+  partSize: 8 * 1024 * 1024, // size of each part, 5 MiB at least
 })
 ```
 

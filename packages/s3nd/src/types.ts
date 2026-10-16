@@ -4,9 +4,8 @@ import type { Readable } from 'node:stream'
 import type { SyncCodeOptions } from '@s3nd/protocol'
 
 /**
- * Everything `upload()` accepts. Streams are part of the signature from v0.1
- * so adding multipart support later is not a breaking change — see the
- * `contentLength` note in `UploadOptions`.
+ * Everything `upload()` accepts. A stream does not need its length: without
+ * one, it goes through a multipart upload.
  */
 export type UploadBody = string | Uint8Array | ArrayBuffer | ArrayBufferView | Blob | Readable | ReadableStream
 
@@ -41,8 +40,23 @@ export interface BucketConfig {
   publicUrl?: string
   /** Prefix prepended to every key, e.g. `"uploads"` or `"tenant-42/avatars"`. */
   prefix?: string
-  /** Rejects uploads above this size, in bytes, before any network call. */
+  /**
+   * Rejects uploads above this size, in bytes: before any network call when
+   * the size is known, while streaming otherwise (the multipart upload is then
+   * aborted and nothing is stored).
+   */
   maxSize?: number
+  /**
+   * Bodies above this many bytes go through a multipart upload instead of a
+   * single `PutObject`. Default 16 MiB.
+   */
+  multipartThreshold?: number
+  /**
+   * Size of each multipart part, in bytes. At least 5 MiB, S3's floor; default
+   * 8 MiB. Up to four parts are in flight at once, so memory stays around four
+   * times this, whatever the size of the body.
+   */
+  partSize?: number
   /**
    * Shape of the codes `store.codes` produces and accepts. Defaults to eight
    * Crockford base32 characters.
@@ -61,6 +75,8 @@ export interface ResolvedConfig {
   publicUrl?: string
   prefix?: string
   maxSize?: number
+  multipartThreshold: number
+  partSize: number
   syncCode?: SyncCodeOptions
   client?: S3Client
 }
@@ -75,9 +91,10 @@ export interface UploadOptions {
   /** Overrides the detected content type. */
   contentType?: string
   /**
-   * Byte size of the body. Required for streams: a single `PutObject` cannot
-   * use chunked encoding. Ignored for buffers, strings and blobs, whose size
-   * is already known.
+   * Byte size of a stream body. Optional: a stream without it goes through a
+   * multipart upload, and a stream with it under `multipartThreshold` goes in
+   * one `PutObject`. Ignored for buffers, strings and blobs, whose size is
+   * already known.
    */
   contentLength?: number
   cacheControl?: string
@@ -109,7 +126,7 @@ export interface UploadResult {
   /** Full object key in the bucket, `prefix` included. */
   path: string
   contentType: string
-  /** Byte size, when known. */
+  /** Byte size: the one known upfront, or the one counted while streaming. */
   size?: number
   /** ETag without the surrounding quotes. */
   etag?: string

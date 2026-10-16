@@ -130,8 +130,10 @@ normalizeSyncCode('k7-qp2m4x') // "K7QP2M4X"
 
 ## `upload(body, options?)`
 
-Uploads a body in a single `PutObject`. Writing to a key that already exists replaces it — S3 has
-no separate update call.
+Uploads a body. Writing to a key that already exists replaces it — S3 has no separate update call.
+Up to `multipartThreshold` (16 MiB by default) the body goes in a single `PutObject`; above it, and
+for a stream without `contentLength`, it goes through a multipart upload, which is aborted on a
+failure or an aborted `signal`. See [How big can a snapshot be](/docs/limits).
 
 ```ts
 const result = await store.upload(file, { prefix: 'invoices' })
@@ -146,7 +148,7 @@ Node `Readable` or web `ReadableStream`.
 | `prefix`             | `string`                 | the bucket-level `prefix`                                                         |
 | `filename`           | `string`                 | the `File` name, when there is one                                                |
 | `contentType`        | `string`                 | the `File` type, else guessed from the extension, else `application/octet-stream` |
-| `contentLength`      | `number`                 | the body size — **required for streams**                                          |
+| `contentLength`      | `number`                 | the size of a stream, when you know it; without it, the stream is multipart       |
 | `cacheControl`       | `string`                 | —                                                                                 |
 | `contentDisposition` | `string`                 | —                                                                                 |
 | `metadata`           | `Record<string, string>` | —                                                                                 |
