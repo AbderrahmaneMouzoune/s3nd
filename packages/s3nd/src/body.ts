@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import { DEFAULT_CONTENT_TYPE } from './mime.js'
 import type { UploadBody } from './types.js'
 

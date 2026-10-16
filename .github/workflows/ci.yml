@@ -116,6 +116,61 @@ jobs:
 
       - run: bunx turbo test
 
+  integration:
+    name: Integration against MinIO
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # MinIO no longer publishes community images or binaries, so it is built
+      # from source at a pinned commit and cached; the runner ships Go.
+      MINIO_VERSION: v0.0.0-20260212201848-7aac2a2c5b7c
+      S3ND_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3ND_TEST_ACCESS_KEY: minioadmin
+      S3ND_TEST_SECRET_KEY: minioadmin
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Restore the MinIO build
+        id: minio-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/go/bin/minio
+          key: minio-${{ runner.os }}-${{ env.MINIO_VERSION }}
+
+      - name: Build MinIO
+        if: steps.minio-cache.outputs.cache-hit != 'true'
+        run: GOTOOLCHAIN=auto go install "github.com/minio/minio@${MINIO_VERSION}"
+
+      # Started in a step rather than as a service container: a service
+      # cannot take the `server` command MinIO needs.
+      - name: Start MinIO
+        env:
+          MINIO_ROOT_USER: ${{ env.S3ND_TEST_ACCESS_KEY }}
+          MINIO_ROOT_PASSWORD: ${{ env.S3ND_TEST_SECRET_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/minio"
+          nohup ~/go/bin/minio server "$RUNNER_TEMP/minio" --address 127.0.0.1:9000 > "$RUNNER_TEMP/minio.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS "$S3ND_TEST_ENDPOINT/minio/health/live" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/minio.log"
+          exit 1
+
+      - run: bun install --frozen-lockfile
+
+      - run: bunx turbo run test:integration --filter=@s3nd/core
+
   runtimes:
     name: Handler on Bun and Deno
     runs-on: ubuntu-latest

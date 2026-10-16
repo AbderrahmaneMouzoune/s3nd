@@ -77,8 +77,9 @@ describe('progress', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXhr)
 
     const fetchImpl = vi.fn()
+    vi.stubGlobal('fetch', fetchImpl)
     const seen: TransferProgress[] = []
-    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl, headers: { authorization: 'Bearer t' } })
+    const client = createTransferClient({ baseUrl: BASE, headers: { authorization: 'Bearer t' } })
 
     const created = await client.createFile({
       body: new Uint8Array(10),
@@ -90,6 +91,28 @@ describe('progress', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
     expect(sent[0]).toMatchObject({ method: 'POST', url: BASE, headers: { authorization: 'Bearer t' } })
     expect(seen.map((p) => p.loaded)).toEqual([0, 5, 10])
+  })
+
+  it('never bypasses a fetch of your own, even where XMLHttpRequest exists', async () => {
+    vi.stubGlobal(
+      'XMLHttpRequest',
+      class {
+        constructor() {
+          throw new Error('XMLHttpRequest should not be used')
+        }
+      },
+    )
+    const fetchImpl = vi.fn(async (input: unknown, init?: RequestInit) => {
+      await new Request(input as string, init).arrayBuffer()
+      return Response.json({ code: 'K7QP2M4X', kind: 'file', createdAt: 'x' }, { status: 201 })
+    })
+    const seen: TransferProgress[] = []
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl as unknown as typeof fetch })
+
+    await client.createFile({ body: new Uint8Array(10), filename: 'a', onProgress: (p) => seen.push(p) })
+
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(seen.at(-1)).toEqual({ loaded: 10, total: 10 })
   })
 
   it('aborts an XMLHttpRequest upload with the signal', async () => {
@@ -105,8 +128,9 @@ describe('progress', () => {
     }
     vi.stubGlobal('XMLHttpRequest', HangingXhr)
 
+    vi.stubGlobal('fetch', vi.fn())
     const controller = new AbortController()
-    const client = createTransferClient({ baseUrl: BASE, fetch: vi.fn() })
+    const client = createTransferClient({ baseUrl: BASE })
     const pending = client.createFile({
       body: new Uint8Array(1),
       filename: 'a',

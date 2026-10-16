@@ -36,6 +36,7 @@
   "files": [
     "dist",
     "README.md",
+    "PROTOCOL.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
@@ -54,9 +55,6 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
-  },
-  "dependencies": {
-    "nanoid": "^6.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

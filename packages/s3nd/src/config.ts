@@ -1,6 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3'
 
-import { S3ndError } from '@s3nd/protocol'
+import { S3ndError } from './errors.js'
 import { normalizePrefix } from './key.js'
 import { DEFAULT_MULTIPART_THRESHOLD, DEFAULT_PART_SIZE, MIN_PART_SIZE } from './multipart.js'
 import type { BucketConfig, ResolvedConfig } from './types.js'
@@ -92,6 +92,18 @@ export function createS3Client(config: ResolvedConfig): S3Client {
   return new S3Client({
     ...(config.region ? { region: config.region } : {}),
     ...(config.credentials ? { credentials: config.credentials } : {}),
-    ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: config.forcePathStyle } : {}),
+    ...(config.endpoint
+      ? {
+          endpoint: config.endpoint,
+          forcePathStyle: config.forcePathStyle,
+          // Since 3.729 the SDK adds a CRC32 checksum to every request, as a
+          // trailer on aws-chunked bodies, and validates the ones it gets back.
+          // R2 and older MinIO/Ceph builds reject or mangle that, and a custom
+          // endpoint already means "not AWS" here: send checksums only when an
+          // operation requires one. AWS itself keeps the SDK defaults.
+          requestChecksumCalculation: 'WHEN_REQUIRED' as const,
+          responseChecksumValidation: 'WHEN_REQUIRED' as const,
+        }
+      : {}),
   })
 }

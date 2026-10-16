@@ -78,7 +78,8 @@ That envelope is what makes a restore safe rather than hopeful. `getSnapshot()` 
   they are about to restore.
 
 Compression is on by default and is not a detail: an IndexedDB dump is repetitive JSON, so gzip
-routinely cuts it by 5 to 10×. That is headroom against the request limit of whatever runs your API.
+routinely cuts it by 5 to 10× in the bucket. `maxSize` measures those stored, gzipped bytes; the
+request that carries a snapshot to your API is plain JSON, and your platform limits it before s3nd runs.
 
 ## The routes, without writing them
 
@@ -113,8 +114,12 @@ CORS rule on the bucket for browsers, and a lifecycle rule on `pending/` for upl
 completes. `store.presignUpload(key, { contentLength })` is the building block, if you write your
 own routes.
 
-The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
-nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
+Every failure answers JSON. One the protocol has no name for (a throwing `authorize`, a failed S3
+call) answers `INTERNAL` with a generic message, so nothing about your bucket leaks; pass
+`onError: (error, request) => …` to log the real error.
+
+The browser half is a separate package, `@s3nd/protocol`, which has no runtime dependencies; no
+path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:
 
 ```ts
@@ -150,8 +155,8 @@ until a bill arrives. `put`, `get` and `rm` move files between machines with a c
 ## Sync codes
 
 `store.codes` pairs code generation with the normalization that reads codes back, so the two can
-never disagree about the alphabet. Codes are generated with
-[nanoid](https://github.com/ai/nanoid).
+never disagree about the alphabet. Codes are drawn from `crypto.getRandomValues`, with no bias
+toward any character.
 
 The default is eight characters of
 [Crockford base32](https://www.crockford.com/base32.html): no `I`, `L`, `O` or `U`, so a code
@@ -196,8 +201,27 @@ import { normalizeSyncCode } from '@s3nd/protocol'
 doing the work. If the data is sensitive, encrypt it in the browser before it ever reaches your
 server: `putSnapshot()` stores whatever you hand it, ciphertext included.
 
-Burning a code after a successful restore is a good habit, and there is no separate call for it:
-`store.delete(code)` is the whole of it.
+Burning a code after a successful restore is a good habit: `store.deleteSnapshot(code)` is the
+whole of it. To check a code without downloading the snapshot, `store.hasSnapshot(code)` answers
+from a `HeadObject` and treats an expired snapshot as gone.
+
+`expiresIn` is enforced on read; the object itself stays until a lifecycle rule removes it, and
+lifecycle rules count in days. Scope one to the snapshot prefix:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-transfer-snapshots",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "snapshots/" },
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}
+```
+
+On R2: `npx wrangler r2 bucket lifecycle add my-bucket expire-transfer-snapshots snapshots/ --expire-days 1`.
 
 ## Two devices, one snapshot
 
@@ -231,12 +255,22 @@ is not a snapshot, such as an attachment, an exported PDF or an avatar:
 await store.upload(file) // → { key, path, url?, size?, etag?, contentType }
 await store.put(id, file) // one file per identifier: create or replace
 await store.get(id) // → the file back, or null
+await store.head(id) // → size, type, ETag, metadata, without the body; or null
+await store.exists(id) // → boolean
 await store.getUrl(id) // → public or presigned URL
+await store.copy(from, to) // → server-side, no bytes through your runtime
+await store.move(from, to) // → copy, then delete the source
 await store.delete(id) // → void
+
+for await (const object of store.list({ prefix: 'snapshots' })) {
+  // paginated ListObjectsV2, one page at a time
+}
 ```
 
-Keys round-trip: what `upload()` returns is what you hand back to `get()`, `getUrl()` and
-`delete()`. The configured `prefix` is an internal namespace.
+Keys round-trip: what `upload()` and `list()` return is what you hand back to `get()`, `getUrl()`
+and `delete()`. The configured `prefix` is an internal namespace, and every method takes a
+per-call `prefix` that overrides it. `list()` needs `s3:ListBucket` on the bucket, which nothing
+else does.
 
 Anything the package does not wrap is one command away through `store.client`, which is the plain
 `S3Client`.
@@ -248,7 +282,6 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | Code                                                            | When                                                                                                    |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `INVALID_CONFIG`                                                | Missing bucket, `publicUrl` that is not an absolute URL, non-positive `maxSize`.                        |
-| `INVALID_SYNC_CODE`                                             | The code is empty, or holds characters outside the alphabet.                                            |
 | `INVALID_SNAPSHOT`                                              | Data JSON cannot represent, a stored object that is not a snapshot, or an envelope from a newer format. |
 | `SNAPSHOT_TOO_NEW`                                              | The snapshot's schema version is above the `maxVersion` given.                                          |
 | `PRECONDITION_FAILED`                                           | An `ifMatch` or `ifAbsent` write lost the race.                                                         |
@@ -257,6 +290,13 @@ Everything throws a `S3ndError` carrying a stable `code`, with the original erro
 | `MISSING_CONTENT_LENGTH`                                        | No longer raised: a stream without `contentLength` goes through multipart.                              |
 | `FILE_TOO_LARGE`                                                | Body above the configured `maxSize`, known upfront or counted while streaming.                          |
 | `UPLOAD_FAILED` / `GET_FAILED` / `DELETE_FAILED` / `URL_FAILED` | S3 rejected the request.                                                                                |
+| `LIST_FAILED` / `COPY_FAILED`                                   | S3 rejected a `list()` or `copy()`, or its arguments were invalid.                                      |
+
+A typed code that cannot exist is the one exception: `store.codes.normalize()` throws a
+`TransferError` with `INVALID_SYNC_CODE`, the protocol's own answer, which the handler sends as is.
+`TransferError` and `isTransferError` are re-exported here, so a server imports from one package.
+Both `isS3ndError` and `isTransferError` check a `Symbol.for('s3nd.error')` brand rather than
+`instanceof`, so they hold when an application ends up with two copies of a package.
 
 Failures that can be caught locally (a bad code, an oversized body, unserializable data) are
 raised before anything reaches the network.
@@ -294,8 +334,9 @@ createBucket({
 })
 ```
 
-With an `endpoint` set, `region` defaults to `"auto"` and path-style addressing is enabled, which is what
-R2, MinIO and Scaleway expect. Every option except `client` falls back to an environment variable,
+With an `endpoint` set, `region` defaults to `"auto"`, path-style addressing is enabled, and the
+AWS SDK's default checksums are only sent when an operation requires them, which is what R2, MinIO
+and Scaleway expect. Every option except `client` falls back to an environment variable,
 so `createBucket()` with no arguments works once `S3_BUCKET` and the usual `AWS_*` variables are
 set.
 

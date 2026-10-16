@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createTransferClient, TransferError } from '../src/index.js'
+import { createTransferClient, PROTOCOL_HEADER, PROTOCOL_VERSION, TransferError } from '../src/index.js'
 
 const BASE = 'http://drop.test/api/transfers'
 
@@ -28,6 +28,43 @@ describe('createTransferClient', () => {
     await client.createSnapshot({ data: 1 })
 
     expect((calls[0]!.init.headers as Record<string, string>).authorization).toBe('Bearer t')
+  })
+
+  it('announces the protocol version on every request', async () => {
+    const calls: RequestInit[] = []
+    const fetchImpl = vi.fn(async (_input: any, init: any) => {
+      calls.push(init)
+      return init.method === 'POST' ? created() : new Response(null, { status: 204 })
+    }) as unknown as typeof globalThis.fetch
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    await client.createSnapshot({ data: 1 })
+    await client.createFile({ body: new Uint8Array([1]), filename: 'a.txt' })
+    await client.remove('K7QP2M4X')
+
+    expect(calls).toHaveLength(3)
+    for (const init of calls) {
+      expect((init.headers as Record<string, string>)[PROTOCOL_HEADER]).toBe(String(PROTOCOL_VERSION))
+    }
+    expect(PROTOCOL_HEADER).toBe('s3nd-protocol')
+  })
+
+  it('keeps its own version header over a configured one', async () => {
+    const { fetchImpl, calls } = stubFetch(created())
+    const client = createTransferClient({ baseUrl: BASE, headers: { 's3nd-protocol': '9' }, fetch: fetchImpl })
+
+    await client.createSnapshot({ data: 1 })
+
+    expect((calls[0]!.init.headers as Record<string, string>)['s3nd-protocol']).toBe('1')
+  })
+
+  it('surfaces UNSUPPORTED_PROTOCOL as a TransferError', async () => {
+    const { fetchImpl } = stubFetch(
+      Response.json({ error: { code: 'UNSUPPORTED_PROTOCOL', message: 'Speaks 1.' } }, { status: 400 }),
+    )
+    const client = createTransferClient({ baseUrl: BASE, fetch: fetchImpl })
+
+    await expect(client.read('K7QP2M4X')).rejects.toMatchObject({ code: 'UNSUPPORTED_PROTOCOL', status: 400 })
   })
 
   it('percent-encodes the filename into the header', async () => {

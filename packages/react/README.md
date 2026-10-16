@@ -17,10 +17,10 @@ npm install @s3nd/react
 ```
 
 **It never sees a storage credential, and never pulls a storage client.** Its whole dependency tree
-is `@s3nd/protocol` and `nanoid`, with React as a peer; the AWS SDK stays on your server,
+is `@s3nd/protocol`, with React as a peer; the AWS SDK stays on your server,
 where `@s3nd/core` runs. That separation is the reason this is its own package.
 
-React 18 or later. Every export is a client hook, and the build carries `'use client'`, so it drops
+React 18 or 19, Node 20 or later. Every export is a client hook, and the build carries `'use client'`, so it drops
 straight into the Next.js App Router.
 
 ## Setting it up
@@ -121,14 +121,17 @@ useSyncCodeInput({ length: 4, alphabet: '0123456789' }) // inputProps.inputMode 
 
 ## What each hook gives back
 
-| Hook                   |                                                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `progress`, `status`, `isPending`, `error`, `reset`                              |
-| `useReceiveTransfer()` | `load`, `loadBytes`, `progress`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
-| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                                        |
-| `useTransferClient()`  | the underlying client, for anything the hooks do not cover                                                       |
+| Hook                   |                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `progress`, `status`, `isPending`, `error`, `reset`                                       |
+| `useReceiveTransfer()` | `load`, `loadBytes`, `progress`, `burn`, `transfer`, `bytes`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
+| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                                                 |
+| `useTransferClient()`  | the underlying client, for anything the hooks do not cover                                                                |
 
-`status` is `'idle' | 'pending' | 'success' | 'error'`.
+`status` is `'idle' | 'pending' | 'success' | 'error'`. On the receiving side, `load`, `loadBytes`
+and `burn` share it, along with `isPending` and `error`: it describes whatever the device is doing
+now, so a large download shows as pending and a failed burn lands in `error`. `loadBytes` keeps
+its result in `bytes` and leaves `transfer` and `data` alone.
 
 Every call aborts the one before it, a late reply from a superseded call is dropped rather than
 published, and nothing is written after unmount, so a user hammering a button does not end up with

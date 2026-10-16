@@ -13,9 +13,8 @@
  */
 export { createTransferClient } from './client.js'
 export { isTransferError, parseTransferErrorBody, TransferError } from './transfer-error.js'
-export { S3ndError, isS3ndError, type S3ndErrorCode } from './s3nd-error.js'
 export { createSyncCode, createSyncCodes, normalizeSyncCode, syncCodeAlphabets } from './sync-code.js'
-export { FILENAME_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from './types.js'
+export { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from './types.js'
 export type {
   CreatedTransfer,
   CreateSnapshotBody,

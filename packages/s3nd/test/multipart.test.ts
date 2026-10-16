@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createBucket } from '../src/bucket.js'
 import { partsOf } from '../src/multipart.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 import { clearBucketEnv, createMemoryClient } from './helpers.js'
 
 beforeEach(clearBucketEnv)

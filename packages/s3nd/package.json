@@ -55,9 +55,10 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "smoke": "node smoke/handler.mjs && bun smoke/handler.mjs",
-    "test:watch": "vitest",
+    "test:watch": "vitest --project unit",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

@@ -1,6 +1,6 @@
-import { parseTransferErrorBody, TransferError } from './transfer-error.js'
+import { isTransferError, parseTransferErrorBody, TransferError } from './transfer-error.js'
 import { readCounted, sizeOf, transmit, type Incoming } from './transport.js'
-import { FILENAME_HEADER } from './types.js'
+import { FILENAME_HEADER, PROTOCOL_HEADER, PROTOCOL_VERSION } from './types.js'
 import type {
   CreatedTransfer,
   CreateSnapshotBody,
@@ -24,7 +24,11 @@ export interface TransferClientConfig {
    * or a same-origin `/api/transfers`.
    */
   baseUrl: string
-  /** Sent on every request — an API key, a session cookie header, a bearer token. */
+  /**
+   * Sent on every request — an API key, a session cookie header, a bearer
+   * token. The `s3nd-protocol` header is the client's own and cannot be
+   * overridden here.
+   */
   headers?: Record<string, string>
   /**
    * Swap the implementation in tests, or to add retries. Defaults to global
@@ -57,8 +61,10 @@ export interface CreateFileInput {
    */
   size?: number
   /**
-   * Called as the bytes go out. In a browser the upload then goes through
-   * `XMLHttpRequest`, the only API that reports upload progress.
+   * Called as the bytes go out. In a browser, with the global `fetch`, the
+   * upload then goes through `XMLHttpRequest`, the only API that reports
+   * upload progress. With a `fetch` of your own, it is used, and the body is
+   * counted as it is read.
    */
   onProgress?: (progress: TransferProgress) => void
   signal?: AbortSignal
@@ -132,7 +138,13 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
   async function send(path: string, init: RequestInit): Promise<Response> {
     const response = await doFetch(joinUrl(config.baseUrl, path), {
       ...init,
-      headers: { ...baseHeaders, ...(init.headers as Record<string, string> | undefined) },
+      headers: {
+        ...baseHeaders,
+        ...(init.headers as Record<string, string> | undefined),
+        // Lets a server refuse a version it does not speak, rather than
+        // misreading a payload whose shape it does not know.
+        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
+      },
     })
 
     if (!response.ok) throw await toTransferError(response)
@@ -163,7 +175,7 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
     } catch (error) {
       // A server in proxy mode, or one older than presigned uploads, reads
       // this as a malformed request. Only `auto` treats that as an answer.
-      if (config.upload === 'auto' && error instanceof TransferError && error.code === 'INVALID_REQUEST') {
+      if (config.upload === 'auto' && isTransferError(error) && error.code === 'INVALID_REQUEST') {
         presignRefused = true
         return null
       }
@@ -181,6 +193,7 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
       size,
       signal: input.signal,
       onProgress: input.onProgress,
+      allowXhr: config.fetch == null,
     })
 
     if (!put.ok) {
@@ -208,11 +221,13 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
         ...baseHeaders,
         'content-type': input.contentType ?? 'application/octet-stream',
         [FILENAME_HEADER]: encodeURIComponent(input.filename),
+        [PROTOCOL_HEADER]: String(PROTOCOL_VERSION),
       },
       body: input.body,
       size,
       signal: input.signal,
       onProgress: input.onProgress,
+      allowXhr: config.fetch == null,
     })
 
     if (!response.ok) throw await toTransferError(response)
@@ -225,7 +240,7 @@ export function createTransferClient(config: TransferClientConfig): TransferClie
     try {
       return await send(path, init)
     } catch (error) {
-      if (error instanceof TransferError && error.code === 'NOT_FOUND') return null
+      if (isTransferError(error) && error.code === 'NOT_FOUND') return null
       throw error
     }
   }

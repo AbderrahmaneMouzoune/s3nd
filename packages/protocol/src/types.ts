@@ -12,8 +12,20 @@
  * contract and its client safe to bundle for a browser.
  */
 
-/** Bumped only when the routes or payloads below change shape. */
+/**
+ * Bumped only when the routes or payloads below change shape. Additions that
+ * an older peer can ignore (a new optional field, a new error code) do not
+ * bump it. `PROTOCOL.md` next to this package is the normative text.
+ */
 export const PROTOCOL_VERSION = 1
+
+/**
+ * Carries `PROTOCOL_VERSION` both ways: a client sends it on every request, a
+ * server sets it on every response, errors included. A server refuses a
+ * request announcing a version it does not speak, and accepts one without the
+ * header, which is how a 0.x client talks.
+ */
+export const PROTOCOL_HEADER = 's3nd-protocol'
 
 /** Header a raw upload uses to carry the original filename. */
 export const FILENAME_HEADER = 'x-s3nd-filename'
@@ -43,6 +55,7 @@ export type TransferErrorCode =
   | 'CODE_TAKEN'
   | 'SNAPSHOT_TOO_NEW'
   | 'TOO_LARGE'
+  | 'UNSUPPORTED_PROTOCOL'
   | 'INTERNAL'
 
 /** The body of every non-2xx response. */
@@ -137,5 +150,6 @@ export const TRANSFER_ERROR_STATUS: Record<TransferErrorCode, number> = {
   CODE_TAKEN: 409,
   SNAPSHOT_TOO_NEW: 409,
   TOO_LARGE: 413,
+  UNSUPPORTED_PROTOCOL: 400,
   INTERNAL: 500,
 }

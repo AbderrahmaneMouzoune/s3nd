@@ -2,29 +2,38 @@ export { Bucket, createBucket } from './bucket.js'
 export { createTransferHandler } from './handler.js'
 export type { TransferHandler, TransferHandlerConfig } from './handler.js'
 
+export { S3ndError, isS3ndError, type S3ndErrorCode } from './errors.js'
+
 /**
- * Re-exported from `@s3nd/protocol`, which owns them: they are shared
- * with the React package and the CLI, and forwarding rather than redefining is
- * what keeps `instanceof S3ndError` true across package boundaries.
- *
- * They were part of s3nd@0.1.0's surface, so they stay on it.
+ * Re-exported from `@s3nd/protocol`, which owns them, so a server imports from
+ * one package only. A sync code that cannot be read throws `TransferError`
+ * with `INVALID_SYNC_CODE`, the same error a client gets from the server, and
+ * the handler answers it as is.
  */
 export {
-  S3ndError,
+  TransferError,
   createSyncCode,
   createSyncCodes,
-  isS3ndError,
+  isTransferError,
   normalizeSyncCode,
   syncCodeAlphabets,
-  type S3ndErrorCode,
+  type TransferErrorCode,
 } from '@s3nd/protocol'
 
 export type {
   BucketConfig,
   BucketCredentials,
+  CopyOptions,
+  CopyResult,
+  DeleteOptions,
+  DeleteSnapshotOptions,
   GetOptions,
   GetSnapshotOptions,
   GetUrlOptions,
+  HasSnapshotOptions,
+  HeadOptions,
+  ListedObject,
+  ListOptions,
   PresignedPut,
   PresignUploadOptions,
   PutOptions,
@@ -33,6 +42,7 @@ export type {
   SnapshotEnvelope,
   SnapshotResult,
   StoredFile,
+  StoredFileInfo,
   SyncCodeOptions,
   SyncCodes,
   UploadBody,

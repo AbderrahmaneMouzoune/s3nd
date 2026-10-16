@@ -42,6 +42,9 @@
     "LICENSE"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -58,7 +61,7 @@
     "@s3nd/protocol": "^0.1.1"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18 <20"
   },
   "devDependencies": {
     "@testing-library/react": "^16.1.0",

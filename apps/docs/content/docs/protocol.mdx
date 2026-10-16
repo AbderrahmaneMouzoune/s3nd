@@ -11,6 +11,13 @@ that answers these routes, not only against `createTransferHandler()`. A server 
 Rails works with every s3nd client. And the CLI pointed at `--remote` cannot tell which of
 those it is talking to — which is exactly why `s3nd put` works against your own deployment.
 
+<Callout>
+  This page is a tour. The normative text is
+  [`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md), shipped in
+  `@s3nd/protocol`: when you implement a server or a client, follow that one. Where the two disagree, `PROTOCOL.md`
+  wins.
+</Callout>
+
 ## Serving it
 
 ```ts title="app/api/transfers/[[...route]]/route.ts"
@@ -53,12 +60,28 @@ const { code } = await transfers.createSnapshot({ data: state, version: 3 })
 const incoming = await transfers.read(typedCode) // null when unknown or expired
 ```
 
-`@s3nd/protocol` is `fetch` and nothing else. Its whole dependency tree is nanoid, and no
+`@s3nd/protocol` is `fetch` and nothing else. It has no runtime dependencies, and no
 path from it reaches the AWS SDK — so it bundles for a browser, a worker or React Native without
 dragging a storage client along. That is the reason it is a separate package rather than a subpath
 of `s3nd`: a subpath would have put the SDK in every front-end's `node_modules`.
 
 In React you rarely call it directly — [the hooks](/docs/react) wrap it.
+
+## The version header
+
+Every request a client sends carries `s3nd-protocol: 1`, and every response the handler sends
+carries it back, errors included. A request announcing a newer version is refused with
+`UNSUPPORTED_PROTOCOL` before anything reads its body, so a future client learns it is talking to
+an older server instead of being misread. A request without the header is answered as version 1,
+which is what clients from before the header speak.
+
+```ts
+import { PROTOCOL_HEADER, PROTOCOL_VERSION } from '@s3nd/protocol'
+// 's3nd-protocol', 1
+```
+
+A new optional field or a new error code does not bump the version; clients ignore fields they do
+not know and treat an unknown error code as `INTERNAL`.
 
 ## The routes
 
@@ -68,11 +91,17 @@ All of them are relative to wherever you mounted the handler, `/api/transfers` b
 
 Creates a transfer and returns the code. What you send decides what it holds.
 
-With `Content-Type: application/json`, the body is `{ data, version?, device? }` and the transfer
-is a **snapshot** — structured state, handed back inline on read.
+The server decides what the transfer is, in this order:
 
-With any other content type, the body is the raw bytes and the transfer is a **file**. The original
-filename travels percent-encoded in `X-S3nd-Filename`.
+1. **`X-S3nd-Filename` present**: a **file**, whatever the `Content-Type`. The body is the raw
+   bytes, and the header carries the original filename, percent-encoded. A `.json` file is sent
+   as `application/json` and stays a file.
+2. **Otherwise, `Content-Type: application/json`**: a **snapshot**. The body is
+   `{ data, version?, device? }`, structured state handed back inline on read.
+3. **Otherwise**: a **file** named `file`.
+
+`createFile()` always sends the filename and `createSnapshot()` never does, so a client built on
+`@s3nd/protocol` lands on the right side without thinking about it.
 
 ```json title="201"
 { "code": "K7QP2M4X", "kind": "snapshot", "createdAt": "…", "expiresAt": "…", "size": 412 }
@@ -105,9 +134,16 @@ or dashes, `O` where they meant `0` — resolves to the same transfer. See
 
 ### `GET /:code/raw`
 
-The bytes, with the stored `Content-Type` and a `Content-Disposition` carrying the filename. With
-`raw: 'redirect'` the handler answers `302` with a presigned URL instead, so the payload never
-transits your server twice.
+The bytes of a file, with the stored `Content-Type` and a `Content-Disposition` carrying the
+filename. With `raw: 'redirect'` the handler answers `302` with a presigned URL instead, so the
+payload never transits your server twice.
+
+`/raw` serves files only: on a snapshot code it answers `NOT_FOUND`. A snapshot's state comes from
+`GET /:code`.
+
+Files only. A snapshot has no raw form, so its code answers `404 NOT_FOUND` with the same body as
+an unknown or expired code: `/raw` says nothing about what a code holds. A snapshot's state comes
+from `GET /:code`.
 
 ### `DELETE /:code`
 
@@ -129,22 +165,23 @@ MUST check, is in
 
 ## Errors
 
-Every non-2xx answer carries the same body:
+Every non-2xx answer carries the same body, unexpected failures included:
 
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Unknown or expired code." } }
 ```
 
-| `code`              | HTTP  | What happened                                        |
-| ------------------- | ----- | ---------------------------------------------------- |
-| `INVALID_REQUEST`   | `400` | Malformed body, or a method the route does not serve |
-| `INVALID_SYNC_CODE` | `400` | What was typed cannot be a code in this alphabet     |
-| `UNAUTHORIZED`      | `401` | `authorize` refused                                  |
-| `NOT_FOUND`         | `404` | No such code — or it expired                         |
-| `CODE_TAKEN`        | `409` | No free code found; vanishingly unlikely at 40 bits  |
-| `SNAPSHOT_TOO_NEW`  | `409` | Written by a newer schema than this deployment reads |
-| `TOO_LARGE`         | `413` | Over the configured `maxSize`                        |
-| `INTERNAL`          | `500` | Anything else                                        |
+| `code`                 | HTTP  | What happened                                                        |
+| ---------------------- | ----- | -------------------------------------------------------------------- |
+| `INVALID_REQUEST`      | `400` | Malformed body, or a method the route does not serve                 |
+| `INVALID_SYNC_CODE`    | `400` | What was typed cannot be a code in this alphabet                     |
+| `UNSUPPORTED_PROTOCOL` | `400` | The request announced a newer protocol version                       |
+| `UNAUTHORIZED`         | `401` | `authorize` refused                                                  |
+| `NOT_FOUND`            | `404` | No such code — or it expired                                         |
+| `CODE_TAKEN`           | `409` | No free code found; vanishingly unlikely at 40 bits                  |
+| `SNAPSHOT_TOO_NEW`     | `409` | Written by a newer schema than this deployment reads                 |
+| `TOO_LARGE`            | `413` | Over the configured `maxSize`, refused before the whole body is read |
+| `INTERNAL`             | `500` | Anything else                                                        |
 
 `NOT_FOUND` deliberately covers expiry as well as absence. Distinguishing them would let someone
 probe which codes have been used.

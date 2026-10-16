@@ -14,6 +14,11 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["S3ND_TEST_*"]
+    },
     "type-check": {
       "dependsOn": ["^build"]
     },

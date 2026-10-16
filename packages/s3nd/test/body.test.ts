@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 
 import { normalizeBody } from '../src/body.js'
-import type { S3ndError } from '@s3nd/protocol'
+import type { S3ndError } from '../src/errors.js'
 
 describe('normalizeBody', () => {
   it('rejects a missing body', async () => {

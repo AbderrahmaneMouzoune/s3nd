@@ -161,6 +161,87 @@ describe('runChecks', () => {
     expect(find(checks, 'Expiry cleanup').status).toBe('ok')
   })
 
+  it('reads the prefix of a rule filtered with And', async () => {
+    const memory = createDoctorClient()
+    memory.setLifecycle([
+      {
+        Status: 'Enabled',
+        Expiration: { Days: 1 },
+        Filter: { And: { Prefix: 'transfers/', ObjectSizeGreaterThan: 0 } },
+      },
+    ])
+
+    const checks = await runChecks(
+      createBucket({ bucket: 'b', prefix: 'transfers', client: memory.client }),
+      'transfers',
+    )
+
+    expect(find(checks, 'Expiry cleanup')).toMatchObject({ status: 'ok', detail: 'expires after 1 day(s)' })
+  })
+
+  it('does not read an And rule on another prefix as covering the whole bucket', async () => {
+    const memory = createDoctorClient()
+    memory.setLifecycle([
+      { Status: 'Enabled', Expiration: { Days: 1 }, Filter: { And: { Prefix: 'logs/', ObjectSizeLessThan: 10 } } },
+    ])
+
+    const checks = await runChecks(createBucket({ bucket: 'b', client: memory.client }))
+
+    expect(find(checks, 'Expiry cleanup').status).toBe('warn')
+  })
+
+  it('treats a rule filtered by tag as not covering, and says why', async () => {
+    const memory = createDoctorClient()
+    memory.setLifecycle([
+      { Status: 'Enabled', Expiration: { Days: 1 }, Filter: { Tag: { Key: 'temp', Value: 'yes' } } },
+      {
+        Status: 'Enabled',
+        Expiration: { Days: 1 },
+        Filter: { And: { Prefix: 'transfers/', Tags: [{ Key: 'temp', Value: 'yes' }] } },
+      },
+    ])
+
+    const checks = await runChecks(
+      createBucket({ bucket: 'b', prefix: 'transfers', client: memory.client }),
+      'transfers',
+    )
+
+    const lifecycle = find(checks, 'Expiry cleanup')
+    expect(lifecycle.status).toBe('warn')
+    expect(lifecycle.detail).toContain('tags')
+    expect(lifecycle.fix).toContain('Leave tags out')
+  })
+
+  it('matches a rule prefix with or without its trailing slash', async () => {
+    for (const [rulePrefix, configured] of [
+      ['transfers/', 'transfers'],
+      ['transfers', 'transfers/'],
+      ['transfers/', '/transfers/'],
+    ]) {
+      const memory = createDoctorClient()
+      memory.setLifecycle([{ Status: 'Enabled', Expiration: { Days: 1 }, Filter: { Prefix: rulePrefix } }])
+
+      const checks = await runChecks(
+        createBucket({ bucket: 'b', prefix: configured, client: memory.client }),
+        configured,
+      )
+
+      expect(find(checks, 'Expiry cleanup').status, `${rulePrefix} vs ${configured}`).toBe('ok')
+    }
+  })
+
+  it('does not take a sibling prefix for the one in use', async () => {
+    const memory = createDoctorClient()
+    memory.setLifecycle([{ Status: 'Enabled', Expiration: { Days: 1 }, Filter: { Prefix: 'transfers-old/' } }])
+
+    const checks = await runChecks(
+      createBucket({ bucket: 'b', prefix: 'transfers', client: memory.client }),
+      'transfers',
+    )
+
+    expect(find(checks, 'Expiry cleanup').status).toBe('warn')
+  })
+
   it('ignores a disabled rule', async () => {
     const memory = createDoctorClient()
     memory.setLifecycle([{ Status: 'Disabled', Expiration: { Days: 1 }, Filter: { Prefix: '' } }])

@@ -1,6 +1,13 @@
 import type { Bucket } from './bucket.js'
-import { S3ndError, isS3ndError } from '@s3nd/protocol'
-import { FILENAME_HEADER, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
+import { S3ndError, isS3ndError } from './errors.js'
+import {
+  FILENAME_HEADER,
+  isTransferError,
+  PROTOCOL_HEADER,
+  PROTOCOL_VERSION,
+  TRANSFER_ERROR_STATUS,
+  TransferError,
+} from '@s3nd/protocol'
 import type {
   CreatedTransfer,
   CreateSnapshotBody,
@@ -79,6 +86,13 @@ export interface TransferHandlerConfig {
   upload?: UploadMode
   /** Lifetime of a presigned upload URL, in seconds. Defaults to 15 minutes. */
   presignExpiresIn?: number
+  /**
+   * Called with any error that answers `INTERNAL`: a throwing `authorize`, a
+   * failed S3 call, a network error, a corrupt stored snapshot. The client only
+   * sees a generic `INTERNAL`, since the raw message can name a bucket or an
+   * SDK internal, so this is where to log it. An error thrown here is ignored.
+   */
+  onError?: (error: unknown, request: Request) => void
 }
 
 export interface TransferHandler {
@@ -107,13 +121,15 @@ function fail(code: TransferErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status: TRANSFER_ERROR_STATUS[code] })
 }
 
-/** Every S3ndError that means something to a client gets its own code. */
-function fromS3ndError(error: S3ndError): Response {
+/**
+ * Every S3ndError that means something to a client gets its own code. The rest
+ * (a failed S3 call, a corrupt envelope) is the server's problem: `null` sends
+ * it to the same net as an unexpected exception.
+ */
+function fromS3ndError(error: S3ndError): Response | null {
   switch (error.code) {
     case 'FILE_TOO_LARGE':
       return fail('TOO_LARGE', error.message)
-    case 'INVALID_SYNC_CODE':
-      return fail('INVALID_SYNC_CODE', error.message)
     case 'SNAPSHOT_TOO_NEW':
       return fail('SNAPSHOT_TOO_NEW', error.message)
     case 'PRECONDITION_FAILED':
@@ -121,7 +137,39 @@ function fromS3ndError(error: S3ndError): Response {
     case 'INVALID_KEY':
       return fail('INVALID_SYNC_CODE', error.message)
     default:
-      return fail('INTERNAL', error.message)
+      return null
+  }
+}
+
+/**
+ * Whether a request speaks a protocol version this handler can answer. No
+ * header is a yes: that is a 0.x client, which spoke version 1 without saying
+ * so. Anything that is not a whole number at most `PROTOCOL_VERSION` is a no.
+ */
+function speaksOurVersion(request: Request): boolean {
+  const announced = request.headers.get(PROTOCOL_HEADER)
+  if (announced === null) return true
+
+  const trimmed = announced.trim()
+  return /^\d+$/.test(trimmed) && Number(trimmed) <= PROTOCOL_VERSION
+}
+
+/**
+ * Stamps the protocol version on a response. Some responses have immutable
+ * headers (`Response.redirect`, or whatever `authorize` built), so those are
+ * rebuilt around the same body rather than mutated.
+ */
+function withProtocolVersion(response: Response): Response {
+  const version = String(PROTOCOL_VERSION)
+
+  try {
+    response.headers.set(PROTOCOL_HEADER, version)
+    return response
+  } catch {
+    const headers = new Headers(response.headers)
+    headers.set(PROTOCOL_HEADER, version)
+
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
   }
 }
 
@@ -216,7 +264,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       .slice(basePath.length)
       .split('/')
       .filter((segment) => segment.length > 0)
-      .map(decodeURIComponent)
+      .map((segment) => {
+        try {
+          return decodeURIComponent(segment)
+        } catch {
+          // A stray `%E0` is a code nobody could have been handed, not a crash.
+          throw new TransferError('INVALID_SYNC_CODE', 'The code in the path is not validly encoded.')
+        }
+      })
   }
 
   function normalize(raw: string): string {
@@ -532,6 +587,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const file = await bucket.get(code)
     if (!file) return fail('NOT_FOUND', 'Unknown or expired code.')
 
+    // A snapshot's bytes are its gzipped envelope, and its expiry lives inside
+    // that envelope where this route cannot see it. It has no raw form: answer
+    // exactly as for an unknown code, so /raw says nothing about what a code holds.
+    if (file.metadata[KIND_METADATA_KEY] !== 'file') {
+      discard(file.body)
+      return fail('NOT_FOUND', 'Unknown or expired code.')
+    }
+
     const expiresAt = file.metadata[EXPIRES_METADATA_KEY]
     if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
       discard(file.body)
@@ -551,6 +614,15 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const segments = segmentsOf(request)
     if (segments === null) return fail('NOT_FOUND', 'No transfer route matches this path.')
 
+    // Before authorize: a client from the future should learn that much
+    // whatever its credentials, and nothing below may read its payload.
+    if (!speaksOurVersion(request)) {
+      return fail(
+        'UNSUPPORTED_PROTOCOL',
+        `This server speaks s3nd protocol version ${PROTOCOL_VERSION}; the request announced "${request.headers.get(PROTOCOL_HEADER)?.slice(0, 32)}".`,
+      )
+    }
+
     if (config.authorize) {
       const allowed = await config.authorize(request)
       if (allowed instanceof Response) return allowed
@@ -564,18 +636,17 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (rawCode === undefined) {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
 
+      // A filename means a file, whatever its type: a `.json` picked from a
+      // file input is sent as `application/json`, and is still a file. Only a
+      // nameless JSON body is a snapshot.
+      if (request.headers.has(FILENAME_HEADER)) return createFile(request)
+
       return (request.headers.get('content-type') ?? '').includes('application/json')
         ? createFromJson(request)
         : createFile(request)
     }
 
-    let code: string
-    try {
-      code = normalize(rawCode)
-    } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
-      throw error
-    }
+    const code = normalize(rawCode)
 
     if (tail === 'complete') {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
@@ -593,7 +664,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
     if (request.method === 'DELETE') {
       // A pending upload under the code is burned with it.
-      await bucket.delete(code)
+      await bucket.deleteSnapshot(code)
       if (uploadMode !== 'proxy') await bucket.delete(pendingKey(code))
       return new Response(null, { status: 204 })
     }
@@ -601,13 +672,32 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
   }
 
-  const handler = async (request: Request): Promise<Response> => {
+  const handler = async (request: Request): Promise<Response> => withProtocolVersion(await answer(request))
+
+  async function answer(request: Request): Promise<Response> {
     try {
       return await route(request)
     } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
+      // A TransferError raised here is already an answer: a code the sync code
+      // rules refused, or a path that cannot hold one.
+      if (isTransferError(error)) return fail(error.code, error.message)
 
-      throw error
+      const named = isS3ndError(error) ? fromS3ndError(error) : null
+      if (named) return named
+
+      // The protocol promises a JSON error body on every failure, so nothing
+      // leaves as a bare framework 500. The message stays generic: the raw one,
+      // a wrapped S3 failure's included, can carry a bucket name or SDK internals.
+      try {
+        // An async logger type-checks as `void` too; its rejection is swallowed
+        // here rather than surfacing as an unhandled one.
+        const logged = config.onError?.(error, request) as unknown
+        if (logged instanceof Promise) logged.catch(() => undefined)
+      } catch {
+        // A logger that throws must not cost the client its answer.
+      }
+
+      return fail('INTERNAL', 'Internal error.')
     }
   }
 

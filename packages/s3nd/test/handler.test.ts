@@ -164,6 +164,34 @@ describe('createTransferHandler — files', () => {
     expect(metadata.filename).toBe('file')
   })
 
+  it('keeps a JSON file a file, even one with a top-level `data` key', async () => {
+    const { handler } = setup()
+    const json = new TextEncoder().encode('{"data":{"secret":true}}')
+
+    const response = await handler(postFile(json, 'export.json', 'application/json'))
+    expect(response.status).toBe(201)
+
+    const { code, kind } = await response.json()
+    expect(kind).toBe('file')
+
+    const metadata = await (await handler(new Request(`${BASE}/${code}`))).json()
+    expect(metadata).toMatchObject({ kind: 'file', filename: 'export.json', contentType: 'application/json' })
+    expect(metadata.data).toBeUndefined()
+
+    const raw = await handler(new Request(`${BASE}/${code}/raw`))
+    expect(new Uint8Array(await raw.arrayBuffer())).toEqual(json)
+  })
+
+  it('stores a nameless body that is not JSON as a file named `file`', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(BASE, { method: 'POST', body: 'plain bytes' }))
+    const { code, kind } = await response.json()
+    expect(kind).toBe('file')
+
+    expect((await (await handler(new Request(`${BASE}/${code}`))).json()).filename).toBe('file')
+  })
+
   it('rejects an empty body', async () => {
     const { handler } = setup()
 
@@ -215,6 +243,36 @@ describe('createTransferHandler — lifecycle', () => {
   })
 })
 
+describe('createTransferHandler — raw', () => {
+  it('answers a snapshot code on /raw exactly as an unknown one', async () => {
+    const { handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: { secret: true } }))).json()
+    const raw = await handler(new Request(`${BASE}/${code}/raw`))
+    const unknown = await handler(new Request(`${BASE}/K7QP2M4X/raw`))
+
+    expect(raw.status).toBe(404)
+    expect(await raw.json()).toEqual(await unknown.json())
+  })
+
+  it('releases the body of the snapshot it refuses', async () => {
+    const { memory, handler } = setup()
+
+    const { code } = await (await handler(postSnapshot({ data: 1 }))).json()
+    const original = memory.send.getMockImplementation()!
+    let body: { destroy: () => void } | undefined
+    memory.send.mockImplementationOnce(async (command: any) => {
+      const response: any = await original(command)
+      body = response.Body
+      vi.spyOn(response.Body, 'destroy')
+      return response
+    })
+
+    await handler(new Request(`${BASE}/${code}/raw`))
+    expect(body?.destroy).toHaveBeenCalled()
+  })
+})
+
 describe('createTransferHandler — expiry', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
@@ -227,6 +285,15 @@ describe('createTransferHandler — expiry', () => {
 
     vi.setSystemTime(Date.now() + 61_000)
     expect((await handler(new Request(`${BASE}/${code}`))).status).toBe(404)
+  })
+
+  it('does not hand over an expired snapshot through /raw either', async () => {
+    const { handler } = setup({ expiresIn: 60 })
+
+    const { code } = await (await handler(postSnapshot({ data: 1 }))).json()
+
+    vi.setSystemTime(Date.now() + 61_000)
+    expect((await handler(new Request(`${BASE}/${code}/raw`))).status).toBe(404)
   })
 
   it('stops handing over an expired file, metadata and bytes alike', async () => {
@@ -403,5 +470,161 @@ describe('createTransferHandler — code collisions', () => {
     // The first transfer is still intact — that is the whole point.
     const metadata = await (await handler(new Request(`${BASE}/${taken}`))).json()
     expect(metadata.data).toBe('first')
+  })
+})
+
+describe('createTransferHandler — unexpected errors', () => {
+  it('answers INVALID_SYNC_CODE for a badly encoded path', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/%E0`))
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe('INVALID_SYNC_CODE')
+  })
+
+  it('answers INTERNAL as JSON when authorize throws, and hands the error to onError', async () => {
+    const seen: unknown[] = []
+    const boom = new Error('session store at db.internal:5432 is down')
+    const { handler } = setup({
+      authorize: () => {
+        throw boom
+      },
+      onError: (error) => seen.push(error),
+    })
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.status).toBe(500)
+
+    const { error } = await response.json()
+    expect(error).toEqual({ code: 'INTERNAL', message: 'Internal error.' })
+    expect(seen).toEqual([boom])
+  })
+
+  it('does not echo the message of an error the storage client throws', async () => {
+    const { memory, handler } = setup()
+    memory.send.mockRejectedValueOnce(new Error('connect ECONNREFUSED my-secret-bucket.s3.amazonaws.com'))
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(500)
+
+    const body = await response.text()
+    expect(JSON.parse(body).error.code).toBe('INTERNAL')
+    expect(body).not.toContain('my-secret-bucket')
+  })
+
+  it('passes the request to onError', async () => {
+    const onError = vi.fn()
+    const { memory, handler } = setup({ onError })
+    memory.send.mockRejectedValueOnce(new TypeError('fetch failed'))
+
+    const request = new Request(`${BASE}/K7QP2M4X`)
+    await handler(request)
+
+    // Bucket wraps the SDK failure; the original stays on `cause`.
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'GET_FAILED' }), request)
+    expect(onError.mock.calls[0]?.[0].cause).toBeInstanceOf(TypeError)
+  })
+
+  it('still answers when onError itself throws', async () => {
+    const { memory, handler } = setup({
+      onError: () => {
+        throw new Error('logger down')
+      },
+    })
+    memory.send.mockRejectedValueOnce(new Error('boom'))
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(500)
+    expect((await response.json()).error.code).toBe('INTERNAL')
+  })
+
+  it('does not call onError for the errors the protocol already names', async () => {
+    const onError = vi.fn()
+    const { handler } = setup({ onError })
+
+    await handler(new Request(`${BASE}/not-a-code!`))
+    await handler(new Request(`${BASE}/K7QP2M4X`))
+
+    expect(onError).not.toHaveBeenCalled()
+  })
+})
+
+describe('createTransferHandler — protocol version', () => {
+  it('announces its version on a success', async () => {
+    const { handler } = setup()
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on an error too', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`))
+    expect(response.status).toBe(404)
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on a response authorize built itself', async () => {
+    const { handler } = setup({ authorize: () => Response.redirect('http://login.test/', 302) })
+
+    const response = await handler(postSnapshot({ data: 1 }))
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('http://login.test/')
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('announces it on a /raw redirect, whose headers are immutable', async () => {
+    const memory = createMemoryClient()
+    const bucket = createBucket({ bucket: 'transfers', client: memory.client, publicUrl: 'https://cdn.test' })
+    const handler = createTransferHandler({ bucket, raw: 'redirect' })
+
+    const { code } = await (await handler(postFile(new Uint8Array([1]), 'a.pdf'))).json()
+    const response = await handler(new Request(`${BASE}/${code}/raw`))
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('s3nd-protocol')).toBe('1')
+  })
+
+  it('accepts a request that announces version 1', async () => {
+    const { handler } = setup()
+
+    const request = postSnapshot({ data: 1 })
+    request.headers.set('s3nd-protocol', '1')
+
+    expect((await handler(request)).status).toBe(201)
+  })
+
+  it('accepts a request without the header, as a 0.x client sends', async () => {
+    const { handler } = setup()
+
+    expect((await handler(postSnapshot({ data: 1 }))).status).toBe(201)
+  })
+
+  it('refuses a newer version before reading the payload', async () => {
+    const { memory, handler } = setup()
+
+    const request = postSnapshot({ data: 1 })
+    request.headers.set('s3nd-protocol', '2')
+
+    const response = await handler(request)
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe('UNSUPPORTED_PROTOCOL')
+    expect(memory.send).not.toHaveBeenCalled()
+  })
+
+  it('refuses a version it cannot read', async () => {
+    const { handler } = setup()
+
+    const response = await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { 's3nd-protocol': 'v1' } }))
+    expect((await response.json()).error.code).toBe('UNSUPPORTED_PROTOCOL')
+  })
+
+  it('refuses it before authorize runs', async () => {
+    const authorize = vi.fn(() => true)
+    const { handler } = setup({ authorize })
+
+    await handler(new Request(`${BASE}/K7QP2M4X`, { headers: { 's3nd-protocol': '2' } }))
+    expect(authorize).not.toHaveBeenCalled()
   })
 })

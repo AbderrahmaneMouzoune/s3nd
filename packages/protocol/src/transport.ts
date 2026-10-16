@@ -10,6 +10,12 @@ export interface Outgoing {
   size?: number
   signal?: AbortSignal
   onProgress?: (progress: TransferProgress) => void
+  /**
+   * Whether an `XMLHttpRequest` may stand in for `fetch` to report progress.
+   * Only when the caller did not bring their own `fetch`: one passed in is
+   * there for a reason (auth, retries, tests) and is never bypassed.
+   */
+  allowXhr?: boolean
 }
 
 /** The part of a `Response` the client reads, so an XHR answer can stand in for one. */
@@ -45,7 +51,8 @@ function abortError(signal: AbortSignal | undefined): unknown {
  *
  * In a browser that is an `XMLHttpRequest`: its `upload.onprogress` is the only
  * way to see bytes leave, since `fetch` reports nothing until the response.
- * Elsewhere the body is wrapped in a stream that counts what is read from it.
+ * Elsewhere, or with a `fetch` of the caller's, the body is wrapped in a
+ * stream that counts what is read from it.
  * Without `onProgress`, it is a plain `fetch`.
  */
 export async function transmit(doFetch: typeof globalThis.fetch, outgoing: Outgoing): Promise<Incoming> {
@@ -61,7 +68,7 @@ export async function transmit(doFetch: typeof globalThis.fetch, outgoing: Outgo
     } as RequestInit)
   }
 
-  if (typeof XMLHttpRequest !== 'undefined' && !isStream(outgoing.body)) {
+  if (outgoing.allowXhr && typeof XMLHttpRequest !== 'undefined' && !isStream(outgoing.body)) {
     return sendWithXhr(outgoing, onProgress)
   }
 

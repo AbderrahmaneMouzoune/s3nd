@@ -57,6 +57,27 @@ has to receive all three.
 | `expiresIn`  | Seconds. An hour is right for a device handover; `null` never expires.                      |
 | `authorize`  | See below. Without it every route is public.                                                |
 | `raw`        | `'stream'` pipes bytes through your server; `'redirect'` answers 302 with a presigned URL.  |
+| `onError`    | A logger for the failures that answer `INTERNAL`. See below.                                |
+
+## When something breaks
+
+Every failure answers JSON, `{ error: { code, message } }`, including the ones nobody planned
+for: an `authorize` that throws, an S3 call that fails, a network error. Those answer `INTERNAL`
+(500) with the message `Internal error.` and nothing more, because the raw message can name your
+bucket or carry SDK internals. A path that is not validly percent-encoded, `/api/transfers/%E0`,
+answers `INVALID_SYNC_CODE` (400) like any other code that cannot exist.
+
+`onError` is where the real error goes, with the request that caused it:
+
+```ts
+createTransferHandler({
+  bucket,
+  onError: (error, request) => console.error(`s3nd: ${request.method} ${request.url}`, error),
+})
+```
+
+It is only called for the failures that answer `INTERNAL`, not for an unknown code or a refused
+request, and an error thrown inside it is ignored: logging cannot cost the client its answer.
 
 ## Credentials
 

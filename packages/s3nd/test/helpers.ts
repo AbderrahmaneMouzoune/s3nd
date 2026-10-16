@@ -243,27 +243,48 @@ export function createMemoryClient() {
       }
     }
 
+    if (name === 'ListObjectsV2Command') {
+      const keys = [...objects.keys()].filter((key) => key.startsWith(input.Prefix ?? '')).sort()
+      const start = input.ContinuationToken ? Number(input.ContinuationToken) : 0
+      const maxKeys = input.MaxKeys ?? 1000
+      const page = keys.slice(start, start + maxKeys)
+      const truncated = start + maxKeys < keys.length
+
+      return {
+        Contents: page.map((key) => {
+          const object = objects.get(key)!
+          return { Key: key, Size: object.body.byteLength, ETag: `"${object.etag}"`, LastModified: object.lastModified }
+        }),
+        IsTruncated: truncated,
+        NextContinuationToken: truncated ? String(start + maxKeys) : undefined,
+      }
+    }
+
     if (name === 'CopyObjectCommand') {
-      const [sourceBucket, ...rest] = String(input.CopySource).split('/')
-      const source = objects.get(rest.map(decodeURIComponent).join('/'))
-      if (!sourceBucket || !source) {
+      const [, ...rest] = String(input.CopySource).split('/')
+      const sourceKey = rest.map(decodeURIComponent).join('/')
+      const source = objects.get(sourceKey)
+
+      if (!source) {
         throw Object.assign(new Error('The specified key does not exist.'), {
           name: 'NoSuchKey',
           $metadata: { httpStatusCode: 404 },
         })
       }
 
+      // REPLACE is what a presigned upload's completion asks for.
       const replace = input.MetadataDirective === 'REPLACE'
       counter += 1
+      const etag = `etag-${counter}`
+      const lastModified = new Date()
       objects.set(input.Key, {
-        body: source.body,
-        contentType: replace ? input.ContentType : source.contentType,
-        metadata: replace ? input.Metadata : source.metadata,
-        etag: `etag-${counter}`,
-        lastModified: new Date(),
+        ...source,
+        ...(replace ? { contentType: input.ContentType, metadata: input.Metadata } : {}),
+        etag,
+        lastModified,
       })
 
-      return { CopyObjectResult: { ETag: `"etag-${counter}"` } }
+      return { CopyObjectResult: { ETag: `"${etag}"`, LastModified: lastModified } }
     }
 
     if (name === 'DeleteObjectCommand') {
