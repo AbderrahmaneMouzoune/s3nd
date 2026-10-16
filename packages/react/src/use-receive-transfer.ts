@@ -14,6 +14,11 @@ export interface ReceiveTransfer<T = unknown> {
   load: (code: string) => Promise<TransferMetadata | null>
   /** The bytes behind a file transfer. Snapshots carry their state in `transfer.data`. */
   loadBytes: (code: string) => Promise<Uint8Array | null>
+  /**
+   * How much of the last `loadBytes` has arrived, from 0 to 1, measured against
+   * the response's `Content-Length`. Stays at 0 when the server sends none.
+   */
+  progress: number
   /** Burns the code. Worth doing once a restore succeeded; expiry is the backstop. */
   burn: (code: string) => Promise<void>
   transfer: TransferMetadata | null
@@ -61,18 +66,35 @@ export function useReceiveTransfer<T = unknown>(): ReceiveTransfer<T> {
     [client, run],
   )
 
-  const loadBytes = useCallback((code: string) => client.readBytes(code), [client])
+  const [progress, setProgress] = useState(0)
+
+  const loadBytes = useCallback(
+    async (code: string) => {
+      setProgress(0)
+      const bytes = await client.readBytes(code, {
+        onProgress: ({ loaded, total }) => {
+          if (total) setProgress(Math.min(loaded / total, 1))
+        },
+      })
+      if (bytes) setProgress(1)
+
+      return bytes
+    },
+    [client],
+  )
 
   const burn = useCallback((code: string) => client.remove(code), [client])
 
   const reset = useCallback(() => {
     setNotFound(false)
+    setProgress(0)
     resetTask()
   }, [resetTask])
 
   return {
     load,
     loadBytes,
+    progress,
     burn,
     transfer: data ?? null,
     data: (data?.data as T | undefined) ?? undefined,

@@ -301,6 +301,9 @@ function buildClient(configuration: Configuration): TransferClient {
     return createTransferClient({
       baseUrl: settings.remote,
       headers: settings.token ? { authorization: `Bearer ${settings.token}` } : undefined,
+      // Straight to the bucket when the server offers it, so a large file is
+      // not bound by the server's request limit; proxied otherwise.
+      upload: 'auto',
     })
   }
 

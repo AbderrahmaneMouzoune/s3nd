@@ -234,3 +234,74 @@ describe('useReceiveTransfer', () => {
     expect(client.remove).toHaveBeenCalledWith('K7QP2M4X')
   })
 })
+
+describe('progress', () => {
+  it('follows a file upload, and reaches 1 only once the server answered', async () => {
+    let finish: (value: CreatedTransfer) => void = () => {}
+    const client = fakeClient({
+      createFile: vi.fn(
+        (input: Parameters<TransferClient['createFile']>[0]) =>
+          new Promise<CreatedTransfer>((resolve) => {
+            input.onProgress?.({ loaded: 0, total: 4 })
+            input.onProgress?.({ loaded: 2, total: 4 })
+            input.onProgress?.({ loaded: 4, total: 4 })
+            finish = resolve
+          }),
+      ),
+    })
+    const { result } = renderHook(() => useSendTransfer(), { wrapper: wrap(client) })
+
+    let pending: Promise<unknown> = Promise.resolve()
+    act(() => {
+      pending = result.current.sendFile(new Blob([new Uint8Array(4)]), 'a.bin')
+    })
+
+    await waitFor(() => expect(result.current.progress).toBe(0.99))
+
+    await act(async () => {
+      finish(created('ABCD1234', 'file'))
+      await pending
+    })
+    expect(result.current.progress).toBe(1)
+
+    act(() => result.current.reset())
+    expect(result.current.progress).toBe(0)
+  })
+
+  it('goes from 0 to 1 for a snapshot', async () => {
+    const client = fakeClient()
+    const { result } = renderHook(() => useSendTransfer(), { wrapper: wrap(client) })
+
+    expect(result.current.progress).toBe(0)
+    await act(async () => {
+      await result.current.send({ a: 1 })
+    })
+    expect(result.current.progress).toBe(1)
+  })
+
+  it('follows loadBytes', async () => {
+    let finish: (value: Uint8Array) => void = () => {}
+    const client = fakeClient({
+      readBytes: vi.fn(
+        (_code: string, options?: Parameters<TransferClient['readBytes']>[1]) =>
+          new Promise<Uint8Array>((resolve) => {
+            options?.onProgress?.({ loaded: 1, total: 4 })
+            finish = resolve
+          }),
+      ),
+    })
+    const { result } = renderHook(() => useReceiveTransfer(), { wrapper: wrap(client) })
+
+    let pending: Promise<unknown> = Promise.resolve()
+    act(() => {
+      pending = result.current.loadBytes('ABCD1234')
+    })
+    await waitFor(() => expect(result.current.progress).toBe(0.25))
+
+    await act(async () => {
+      finish(new Uint8Array(4))
+      await pending
+    })
+    expect(result.current.progress).toBe(1)
+  })
+})

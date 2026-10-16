@@ -1,12 +1,31 @@
 import type { Bucket } from './bucket.js'
 import { S3ndError, isS3ndError } from '@s3nd/protocol'
 import { FILENAME_HEADER, TRANSFER_ERROR_STATUS } from '@s3nd/protocol'
-import type { CreatedTransfer, CreateSnapshotBody, TransferErrorCode, TransferMetadata } from '@s3nd/protocol'
+import type {
+  CreatedTransfer,
+  CreateSnapshotBody,
+  PresignedUpload,
+  PresignUploadBody,
+  TransferErrorCode,
+  TransferMetadata,
+  UploadMode,
+} from '@s3nd/protocol'
+import { copyObject, headObject, pathOf, type ObjectHead } from './staging.js'
 
 /** Marks a stored object as opaque bytes rather than a snapshot envelope. */
 const KIND_METADATA_KEY = 's3nd-kind'
 /** Files carry their expiry here; snapshots carry it inside their envelope. */
 const EXPIRES_METADATA_KEY = 's3nd-expires-at'
+/** A presigned upload carries the size it announced, signed into its URL. */
+const DECLARED_SIZE_METADATA_KEY = 's3nd-declared-size'
+const FILENAME_METADATA_KEY = 'filename'
+/**
+ * Where presigned uploads wait for `POST /:code/complete`, inside the bucket's
+ * prefix. A code has no `/`, so nothing live can ever sit under it, and a
+ * lifecycle rule on it removes the uploads nobody completed.
+ */
+const PENDING_PREFIX = 'pending'
+const DEFAULT_PRESIGN_EXPIRES_IN = 900
 const DEFAULT_BASE_PATH = '/api/transfers'
 const DEFAULT_EXPIRES_IN = 3600
 /** A fresh code is 40 bits — a collision needs bad luck, not many retries. */
@@ -47,6 +66,17 @@ export interface TransferHandlerConfig {
    * `redirect` answers 302 with a presigned URL so they never transit it.
    */
   raw?: 'stream' | 'redirect'
+  /**
+   * How files come in. `proxy` (the default) takes the bytes in `POST /`, so
+   * your runtime's request limit applies. `presign` hands the client a signed
+   * URL to `PUT` them straight to the bucket, then checks them on
+   * `POST /:code/complete`; the bucket needs a CORS rule for browsers, and a
+   * lifecycle rule on `pending/` for uploads nobody completes. `both` accepts
+   * either. Snapshots always go through `POST /`.
+   */
+  upload?: UploadMode
+  /** Lifetime of a presigned upload URL, in seconds. Defaults to 15 minutes. */
+  presignExpiresIn?: number
 }
 
 export interface TransferHandler {
@@ -56,6 +86,19 @@ export interface TransferHandler {
   GET: (request: Request) => Promise<Response>
   POST: (request: Request) => Promise<Response>
   DELETE: (request: Request) => Promise<Response>
+}
+
+function pendingKey(code: string): string {
+  return `${PENDING_PREFIX}/${code}`
+}
+
+/** S3 failures in the raw calls become S3ndErrors, so they answer as JSON. */
+async function s3<T>(code: 'GET_FAILED' | 'UPLOAD_FAILED', what: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (error) {
+    throw new S3ndError(code, `${what}: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  }
 }
 
 function fail(code: TransferErrorCode, message: string): Response {
@@ -142,6 +185,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   const basePath = `/${(config.basePath ?? DEFAULT_BASE_PATH).replace(/^\/+|\/+$/g, '')}`
   const expiresIn = config.expiresIn === null ? undefined : (config.expiresIn ?? DEFAULT_EXPIRES_IN)
   const rawMode = config.raw ?? 'stream'
+  const uploadMode = config.upload ?? 'proxy'
+  const presignExpiresIn = config.presignExpiresIn ?? DEFAULT_PRESIGN_EXPIRES_IN
 
   /** Everything after the mount point: `[]`, `[code]` or `[code, 'raw']`. */
   function segmentsOf(request: Request): string[] | null {
@@ -177,15 +222,23 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       : last
   }
 
-  async function createSnapshot(request: Request): Promise<Response> {
-    let body: CreateSnapshotBody
+  async function createFromJson(request: Request): Promise<Response> {
+    let body: unknown
 
     try {
-      body = (await request.json()) as CreateSnapshotBody
+      body = await request.json()
     } catch {
       return fail('INVALID_REQUEST', 'Request body is not valid JSON.')
     }
 
+    if (typeof body === 'object' && body !== null && (body as { upload?: unknown }).upload === 'presign') {
+      return presign(body as PresignUploadBody)
+    }
+
+    return createSnapshot(request, body as CreateSnapshotBody)
+  }
+
+  async function createSnapshot(request: Request, body: CreateSnapshotBody): Promise<Response> {
     if (typeof body !== 'object' || body === null || !('data' in body)) {
       return fail('INVALID_REQUEST', 'Request body must be an object with a `data` property.')
     }
@@ -211,7 +264,149 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     return Response.json(created, { status: 201 })
   }
 
+  /** The live transfer a file object describes, as `POST /` answers it. */
+  function createdFile(code: string, head: ObjectHead): CreatedTransfer {
+    return {
+      code,
+      kind: 'file',
+      createdAt: (head.lastModified ?? new Date()).toISOString(),
+      expiresAt: head.metadata[EXPIRES_METADATA_KEY],
+      size: head.size,
+    }
+  }
+
+  async function presign(body: PresignUploadBody): Promise<Response> {
+    if (uploadMode === 'proxy') {
+      return fail('INVALID_REQUEST', 'This server does not offer presigned uploads. Send the bytes in POST / instead.')
+    }
+
+    const { filename, size, contentType } = body
+
+    if (typeof filename !== 'string' || filename.length === 0) {
+      return fail('INVALID_REQUEST', '`filename` must be a non-empty string.')
+    }
+
+    if (typeof size !== 'number' || !Number.isInteger(size) || size <= 0) {
+      return fail('INVALID_REQUEST', '`size` must be a positive whole number of bytes.')
+    }
+
+    if (contentType != null && typeof contentType !== 'string') {
+      return fail('INVALID_REQUEST', '`contentType` must be a string when present.')
+    }
+
+    // Refused before a code is even picked: nothing to clean up.
+    if (bucket.maxSize != null && size > bucket.maxSize) {
+      return fail(
+        'TOO_LARGE',
+        `Upload is ${size} bytes, which exceeds the configured maxSize of ${bucket.maxSize} bytes.`,
+      )
+    }
+
+    let code: string | undefined
+    for (let attempt = 0; attempt < CODE_ATTEMPTS && code === undefined; attempt += 1) {
+      const candidate = bucket.codes.create()
+      const taken = await s3(
+        'GET_FAILED',
+        `Failed to check code ${candidate}`,
+        async () =>
+          (await headObject(bucket, pathOf(bucket, candidate))) ??
+          (await headObject(bucket, pathOf(bucket, pendingKey(candidate)))),
+      )
+      if (!taken) code = candidate
+    }
+
+    if (code === undefined) {
+      return fail('CODE_TAKEN', `Could not find a free code in ${CODE_ATTEMPTS} attempts.`)
+    }
+
+    const signed = await bucket.presignUpload(pendingKey(code), {
+      contentLength: size,
+      // A generic octet-stream means the client did not know; guess from the name.
+      contentType: contentType && contentType !== 'application/octet-stream' ? contentType : undefined,
+      filename,
+      cacheControl: 'private, no-store',
+      metadata: { [KIND_METADATA_KEY]: 'file', [DECLARED_SIZE_METADATA_KEY]: String(size) },
+      expiresIn: presignExpiresIn,
+    })
+
+    const answer: PresignedUpload = {
+      code,
+      uploadUrl: signed.url,
+      method: signed.method,
+      headers: signed.headers,
+      expiresAt: signed.expiresAt.toISOString(),
+    }
+
+    return Response.json(answer, { status: 201 })
+  }
+
+  async function complete(code: string): Promise<Response> {
+    const pendingPath = pathOf(bucket, pendingKey(code))
+    const livePath = pathOf(bucket, code)
+
+    const pending = await s3('GET_FAILED', `Failed to read the pending upload ${code}`, () =>
+      headObject(bucket, pendingPath),
+    )
+
+    if (!pending) {
+      // Completed already, and the client lost the answer: say it again.
+      const live = await s3('GET_FAILED', `Failed to read transfer ${code}`, () => headObject(bucket, livePath))
+      if (live && live.metadata[KIND_METADATA_KEY] === 'file') {
+        return Response.json(createdFile(code, live), { status: 201 })
+      }
+
+      return fail('NOT_FOUND', 'Nothing is waiting to be completed under this code.')
+    }
+
+    const declared = Number(pending.metadata[DECLARED_SIZE_METADATA_KEY])
+
+    if (pending.size !== declared) {
+      await bucket.delete(pendingKey(code))
+      return fail('INVALID_REQUEST', `The upload is ${pending.size} bytes, not the ${declared} announced.`)
+    }
+
+    if (bucket.maxSize != null && (pending.size ?? 0) > bucket.maxSize) {
+      await bucket.delete(pendingKey(code))
+      return fail('TOO_LARGE', `Upload exceeds the configured maxSize of ${bucket.maxSize} bytes.`)
+    }
+
+    const createdAt = new Date()
+    const expiresAt = expiresIn != null ? new Date(createdAt.getTime() + expiresIn * 1000) : undefined
+
+    const metadata: Record<string, string> = { [KIND_METADATA_KEY]: 'file' }
+    const filename = pending.metadata[FILENAME_METADATA_KEY]
+    if (filename) metadata[FILENAME_METADATA_KEY] = filename
+    if (expiresAt) metadata[EXPIRES_METADATA_KEY] = expiresAt.toISOString()
+
+    // Expiry runs from completion, the moment the code becomes usable.
+    await s3('UPLOAD_FAILED', `Failed to complete transfer ${code}`, () =>
+      copyObject(bucket, pendingPath, livePath, {
+        contentType: pending.contentType,
+        cacheControl: 'private, no-store',
+        metadata,
+      }),
+    )
+    await bucket.delete(pendingKey(code))
+
+    const created: CreatedTransfer = {
+      code,
+      kind: 'file',
+      createdAt: createdAt.toISOString(),
+      expiresAt: expiresAt?.toISOString(),
+      size: pending.size,
+    }
+
+    return Response.json(created, { status: 201 })
+  }
+
   async function createFile(request: Request): Promise<Response> {
+    if (uploadMode === 'presign') {
+      return fail(
+        'INVALID_REQUEST',
+        'This server takes files through presigned uploads only: POST { "upload": "presign", … } first.',
+      )
+    }
+
     const filename = decodeHeaderValue(request.headers.get(FILENAME_HEADER)) ?? 'file'
     const bytes = new Uint8Array(await request.arrayBuffer())
 
@@ -336,7 +531,7 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
 
       return (request.headers.get('content-type') ?? '').includes('application/json')
-        ? createSnapshot(request)
+        ? createFromJson(request)
         : createFile(request)
     }
 
@@ -346,6 +541,11 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     } catch (error) {
       if (isS3ndError(error)) return fromS3ndError(error)
       throw error
+    }
+
+    if (tail === 'complete') {
+      if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
+      return complete(code)
     }
 
     if (tail === 'raw') {
@@ -358,7 +558,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (request.method === 'GET') return read(code)
 
     if (request.method === 'DELETE') {
+      // A pending upload under the code is burned with it.
       await bucket.delete(code)
+      if (uploadMode !== 'proxy') await bucket.delete(pendingKey(code))
       return new Response(null, { status: 204 })
     }
 

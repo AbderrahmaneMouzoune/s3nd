@@ -163,6 +163,34 @@ export interface StoredFile {
   text(): Promise<string>
 }
 
+export interface PresignUploadOptions {
+  /** The exact byte size the client will send. Signed: S3 refuses any other. */
+  contentLength: number
+  /** Signed too. Guessed from the key, then `filename`, when omitted. */
+  contentType?: string
+  /** Stored as metadata, so `get()` hands it back. */
+  filename?: string
+  metadata?: Record<string, string>
+  cacheControl?: string
+  /** Lifetime of the URL, in seconds. Default `3600`, max `604800` (7 days). */
+  expiresIn?: number
+  /** Prefix for this upload only. Overrides the bucket-level `prefix`. */
+  prefix?: string
+}
+
+/** A signed `PUT`: send the bytes to `url`, with `method` and `headers`. */
+export interface PresignedPut {
+  bucket: string
+  key: string
+  path: string
+  url: string
+  method: 'PUT'
+  /** To send exactly. `Content-Length`, which the browser sets itself, comes on top. */
+  headers: Record<string, string>
+  /** When S3 stops accepting `url`. */
+  expiresAt: Date
+}
+
 export interface GetUrlOptions {
   /** Lifetime of a signed URL, in seconds. Default `3600`, max `604800` (7 days). */
   expiresIn?: number

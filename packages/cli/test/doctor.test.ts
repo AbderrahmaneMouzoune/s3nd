@@ -14,6 +14,7 @@ import { runChecks, type Check } from '../src/doctor.js'
 function createDoctorClient() {
   const objects = new Map<string, Buffer>()
   let lifecycle: Record<string, any>[] | undefined
+  let cors: Record<string, any>[] | undefined
 
   const send = vi.fn(async (command: any) => {
     const name = command.constructor.name
@@ -60,6 +61,14 @@ function createDoctorClient() {
       return { Rules: lifecycle }
     }
 
+    if (name === 'GetBucketCorsCommand') {
+      if (cors === undefined) {
+        throw Object.assign(new Error('none'), { name: 'NoSuchCORSConfiguration', $metadata: { httpStatusCode: 404 } })
+      }
+
+      return { CORSRules: cors }
+    }
+
     throw new Error(`Unexpected command: ${name}`)
   })
 
@@ -76,6 +85,9 @@ function createDoctorClient() {
     setLifecycle(rules: Record<string, any>[] | undefined) {
       lifecycle = rules
     },
+    setCors(rules: Record<string, any>[] | undefined) {
+      cors = rules
+    },
   }
 }
 
@@ -90,6 +102,7 @@ describe('runChecks', () => {
   it('reports a healthy bucket', async () => {
     const memory = createDoctorClient()
     memory.setLifecycle([{ Status: 'Enabled', Expiration: { Days: 2 }, Filter: { Prefix: '' } }])
+    memory.setCors([{ AllowedMethods: ['GET', 'PUT'], AllowedOrigins: ['https://app.example'], AllowedHeaders: ['*'] }])
 
     const checks = await runChecks(createBucket({ bucket: 'transfers', client: memory.client }))
 
@@ -164,5 +177,29 @@ describe('runChecks', () => {
     // No credentials provider on this client, so nothing past that is meaningful.
     expect(find(checks, 'Credentials').status).toBe('fail')
     expect(checks.some((check) => check.name === 'Bucket reachable')).toBe(false)
+  })
+
+  it('warns when no CORS rule lets a browser PUT', async () => {
+    const memory = createDoctorClient()
+
+    const missing = find(
+      await runChecks(createBucket({ bucket: 'transfers', client: memory.client })),
+      'Browser uploads (CORS)',
+    )
+    memory.setCors([{ AllowedMethods: ['GET'], AllowedOrigins: ['*'], AllowedHeaders: ['*'] }])
+    const getOnly = find(
+      await runChecks(createBucket({ bucket: 'transfers', client: memory.client })),
+      'Browser uploads (CORS)',
+    )
+    memory.setCors([{ AllowedMethods: ['PUT'], AllowedOrigins: ['*'], AllowedHeaders: ['Content-Type'] }])
+    const allowed = find(
+      await runChecks(createBucket({ bucket: 'transfers', client: memory.client })),
+      'Browser uploads (CORS)',
+    )
+
+    expect(missing).toMatchObject({ status: 'warn', detail: 'no CORS configuration' })
+    expect(missing.fix).toContain('presign')
+    expect(getOnly.status).toBe('warn')
+    expect(allowed.status).toBe('ok')
   })
 })

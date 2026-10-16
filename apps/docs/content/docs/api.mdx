@@ -237,6 +237,39 @@ public URL, set `contentDisposition` at upload time instead.
 
 ---
 
+## `presignUpload(key, options)`
+
+Signs a `PUT` a client sends the bytes with, straight to the bucket, so they never transit your
+runtime. The handler's `upload: 'presign'` is built on it.
+
+```ts
+const { url, method, headers, expiresAt } = await store.presignUpload('uploads/video.mov', {
+  contentLength: file.size,
+  contentType: 'video/quicktime',
+  filename: 'video.mov',
+})
+
+await fetch(url, { method, headers, body: file })
+```
+
+| Option          | Type                     | Default                                        |
+| --------------- | ------------------------ | ---------------------------------------------- |
+| `contentLength` | `number`                 | required: the exact size. Signed.              |
+| `contentType`   | `string`                 | guessed from the key, then `filename`. Signed. |
+| `filename`      | `string`                 | — stored as metadata, as `upload()` does       |
+| `metadata`      | `Record<string, string>` | — signed into the URL                          |
+| `cacheControl`  | `string`                 | —                                              |
+| `expiresIn`     | `number`                 | `3600` seconds, at most `604800`               |
+| `prefix`        | `string`                 | the bucket-level `prefix`                      |
+
+S3 refuses a body of another length or type. `maxSize` is checked before signing
+(`FILE_TOO_LARGE`). A browser needs a CORS rule on the bucket allowing `PUT` with `content-type`.
+The SDK's default checksum is left out of the URL, since a browser computes none.
+
+`store.prefix` and `store.maxSize` read back what the bucket was configured with.
+
+---
+
 ## `delete(key)`
 
 ```ts

@@ -25,6 +25,8 @@ export type {
   GetOptions,
   GetSnapshotOptions,
   GetUrlOptions,
+  PresignedPut,
+  PresignUploadOptions,
   PutOptions,
   PutSnapshotOptions,
   Snapshot,

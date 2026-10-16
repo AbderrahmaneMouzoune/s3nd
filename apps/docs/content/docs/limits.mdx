@@ -70,10 +70,11 @@ await store.putSnapshot(`${code}/attachments`, attachments)
 defeats gzip. Store blobs as objects and reference them by key — see
 [attachments beside the data](/docs/use-cases/attachments).
 
-**Presign the upload.** For a genuinely large database, have the browser talk to S3 directly so
-the bytes never touch your runtime. That needs CORS on the bucket, which is the thing s3nd
-otherwise saves you from — worth it above a certain size, not before. Today you build it over
-`store.client`.
+**Presign the upload.** For a genuinely large file, have the browser talk to S3 directly so the
+bytes never touch your runtime: `upload: 'presign'` on the handler, `upload: 'auto'` on the
+client. That needs CORS on the bucket, which is the thing s3nd otherwise saves you from — worth it
+above a certain size, not before. See [files past the request limit](/docs/server#files-past-the-request-limit),
+or `store.presignUpload()` to build your own.
 
 ## Multipart, and what it does not change
 

@@ -112,11 +112,15 @@ Using /home/you/transfers/s3nd.config.json
 ! Expiry cleanup: no enabled expiration rule
   → Add an S3 lifecycle rule that expires objects under this bucket after a day or
     two. Without it, expired transfers stay stored and billed.
+✓ Browser uploads (CORS): a CORS rule allows PUT with content-type
 
 1 check(s) failed.
 ```
 
-That last check is the one that earns the command. `expiresIn` stops a transfer being _handed
+The CORS check only matters for presigned uploads from a browser, which need the bucket to accept a
+`PUT` from your app's origin.
+
+The expiry check is the one that earns the command. `expiresIn` stops a transfer being _handed
 over_; only a lifecycle rule deletes the object, and nothing surfaces the gap until a bill does.
 
 Pointed at a server, `doctor` checks the only thing that matters there, a real round trip:
@@ -228,6 +232,9 @@ instead of at S3:
 ```sh
 s3nd --remote https://drop.example.com/api/transfers put ./report.pdf
 ```
+
+When the server offers presigned uploads (`upload: 'presign'` or `'both'`), `put` sends the file
+straight to the bucket, past the server's request limit; otherwise it posts it to the server.
 
 This is not a second implementation. The CLI has exactly one, the protocol client, wired either to
 `fetch` or, without `--remote`, straight into the request handler in the same process. The two modes

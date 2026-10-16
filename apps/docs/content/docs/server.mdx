@@ -154,6 +154,68 @@ Snapshots are gzipped, and an IndexedDB dump compresses 5–10×, so the real ce
 it looks. For files, `raw: 'redirect'` keeps the download off your server entirely — the handler
 answers 302 with a presigned URL. See [limits](/docs/limits).
 
+## Files past the request limit
+
+With `upload: 'presign'`, a file never goes through your server. The client asks for a signed
+URL, sends the bytes straight to the bucket, then asks the server to check them and make the code
+live. Your runtime's request limit stops applying to files; snapshots keep going through the
+route, as before.
+
+```ts title="app/api/transfers/[[...route]]/route.ts"
+export const { GET, POST, DELETE } = createTransferHandler({
+  bucket,
+  upload: 'both', // 'proxy' (the default), 'presign', or 'both'
+  presignExpiresIn: 900, // how long the upload URL is accepted, in seconds
+})
+```
+
+```ts
+const transfers = createTransferClient({ baseUrl: '/api/transfers', upload: 'auto' })
+
+await transfers.createFile({ body: file, filename: file.name, onProgress: ({ loaded, total }) => {} })
+```
+
+The signature covers the exact size and content type the client announced, so the bucket refuses
+anything else, and `maxSize` is checked before a URL is signed. On completion the server checks
+the stored size again. `'auto'` on the client tries a presigned upload and falls back to the route
+when the server does not offer one. The flow is specified in
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md).
+
+Two things on the bucket make it work:
+
+**A CORS rule**, because the browser now talks to the bucket. It needs `PUT` from your app's
+origin, with the `content-type` header. [`s3nd doctor`](/docs/cli) checks for one.
+
+```json title="Bucket CORS"
+[
+  {
+    "AllowedOrigins": ["https://app.example.com"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+**A lifecycle rule on `pending/`**, inside your prefix. An upload that is never completed stays
+there, never handed over, until a rule removes it. A rule on the whole prefix (`transfers/`)
+already covers it.
+
+```jsonc
+{
+  "Rules": [
+    {
+      "ID": "abort-unfinished-presigned-uploads",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "transfers/pending/" },
+      "Expiration": { "Days": 1 },
+    },
+  ],
+}
+```
+
+A single presigned `PUT` is capped at 5 GiB by S3.
+
 ## When the app is on another origin
 
 Same-origin — the app and the route in one Next.js deployment — needs no CORS at all, which is the

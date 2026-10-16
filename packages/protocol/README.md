@@ -41,12 +41,29 @@ const bytes = await transfers.readBytes(code) // for a file transfer
 await transfers.remove(code)
 ```
 
+Files can go straight to the bucket instead of through the server, with progress:
+
+```ts
+const transfers = createTransferClient({ baseUrl: '/api/transfers', upload: 'auto' })
+
+await transfers.createFile({
+  body: file,
+  filename: file.name,
+  onProgress: ({ loaded, total }) => render(loaded / (total ?? loaded)),
+})
+```
+
+`upload` is `'proxy'` (the default: the bytes go in `POST /`), `'presign'` (the server signs a URL,
+the bytes go to the bucket) or `'auto'` (presign when the server offers it). In a browser,
+`onProgress` sends through `XMLHttpRequest`, the only API that reports upload progress.
+`readBytes(code, { onProgress })` counts a download the same way.
+
 `fetch` and nothing else, so it runs in a browser, a worker, React Native, Deno or Node without a
 polyfill. Pass your own `fetch` to add retries, or to point it somewhere else in tests.
 
 ## The routes
 
-All four are relative to wherever the server mounted them.
+All of them are relative to wherever the server mounted them.
 
 | Route            | What it does                                                                        |
 | ---------------- | ----------------------------------------------------------------------------------- |
@@ -54,6 +71,11 @@ All four are relative to wherever the server mounted them.
 | `GET /:code`     | Metadata, with the state inline for a snapshot                                      |
 | `GET /:code/raw` | The bytes, or a `302` to a presigned URL                                            |
 | `DELETE /:code`  | Burns the code                                                                      |
+
+A server can also offer presigned uploads: `POST /` with `{ "upload": "presign", … }` hands back a
+URL to send the bytes to, and `POST /:code/complete` makes the code live once they are there.
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md)
+specifies it.
 
 Every non-2xx answer carries `{ "error": { "code", "message" } }`, and the client turns it into a
 `TransferError` with that `code` on it. Branch on the code, never on the message:

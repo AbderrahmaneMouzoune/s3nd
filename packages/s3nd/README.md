@@ -107,6 +107,12 @@ createTransferHandler({
 })
 ```
 
+Past your runtime's request limit, `upload: 'presign'` (or `'both'`) has the client send a file
+straight to the bucket through a signed URL, then checks it on `POST /:code/complete`. It needs a
+CORS rule on the bucket for browsers, and a lifecycle rule on `pending/` for uploads nobody
+completes. `store.presignUpload(key, { contentLength })` is the building block, if you write your
+own routes.
+
 The browser half is a separate package, `@s3nd/protocol`, whose whole dependency tree is
 nanoid; no path from it reaches the AWS SDK, so it bundles for a browser or React Native without
 dragging a storage client along:
