@@ -1,4 +1,4 @@
-import { GetBucketLifecycleConfigurationCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { GetBucketCorsCommand, GetBucketLifecycleConfigurationCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { randomUUID } from 'node:crypto'
 
 import type { Bucket } from '@s3nd/core'
@@ -124,8 +124,45 @@ export async function runChecks(bucket: Bucket, prefix?: string): Promise<Check[
   }
 
   checks.push(await checkLifecycle(bucket, prefix))
+  checks.push(await checkCors(bucket))
 
   return checks
+}
+
+const CORS_FIX =
+  'Only needed for presigned uploads from a browser (`upload: "presign"` on the handler): add a CORS rule ' +
+  "allowing PUT from your app's origin, with the content-type header. See https://doc.s3nd.sh/docs/server."
+
+/**
+ * A presigned upload sends the bytes from the browser straight to the bucket,
+ * which the browser only allows when the bucket answers the preflight. Without
+ * a rule, every upload fails with nothing but "network error" to go on.
+ */
+async function checkCors(bucket: Bucket): Promise<Check> {
+  try {
+    const response = await bucket.client.send(new GetBucketCorsCommand({ Bucket: bucket.bucket }))
+
+    const allowsPut = (response.CORSRules ?? []).some(
+      (rule) =>
+        (rule.AllowedMethods ?? []).some((method) => method.toUpperCase() === 'PUT') &&
+        (rule.AllowedHeaders ?? []).some((header) => header === '*' || header.toLowerCase() === 'content-type'),
+    )
+
+    return allowsPut
+      ? { name: 'Browser uploads (CORS)', status: 'ok', detail: 'a CORS rule allows PUT with content-type' }
+      : { name: 'Browser uploads (CORS)', status: 'warn', detail: 'no CORS rule allows PUT', fix: CORS_FIX }
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'NoSuchCORSConfiguration') {
+      return { name: 'Browser uploads (CORS)', status: 'warn', detail: 'no CORS configuration', fix: CORS_FIX }
+    }
+
+    return {
+      name: 'Browser uploads (CORS)',
+      status: 'warn',
+      detail: `could not be read (${describe(error)})`,
+      fix: 'Grant s3:GetBucketCORS to check this automatically, or verify the rule by hand.',
+    }
+  }
 }
 
 /**

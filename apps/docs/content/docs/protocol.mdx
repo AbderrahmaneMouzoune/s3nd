@@ -62,7 +62,7 @@ In React you rarely call it directly — [the hooks](/docs/react) wrap it.
 
 ## The routes
 
-All four are relative to wherever you mounted the handler, `/api/transfers` by default.
+All of them are relative to wherever you mounted the handler, `/api/transfers` by default.
 
 ### `POST /`
 
@@ -113,6 +113,19 @@ transits your server twice.
 
 Burns a code, and answers `204`. Deleting one that is already gone is not an error — a client that
 burns a code after a successful restore should not have to care whether it won that race.
+
+### Presigned uploads: `POST /` with `upload: "presign"`, then `POST /:code/complete`
+
+A server with `upload: 'presign'` or `'both'` also takes a file without its bytes. The client
+posts `{ "upload": "presign", "filename", "size", "contentType" }` as JSON and gets back
+`{ code, uploadUrl, method: "PUT", headers, expiresAt }`. It sends the bytes to `uploadUrl`, then
+calls `POST /:code/complete`. The server checks the stored object and answers the usual `201`.
+Until then the code reads as `NOT_FOUND`.
+
+A server in `proxy` mode, the default, answers the presign request with `400 INVALID_REQUEST`, and
+so does one that predates it, so a client can try and fall back. The full flow, with what each side
+MUST check, is in
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md).
 
 ## Errors
 

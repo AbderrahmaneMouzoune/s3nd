@@ -19,10 +19,21 @@ export { FILENAME_HEADER, PROTOCOL_VERSION, TRANSFER_ERROR_STATUS } from './type
 export type {
   CreatedTransfer,
   CreateSnapshotBody,
+  PresignedUpload,
+  PresignUploadBody,
   TransferErrorBody,
   TransferErrorCode,
   TransferKind,
   TransferMetadata,
+  TransferProgress,
+  UploadMode,
 } from './types.js'
-export type { CreateFileInput, CreateSnapshotInput, TransferClient, TransferClientConfig } from './client.js'
+export type {
+  ClientUploadMode,
+  CreateFileInput,
+  CreateSnapshotInput,
+  ReadBytesOptions,
+  TransferClient,
+  TransferClientConfig,
+} from './client.js'
 export type { SyncCodeOptions, SyncCodes } from './types-codes.js'

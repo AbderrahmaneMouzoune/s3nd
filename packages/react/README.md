@@ -61,6 +61,8 @@ function MoveToAnotherDevice() {
 ```
 
 `sendFile` takes a `File` straight off an `<input type="file">`, keeping its name and type.
+`progress` goes from 0 to 1 as its bytes go out, and reaches 1 once the server has answered. With
+`upload: 'auto'` on the client, a file goes straight to the bucket when the server offers it.
 
 Failures land in `error` rather than rejecting: an event handler should not need a `try`/`catch`.
 The call returns `null` when it failed, for callers that want to branch.
@@ -119,12 +121,12 @@ useSyncCodeInput({ length: 4, alphabet: '0123456789' }) // inputProps.inputMode 
 
 ## What each hook gives back
 
-| Hook                   |                                                                                                      |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `status`, `isPending`, `error`, `reset`                              |
-| `useReceiveTransfer()` | `load`, `loadBytes`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
-| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                            |
-| `useTransferClient()`  | the underlying client, for anything the hooks do not cover                                           |
+| Hook                   |                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `progress`, `status`, `isPending`, `error`, `reset`                              |
+| `useReceiveTransfer()` | `load`, `loadBytes`, `progress`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
+| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                                        |
+| `useTransferClient()`  | the underlying client, for anything the hooks do not cover                                                       |
 
 `status` is `'idle' | 'pending' | 'success' | 'error'`.
 

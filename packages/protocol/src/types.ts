@@ -93,6 +93,41 @@ export interface CreateSnapshotBody {
   device?: string
 }
 
+/**
+ * How a server accepts files. `proxy` takes the bytes in `POST /`; `presign`
+ * hands out a URL for the client to send them straight to the bucket; `both`
+ * does either. Snapshots always go through `POST /`. See `PROTOCOL.md`.
+ */
+export type UploadMode = 'proxy' | 'presign' | 'both'
+
+/** Body of `POST /` asking for a presigned upload (`Content-Type: application/json`). */
+export interface PresignUploadBody {
+  upload: 'presign'
+  filename: string
+  /** The exact byte size that will be sent. The bucket refuses any other. */
+  size: number
+  contentType?: string
+}
+
+/** 201 body of `POST /` for a presigned upload. */
+export interface PresignedUpload {
+  /** The transfer's code. Until `POST /:code/complete` it reads as `NOT_FOUND`. */
+  code: string
+  /** Where to send the bytes. */
+  uploadUrl: string
+  method: 'PUT'
+  /** Headers to send with the bytes, exactly. `Content-Length` comes on top. */
+  headers: Record<string, string>
+  /** When `uploadUrl` stops being accepted — not the transfer's own expiry. */
+  expiresAt: string
+}
+
+/** How far a transfer has got. `total` is absent when the size is unknown. */
+export interface TransferProgress {
+  loaded: number
+  total?: number
+}
+
 /** The HTTP status each error code answers with. */
 export const TRANSFER_ERROR_STATUS: Record<TransferErrorCode, number> = {
   INVALID_REQUEST: 400,

@@ -229,6 +229,43 @@ export function createMemoryClient() {
       }
     }
 
+    if (name === 'HeadObjectCommand') {
+      if (!stored) {
+        throw Object.assign(new Error('NotFound'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } })
+      }
+
+      return {
+        ContentType: stored.contentType,
+        ContentLength: stored.body.byteLength,
+        LastModified: stored.lastModified,
+        Metadata: stored.metadata ?? {},
+        ETag: `"${stored.etag}"`,
+      }
+    }
+
+    if (name === 'CopyObjectCommand') {
+      const [sourceBucket, ...rest] = String(input.CopySource).split('/')
+      const source = objects.get(rest.map(decodeURIComponent).join('/'))
+      if (!sourceBucket || !source) {
+        throw Object.assign(new Error('The specified key does not exist.'), {
+          name: 'NoSuchKey',
+          $metadata: { httpStatusCode: 404 },
+        })
+      }
+
+      const replace = input.MetadataDirective === 'REPLACE'
+      counter += 1
+      objects.set(input.Key, {
+        body: source.body,
+        contentType: replace ? input.ContentType : source.contentType,
+        metadata: replace ? input.Metadata : source.metadata,
+        etag: `etag-${counter}`,
+        lastModified: new Date(),
+      })
+
+      return { CopyObjectResult: { ETag: `"etag-${counter}"` } }
+    }
+
     if (name === 'DeleteObjectCommand') {
       objects.delete(input.Key)
       return {}

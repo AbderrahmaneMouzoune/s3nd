@@ -22,6 +22,8 @@ import type {
   GetSnapshotOptions,
   GetUrlOptions,
   PutOptions,
+  PresignedPut,
+  PresignUploadOptions,
   PutSnapshotOptions,
   ResolvedConfig,
   Snapshot,
@@ -144,6 +146,16 @@ export class Bucket {
     this.config = resolveConfig(config)
     this.bucket = this.config.bucket
     this.codes = createSyncCodes(this.config.syncCode)
+  }
+
+  /** The bucket-level `prefix`, normalized, or undefined when there is none. */
+  get prefix(): string | undefined {
+    return this.config.prefix
+  }
+
+  /** The configured `maxSize`, in bytes, or undefined when there is none. */
+  get maxSize(): number | undefined {
+    return this.config.maxSize
   }
 
   /** Underlying `S3Client`, created on first use. */
@@ -438,6 +450,91 @@ export class Bucket {
       body,
       bytes: () => body.transformToByteArray(),
       text: () => body.transformToString(),
+    }
+  }
+
+  /**
+   * Signs a `PUT` a client can send the bytes with, straight to the bucket, so
+   * they never transit your server or its request limit.
+   *
+   * The signature covers the exact `contentLength` and the content type: S3
+   * refuses any other body. `maxSize` is checked here, before signing. The
+   * filename and `metadata` are signed into the URL, so the uploader cannot
+   * change them. A browser needs a CORS rule on the bucket that allows `PUT`
+   * with the `content-type` header.
+   */
+  async presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedPut> {
+    const path = this.resolvePath(key, options.prefix)
+    const size = options.contentLength
+
+    if (!Number.isInteger(size) || size < 0) {
+      throw new S3ndError('INVALID_BODY', '`contentLength` must be a whole, non-negative number of bytes.')
+    }
+
+    if (this.config.maxSize != null && size > this.config.maxSize) throw tooLarge(size, this.config.maxSize)
+
+    const expiresIn = options.expiresIn ?? DEFAULT_EXPIRES_IN
+    if (!Number.isFinite(expiresIn) || expiresIn <= 0 || expiresIn > MAX_EXPIRES_IN) {
+      throw new S3ndError('URL_FAILED', `\`expiresIn\` must be between 1 and ${MAX_EXPIRES_IN} seconds.`)
+    }
+
+    const contentType =
+      options.contentType ??
+      lookupContentType(key) ??
+      (options.filename ? lookupContentType(options.filename) : undefined) ??
+      DEFAULT_CONTENT_TYPE
+
+    const metadata = { ...options.metadata }
+    if (options.filename && metadata[FILENAME_METADATA_KEY] == null) {
+      metadata[FILENAME_METADATA_KEY] = encodeURIComponent(options.filename)
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: path,
+      ContentType: contentType,
+      ContentLength: size,
+      CacheControl: options.cacheControl,
+      Metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    })
+
+    // The SDK checksums every PutObject by default, and a presigned one gets
+    // the checksum of an empty body signed into its URL, which S3 then holds
+    // the real body to. The client computes no checksum for a presigned PUT,
+    // so the headers go before the URL is signed.
+    command.middlewareStack.add(
+      (next) => async (args) => {
+        const headers = (args.request as { headers?: Record<string, string> }).headers ?? {}
+        for (const name of Object.keys(headers)) {
+          if (/^x-amz-(sdk-)?checksum-/i.test(name)) delete headers[name]
+        }
+        return next(args)
+      },
+      { step: 'build', priority: 'low', name: 's3ndPresignWithoutChecksum' },
+    )
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
+    try {
+      const url = await getSignedUrl(this.client, command, {
+        expiresIn,
+        // Signed, so a body of another length or type is refused by S3 itself.
+        signableHeaders: new Set(['content-type', 'content-length']),
+      })
+
+      return {
+        bucket: this.bucket,
+        key,
+        path,
+        url,
+        method: 'PUT',
+        headers: { 'content-type': contentType },
+        expiresAt,
+      }
+    } catch (error) {
+      throw new S3ndError('URL_FAILED', `Failed to sign an upload for "${path}": ${describe(error)}`, {
+        cause: error,
+      })
     }
   }
 

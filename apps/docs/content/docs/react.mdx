@@ -72,6 +72,18 @@ const { sendFile } = useSendTransfer()
 <input type="file" onChange={(event) => event.target.files?.[0] && sendFile(event.target.files[0])} />
 ```
 
+`progress` goes from 0 to 1 as the bytes go out, for a progress bar. It stops just short of 1
+until the server has answered, so a finished bar means a usable code. A snapshot, posted in one
+request, jumps from 0 to 1. On the receiving side, `progress` follows `loadBytes`.
+
+```tsx
+const { sendFile, progress, isPending } = useSendTransfer()
+
+{
+  isPending && <progress value={progress} />
+}
+```
+
 <Callout>
   Failures land in `error` rather than rejecting — an event handler should not need a `try`/`catch` around every call.
   The call returns `null` when it failed, for callers that want to branch on it.
@@ -159,11 +171,11 @@ happened to finish last.
 
 ## Reference
 
-| Hook                   | Returns                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `status`, `isPending`, `error`, `reset`                              |
-| `useReceiveTransfer()` | `load`, `loadBytes`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
-| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                            |
-| `useTransferClient()`  | The underlying client, for anything the hooks do not cover                                           |
+| Hook                   | Returns                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `useSendTransfer()`    | `send`, `sendFile`, `transfer`, `progress`, `status`, `isPending`, `error`, `reset`                              |
+| `useReceiveTransfer()` | `load`, `loadBytes`, `progress`, `burn`, `transfer`, `data`, `notFound`, `status`, `isPending`, `error`, `reset` |
+| `useSyncCodeInput()`   | `value`, `setValue`, `code`, `isComplete`, `error`, `reset`, `inputProps`                                        |
+| `useTransferClient()`  | The underlying client, for anything the hooks do not cover                                                       |
 
 `status` is `'idle' | 'pending' | 'success' | 'error'`.
