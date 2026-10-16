@@ -12,6 +12,4 @@ export default defineConfig({
   target: 'es2022',
   // Neutral, not node: this package has to bundle for a browser too.
   platform: 'neutral',
-  // nanoid is ESM-only; bundling it keeps the CommonJS build usable.
-  noExternal: ['nanoid'],
 })

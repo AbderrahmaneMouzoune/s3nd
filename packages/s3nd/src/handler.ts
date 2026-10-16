@@ -51,6 +51,24 @@ export interface TransferHandlerConfig {
    * `redirect` answers 302 with a presigned URL so they never transit it.
    */
   raw?: 'stream' | 'redirect'
+  /**
+   * Called with any error that answers `INTERNAL`: a throwing `authorize`, a
+   * failed S3 call, a network error, a corrupt stored snapshot. The client only
+   * sees a generic `INTERNAL`, since the raw message can name a bucket or an
+   * SDK internal, so this is where to log it. An error thrown here is ignored.
+   */
+  onError?: (error: unknown, request: Request) => void
+  /**
+   * Largest request body accepted, in bytes, for snapshots and files alike. A
+   * bigger body answers `TOO_LARGE` without being read past the limit, which is
+   * what keeps a self-hosted server's memory bounded: set it there.
+   *
+   * Defaults to the bucket's `maxSize` for files when that is set, and to no
+   * limit otherwise, since a platform like Vercel or Lambda already enforces
+   * its own. It measures the incoming body, so the raw JSON of a snapshot,
+   * where the bucket's `maxSize` measures the gzipped bytes stored.
+   */
+  maxRequestSize?: number
 }
 
 export interface TransferHandler {
@@ -66,8 +84,12 @@ function fail(code: TransferErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status: TRANSFER_ERROR_STATUS[code] })
 }
 
-/** Every S3ndError that means something to a client gets its own code. */
-function fromS3ndError(error: S3ndError): Response {
+/**
+ * Every S3ndError that means something to a client gets its own code. The rest
+ * (a failed S3 call, a corrupt envelope) is the server's problem: `null` sends
+ * it to the same net as an unexpected exception.
+ */
+function fromS3ndError(error: S3ndError): Response | null {
   switch (error.code) {
     case 'FILE_TOO_LARGE':
       return fail('TOO_LARGE', error.message)
@@ -80,7 +102,7 @@ function fromS3ndError(error: S3ndError): Response {
     case 'INVALID_KEY':
       return fail('INVALID_SYNC_CODE', error.message)
     default:
-      return fail('INTERNAL', error.message)
+      return null
   }
 }
 
@@ -125,6 +147,48 @@ function toWebStream(body: unknown): ReadableStream {
   return Readable.toWeb(body as Readable) as ReadableStream
 }
 
+/**
+ * The request body, read no further than `limit` bytes: `null` when it is
+ * larger. `content-length` settles it up front when it is honest; the counter
+ * catches a body that has none, or lies.
+ */
+async function readBody(request: Request, limit: number | undefined): Promise<Uint8Array | null> {
+  if (limit === undefined) return new Uint8Array(await request.arrayBuffer())
+
+  const declared = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > limit) {
+    await request.body?.cancel().catch(() => undefined)
+    return null
+  }
+
+  if (!request.body) return new Uint8Array()
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    chunks.push(value)
+  }
+
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return bytes
+}
+
 function discard(body: unknown): void {
   const stream = body as { destroy?: () => void; cancel?: () => void }
   stream?.destroy?.()
@@ -146,6 +210,19 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   const expiresIn = config.expiresIn === null ? undefined : (config.expiresIn ?? DEFAULT_EXPIRES_IN)
   const rawMode = config.raw ?? 'stream'
 
+  if (config.maxRequestSize != null && !(Number.isFinite(config.maxRequestSize) && config.maxRequestSize > 0)) {
+    throw new S3ndError('INVALID_CONFIG', '`maxRequestSize` must be a positive number of bytes.')
+  }
+
+  // `config` is private to Bucket so that it stays out of the public API; the
+  // handler is the one caller in the package that needs its maxSize.
+  const fileLimit = config.maxRequestSize ?? bucket['config']?.maxSize
+  const snapshotLimit = config.maxRequestSize
+
+  function tooLarge(limit: number): Response {
+    return fail('TOO_LARGE', `Request body exceeds the limit of ${limit} bytes.`)
+  }
+
   /** Everything after the mount point: `[]`, `[code]` or `[code, 'raw']`. */
   function segmentsOf(request: Request): string[] | null {
     const { pathname } = new URL(request.url)
@@ -155,7 +232,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       .slice(basePath.length)
       .split('/')
       .filter((segment) => segment.length > 0)
-      .map(decodeURIComponent)
+      .map((segment) => {
+        try {
+          return decodeURIComponent(segment)
+        } catch {
+          // A stray `%E0` is a code nobody could have been handed, not a crash.
+          throw new S3ndError('INVALID_SYNC_CODE', 'The code in the path is not validly encoded.')
+        }
+      })
   }
 
   function normalize(raw: string): string {
@@ -181,10 +265,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
   }
 
   async function createSnapshot(request: Request): Promise<Response> {
+    // Bounded before parsing: the raw JSON is what costs memory here.
+    const raw = await readBody(request, snapshotLimit)
+    if (raw === null) return tooLarge(snapshotLimit!)
+
     let body: CreateSnapshotBody
 
     try {
-      body = (await request.json()) as CreateSnapshotBody
+      body = JSON.parse(new TextDecoder().decode(raw)) as CreateSnapshotBody
     } catch {
       return fail('INVALID_REQUEST', 'Request body is not valid JSON.')
     }
@@ -197,7 +285,9 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
       const result = await bucket.putSnapshot(code, body.data, {
         app: config.app,
         version: body.version,
-        device: body.device ?? request.headers.get('user-agent') ?? undefined,
+        // Only what the client chose to say. The User-Agent is not a device
+        // name, and storing it would hand it to anyone who knows the code.
+        device: body.device,
         expiresIn,
         ifAbsent: true,
       })
@@ -216,7 +306,8 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
 
   async function createFile(request: Request): Promise<Response> {
     const filename = safeFilename(decodeHeaderValue(request.headers.get(FILENAME_HEADER))) ?? 'file'
-    const bytes = new Uint8Array(await request.arrayBuffer())
+    const bytes = await readBody(request, fileLimit)
+    if (bytes === null) return tooLarge(fileLimit!)
 
     if (bytes.byteLength === 0) {
       return fail('INVALID_REQUEST', 'Request body is empty.')
@@ -318,6 +409,14 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     const file = await bucket.get(code)
     if (!file) return fail('NOT_FOUND', 'Unknown or expired code.')
 
+    // A snapshot's bytes are its gzipped envelope, and its expiry lives inside
+    // that envelope where this route cannot see it. It has no raw form: answer
+    // exactly as for an unknown code, so /raw says nothing about what a code holds.
+    if (file.metadata[KIND_METADATA_KEY] !== 'file') {
+      discard(file.body)
+      return fail('NOT_FOUND', 'Unknown or expired code.')
+    }
+
     const expiresAt = file.metadata[EXPIRES_METADATA_KEY]
     if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
       discard(file.body)
@@ -350,18 +449,17 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     if (rawCode === undefined) {
       if (request.method !== 'POST') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
 
+      // A filename means a file, whatever its type: a `.json` picked from a
+      // file input is sent as `application/json`, and is still a file. Only a
+      // nameless JSON body is a snapshot.
+      if (request.headers.has(FILENAME_HEADER)) return createFile(request)
+
       return (request.headers.get('content-type') ?? '').includes('application/json')
         ? createSnapshot(request)
         : createFile(request)
     }
 
-    let code: string
-    try {
-      code = normalize(rawCode)
-    } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
-      throw error
-    }
+    const code = normalize(rawCode)
 
     if (tail === 'raw') {
       if (request.method !== 'GET') return fail('INVALID_REQUEST', `${request.method} is not allowed here.`)
@@ -384,9 +482,22 @@ export function createTransferHandler(config: TransferHandlerConfig): TransferHa
     try {
       return await route(request)
     } catch (error) {
-      if (isS3ndError(error)) return fromS3ndError(error)
+      const named = isS3ndError(error) ? fromS3ndError(error) : null
+      if (named) return named
 
-      throw error
+      // The protocol promises a JSON error body on every failure, so nothing
+      // leaves as a bare framework 500. The message stays generic: the raw one,
+      // a wrapped S3 failure's included, can carry a bucket name or SDK internals.
+      try {
+        // An async logger type-checks as `void` too; its rejection is swallowed
+        // here rather than surfacing as an unhandled one.
+        const logged = config.onError?.(error, request) as unknown
+        if (logged instanceof Promise) logged.catch(() => undefined)
+      } catch {
+        // A logger that throws must not cost the client its answer.
+      }
+
+      return fail('INTERNAL', 'Internal error.')
     }
   }
 
