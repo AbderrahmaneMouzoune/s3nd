@@ -6,6 +6,16 @@ into `main`. The detailed notes at the bottom were written by hand for the first
 this package was published as `bucketcode`, and are kept because they say what 0.1.0 actually
 contains.
 
+## [0.1.2](https://github.com/AbderrahmaneMouzoune/s3nd/compare/s3nd-v0.1.1...s3nd-v0.1.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **cli:** keep only the base name of a received filename ([3e961b5](https://github.com/AbderrahmaneMouzoune/s3nd/commit/3e961b53dea54628a2e988f3162bac49f41e6e78))
+* **cli:** keep only the base name of a received filename ([d62b1cc](https://github.com/AbderrahmaneMouzoune/s3nd/commit/d62b1cc0a1f64c11e95d7d680a467012c6dd7432))
+* **core:** check a transfer before redirecting to it ([b896c62](https://github.com/AbderrahmaneMouzoune/s3nd/commit/b896c62160a6c1c036a83299507e92b63be56bcc))
+* **core:** check a transfer before redirecting to it ([21a22e8](https://github.com/AbderrahmaneMouzoune/s3nd/commit/21a22e887da7a15178d89406486e792d6f76dd92))
+
 ## [0.1.1](https://github.com/AbderrahmaneMouzoune/s3nd/compare/s3nd-v0.1.0...s3nd-v0.1.1) (2026-09-29)
 
 
