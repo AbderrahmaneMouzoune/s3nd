@@ -141,8 +141,8 @@ s3nd -p r2 put ./report.pdf
 
 **From a terminal:** `@s3nd/cli`. Straight to the bucket with the credentials on that machine, or
 through your own server with `--remote` and a token. The code goes to stdout and everything else to
-stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `tar cz ./project | s3nd put - --name project.tar.gz`
-moves a directory. [Every command →](https://doc.s3nd.sh/docs/cli)
+stderr, so it composes: `CODE=$(s3nd put ./report.pdf)`, and `s3nd put ./project` moves a directory
+as a `.tar.gz`. [Every command →](https://doc.s3nd.sh/docs/cli)
 
 **Inside your app:** `@s3nd/core` on the server, `@s3nd/react` in the browser. One route file turns any
 bucket into a drop box; the hooks send a file or a snapshot and read a code back, with typos repaired

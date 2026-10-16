@@ -149,9 +149,26 @@ The code goes to stdout and everything else to stderr, so it composes:
 CODE=$(s3nd put ./report.pdf)
 ```
 
-`put -` reads stdin, which is how a directory travels:
+A directory travels as it is: `put` archives and gzips it on the fly, as `<name>.tar.gz`, and the
+other machine unpacks it with plain `tar xzf`. Permissions are kept, and symbolic links are stored
+as links, never followed, so nothing outside the directory goes along. `--compress` (`-z`) gzips a
+single file the same way, as `<name>.gz`; without it a file goes as it is. `--name` always wins. With
+`--json`, `put` reports the stored `filename`, and `compressed: true` with the `originalSize` when it
+compressed.
 
 ```sh
+$ s3nd put ./project
+project.tar.gz · 12 MB (48 MB before compression) · expires in 1 hour
+K7QP2M4X
+
+$ s3nd put ./dump.sql -z
+dump.sql.gz · 3.1 MB (41 MB before compression) · expires in 1 hour
+```
+
+`put -` reads stdin instead, for anything a command produces:
+
+```sh
+pg_dump notes | s3nd put - -z --name notes.sql.gz --expires-in 7d
 tar cz ./project | s3nd put - --name project.tar.gz
 ```
 
@@ -268,23 +285,24 @@ rather than S3 credentials.
 
 ## Options
 
-| Option                 | What it does                                                |
-| ---------------------- | ----------------------------------------------------------- |
-| `-c, --config <path>`  | Configuration file to read                                  |
-| `-p, --profile <name>` | Profile to use inside it                                    |
-| `--env-file <path>`    | Read `KEY=value` pairs from this file first                 |
-| `--bucket <name>`      | Bucket name                                                 |
-| `--prefix <prefix>`    | Key prefix inside the bucket                                |
-| `--region <name>`      | Region                                                      |
-| `--endpoint <url>`     | S3-compatible endpoint                                      |
-| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`   |
-| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                |
-| `--token <token>`      | Bearer token sent with `--remote`                           |
-| `--name <filename>`    | Filename to store the transfer under                        |
-| `-o, --output <path>`  | Where `get` writes. `-` is stdout                           |
-| `--json`               | Machine-readable output, for scripts and for `doctor` in CI |
-| `--provider <name>`    | Which starter `init` writes                                 |
-| `--force`              | Let `init` and `get` overwrite an existing file             |
+| Option                 | What it does                                                   |
+| ---------------------- | -------------------------------------------------------------- |
+| `-c, --config <path>`  | Configuration file to read                                     |
+| `-p, --profile <name>` | Profile to use inside it                                       |
+| `--env-file <path>`    | Read `KEY=value` pairs from this file first                    |
+| `--bucket <name>`      | Bucket name                                                    |
+| `--prefix <prefix>`    | Key prefix inside the bucket                                   |
+| `--region <name>`      | Region                                                         |
+| `--endpoint <url>`     | S3-compatible endpoint                                         |
+| `--expires-in <d>`     | Transfer lifetime: `3600`, `30m`, `24h`, `7d`, or `never`      |
+| `--remote <url>`       | Talk to a s3nd server instead of S3 directly                   |
+| `--token <token>`      | Bearer token sent with `--remote`                              |
+| `--name <filename>`    | Filename to store the transfer under                           |
+| `-z, --compress`       | `put`: gzip a file or stdin on the way (a directory always is) |
+| `-o, --output <path>`  | Where `get` writes. `-` is stdout                              |
+| `--json`               | Machine-readable output, for scripts and for `doctor` in CI    |
+| `--provider <name>`    | Which starter `init` writes                                    |
+| `--force`              | Let `init` and `get` overwrite an existing file                |
 
 Configuration otherwise comes from the same environment variables as the library:
 `S3ND_BUCKET`, `S3ND_REGION`, `S3ND_ENDPOINT`, `S3ND_PREFIX`, `S3ND_PUBLIC_URL`,
