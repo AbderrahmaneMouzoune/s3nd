@@ -1,0 +1,194 @@
+---
+title: 'Migrating from 0.x to 1.0'
+description: 'Every change between the 0.x releases and 1.0 that can break an application, with the code before and after.'
+---
+
+1.0 is where the API stops moving: from it on, a breaking change waits for 2.0. Everything that had
+to break did so on the way there, and is listed below. Most applications only meet the first
+section; the rest matter if you run your own server, branch on error codes, or read transfers that
+a 0.x release wrote.
+
+The versions this page compares are the latest 0.x releases (`@s3nd/core` and `@s3nd/protocol`
+0.1, `@s3nd/react` 0.1, `@s3nd/cli` 0.2) and 1.0.
+
+## `S3ndError` moved to `@s3nd/core`
+
+`@s3nd/protocol` is the contract with no storage client, yet it owned `S3ndError`, whose codes
+mostly describe S3 calls. It now lives in `@s3nd/core`, with `isS3ndError` and `S3ndErrorCode`.
+`@s3nd/protocol` keeps `TransferError`, and `@s3nd/core` re-exports it, so a server imports from one
+package.
+
+```ts
+// 0.x
+import { isS3ndError, S3ndError, type S3ndErrorCode } from '@s3nd/protocol'
+
+// 1.0
+import { isS3ndError, S3ndError, type S3ndErrorCode } from '@s3nd/core'
+```
+
+A code that cannot exist is now a `TransferError`, the same answer a server gives, rather than an
+`S3ndError`. `INVALID_SYNC_CODE` is no longer an `S3ndErrorCode`:
+
+```ts
+// 0.x
+try {
+  normalizeSyncCode(input)
+} catch (error) {
+  if (isS3ndError(error) && error.code === 'INVALID_SYNC_CODE') showTypo()
+}
+
+// 1.0
+import { isTransferError, normalizeSyncCode } from '@s3nd/protocol'
+
+try {
+  normalizeSyncCode(input)
+} catch (error) {
+  if (isTransferError(error) && error.code === 'INVALID_SYNC_CODE') showTypo()
+}
+```
+
+The same goes for `store.codes.normalize()`. The sync code helpers in `@s3nd/protocol`
+(`createSyncCodes()`, `createSyncCode()`, `normalizeSyncCode()`) throw a plain `TypeError` for an
+alphabet or a length they cannot use, where 0.x threw `S3ndError('INVALID_CONFIG')`;
+`createBucket()` still turns that into `INVALID_CONFIG`. An alphabet over 256 characters is now
+refused.
+
+Every guard (`isS3ndError`, `isTransferError`) checks a brand rather than `instanceof`, so an
+error from a second copy of a package, loaded once through `require` and once through `import`, is
+still recognised. Code that used `instanceof S3ndError` keeps working with one copy; the guards are
+the reliable way.
+
+## The protocol version travels in a header
+
+The contract is now written down, in
+[`PROTOCOL.md`](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/packages/protocol/PROTOCOL.md),
+as version 1. Every request from `createTransferClient()` carries `s3nd-protocol: 1`, and
+`createTransferHandler()` sets the same header on every response.
+
+Nothing changes for an application using both packages. A request without the header is still
+answered as version 1, so a 0.x client keeps working against a 1.0 server. If you wrote **your own
+server**, it should set `s3nd-protocol: 1` on its responses, refuse a higher version with the new
+`UNSUPPORTED_PROTOCOL` error (`400`), and, when browsers call it from another origin, allow the
+header in its CORS answer. The [conformance suite](/docs/protocol#checking-a-server) checks all of it:
+
+```ts
+import { runConformance } from '@s3nd/protocol/conformance'
+
+const report = await runConformance({ baseUrl: 'https://drop.example.com/api/transfers' })
+```
+
+## Error codes: new ones, and no more raw messages
+
+Both code unions grew. A `switch` that TypeScript checks for exhaustiveness needs the new cases:
+
+| Union                     | New in 1.0                                                                 |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `TransferErrorCode`       | `UNSUPPORTED_PROTOCOL` (`400`), `RATE_LIMITED` (`429`)                     |
+| `TransferClientErrorCode` | New type: `TransferErrorCode` plus `TIMEOUT`, which only the client raises |
+| `S3ndErrorCode`           | `LIST_FAILED`, `COPY_FAILED`, `CONDITIONAL_WRITE_UNSUPPORTED`              |
+
+`TransferError.code` is now a `TransferClientErrorCode`, and a `TransferError` carries
+`retryAfter`, in seconds, on a `RATE_LIMITED`. `MISSING_CONTENT_LENGTH` stays in `S3ndErrorCode`
+but is no longer raised: a stream of unknown length now goes up as a multipart upload.
+
+The handler no longer echoes an internal error's message. Anything that answers `INTERNAL`, a failed
+S3 call included, says `"Internal error."`, since the raw message can name a bucket. To see the real
+error, log it from the new `onError` option:
+
+```ts
+// 0.x: the client saw the S3 error's message in the 500
+createTransferHandler({ bucket })
+
+// 1.0: the client sees "Internal error."; your logs see the cause
+createTransferHandler({ bucket, onError: (error, request) => console.error(request.url, error) })
+```
+
+## The client checks what it receives
+
+`createTransferClient()` used to trust any `2xx`. It now checks the body first: a JSON content type,
+and for a transfer a string `code`, a known `kind` and a `createdAt`. A login page answering `200`
+with HTML, or a wrong `baseUrl`, used to surface as an unrelated `SyntaxError`; it now rejects with
+`TransferError('INTERNAL')`, whose message names the status and the content type received.
+
+A new `timeout` (milliseconds) bounds every call, reading the response included, and rejects with
+`TransferError('TIMEOUT')` past it. It is off unless you set it.
+
+## Telling a snapshot from a file
+
+In 0.x the handler decided by `content-type` alone, so a `.json` file picked from a file input was
+refused as a malformed snapshot, or, with a top-level `data` key, stored as a snapshot that lost its
+name. The rule is now, in order: an `x-s3nd-filename` header means a file, whatever the
+`content-type`; otherwise `application/json` means a snapshot; otherwise a file named `file`.
+
+`createFile()` always sends the header and `createSnapshot()` never does, so nothing changes through
+the client. A hand-written client that posts a snapshot **with** an `x-s3nd-filename` header now
+creates a file; drop the header.
+
+## `/raw` serves files only
+
+`GET /:code/raw` on a snapshot code, in the default `raw: 'stream'` mode, used to return the stored object as it is: the gzipped envelope,
+with its app, device and timestamps, and with no expiry check. It now answers `NOT_FOUND`, as for an
+unknown code. Read a snapshot's state from `GET /:code`, or `read(code)` on the client:
+
+```ts
+// 0.x: worked, and returned the gzipped envelope
+const bytes = await transfers.readBytes(snapshotCode)
+
+// 1.0
+const { data } = (await transfers.read(snapshotCode)) ?? {}
+```
+
+## `device` is what the client sent, or nothing
+
+When a client sent no `device`, the 0.x handler stored the request's `User-Agent` instead, and
+`GET /:code` handed the sender's browser and OS to anyone with the code. A snapshot created without
+a `device` now has none. Send a label yourself if the receiving side shows one:
+
+```ts
+// 0.x: the receiving device saw "Mozilla/5.0 (Linux; Android 14; Pixel 8) …"
+await transfers.createSnapshot({ data: state })
+
+// 1.0: it sees exactly this, or no device at all without it
+await transfers.createSnapshot({ data: state, device: 'Pixel 8' })
+```
+
+## React: a bounded peer range
+
+`@s3nd/react` declares `react: ">=18 <20"`, where 0.x said `">=18"`. A React release past 19 will be
+supported by a new `@s3nd/react` release once it is tested against it.
+
+`useReceiveTransfer()` now tracks `loadBytes` and `burn` in its `status`, `isPending` and `error`,
+as it already did `load`: a failed `loadBytes` sets `error` rather than only rejecting, and the
+bytes it fetched are also in a new `bytes` field. Code that awaited `loadBytes` and caught its
+rejection keeps working.
+
+## Snapshots written by 0.1
+
+`putSnapshot()` now mirrors `expiresAt` into the object's metadata, which `hasSnapshot()` reads
+without downloading the body. A snapshot written by `@s3nd/core` 0.1.x has no such metadata, so
+`hasSnapshot()` counts it as present even once it has expired. `getSnapshot()` reads the envelope
+and is not affected. Snapshots are short-lived, so this only matters for ones written just before
+the upgrade.
+
+## What you may want to turn on
+
+None of these is required, and none is on by default:
+
+- `getSnapshot(code, { parse })`: validate the data instead of casting it to `T`. The bare generic
+  still works, and is an unchecked assertion.
+- `upload: 'presign'` or `'both'` on the handler, with `upload: 'auto'` on the client: files go
+  straight to the bucket, past your runtime's request limit, with progress.
+- `rateLimit` and `protectDelete` on the handler, and `burnAfterRead` for short codes. The
+  [security policy](https://github.com/AbderrahmaneMouzoune/s3nd/blob/main/.github/SECURITY.md#threat-model)
+  says when each matters.
+- `cors` on the handler, for pages on another origin.
+- `maxRequestSize` on the handler, to bound request bodies on a self-hosted server.
+- Two lifecycle rules beside the expiry one: one for `pending/` uploads nobody completed, one
+  aborting incomplete multipart uploads. `s3nd doctor` checks the expiry rule.
+
+## CommonJS types
+
+The `require` entry of `@s3nd/protocol`, `@s3nd/core` and `@s3nd/react` resolved to the ESM type
+declarations, so a CommonJS project under `moduleResolution: node16` got types that did not match
+the code it loaded. Each condition now has its own declarations. A workaround such as a
+`paths` override or a `// @ts-expect-error` on the import can go.

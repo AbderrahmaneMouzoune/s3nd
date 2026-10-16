@@ -21,6 +21,7 @@
     "limits",
     "errors",
     "testing",
+    "security",
     "---Use cases---",
     "use-cases/new-device",
     "use-cases/continuous-backup",
@@ -28,6 +29,7 @@
     "use-cases/attachments",
     "---Reference---",
     "cli",
-    "api"
+    "api",
+    "migration"
   ]
 }
