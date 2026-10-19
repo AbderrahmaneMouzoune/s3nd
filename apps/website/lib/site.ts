@@ -6,7 +6,8 @@ export const site = {
   name: 's3nd',
   /** The domain, as the wordmark writes it: `s3nd` and a quieter `.sh`. */
   domain: 's3nd.sh',
-  url: 'https://s3nd.sh',
+  /** The canonical origin: the apex redirects here, so canonical, sitemap and cards must name it. */
+  url: 'https://www.s3nd.sh',
   docsUrl: 'https://doc.s3nd.sh',
   /** Where the documentation app mounts its pages. `''` once it moves to the root. */
   docsPath: '/docs',

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { source } from './source'
-import { docsUrl, gitConfig } from './shared'
+import { docsUrl, gitConfig, websiteUrl } from './shared'
 
 /**
  * The documentation as Markdown, for agents: `/docs/<slug>.md`, any docs URL
@@ -46,7 +46,7 @@ export function llmsIndex(): string {
     '',
     '> Send anything with a code, through your own bucket. Snapshots, sync codes, the transfer protocol, the CLI, the React hooks and the API reference.',
     '',
-    `Every page below also exists as Markdown at the \`.md\` URL, or by asking for \`text/markdown\`. The full text is at ${docsUrl}/llms-full.txt. The product site, the use cases and the comparisons are at https://s3nd.sh (https://s3nd.sh/llms.txt).`,
+    `Every page below also exists as Markdown at the \`.md\` URL, or by asking for \`text/markdown\`. The full text is at ${docsUrl}/llms-full.txt. The product site, the use cases and the comparisons are at ${websiteUrl} (${websiteUrl}/llms.txt).`,
     '',
     '## Pages',
     '',

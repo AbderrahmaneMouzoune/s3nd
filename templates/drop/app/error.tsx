@@ -35,7 +35,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
         </Link>
         <a
           className="text-ink-muted hover:text-ink inline-flex items-center gap-2 rounded-md px-5 py-3.5 font-mono text-[13px] font-bold tracking-[0.14em] uppercase transition-colors"
-          href="https://s3nd.sh/drop"
+          href="https://www.s3nd.sh/drop"
           rel="noopener"
         >
           Setup guide ↗
