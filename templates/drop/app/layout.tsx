@@ -64,7 +64,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
             </Link>
             <a
               className="text-ink-faint hover:text-accent font-mono text-[10px] font-semibold tracking-[0.22em] uppercase transition-colors"
-              href="https://s3nd.sh"
+              href="https://www.s3nd.sh"
               rel="noopener"
             >
               on s3nd.sh ↗
@@ -80,7 +80,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
             <span>your bucket · a code · no account</span>
             <span>
               built on{' '}
-              <a className="hover:text-accent transition-colors" href="https://s3nd.sh" rel="noopener">
+              <a className="hover:text-accent transition-colors" href="https://www.s3nd.sh" rel="noopener">
                 s3nd
               </a>
             </span>
